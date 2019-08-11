@@ -8,7 +8,7 @@
 
 -----
 
-This is an implementation of the FEAST eigensolver in Julia for research and educational purposes, and is not meant to replace the reference FORTRAN implementation. 
+This is an implementation of the FEAST eigensolver in Julia, and is not meant to replace the reference FORTRAN implementation. 
 Despite this, it does aim to be performant, and should work well for large dense and sparse problems where spectral slicing is needed.
 
 For Julia bindings to the FORTRAN implementation see FEAST.jl (coming soon).
