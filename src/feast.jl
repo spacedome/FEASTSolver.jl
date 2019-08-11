@@ -1,5 +1,5 @@
 
-using LinearAlgebra: ldiv!, lu!, mul!, rmul!, lmul!, eigen!, svd!, norm, Diagonal
+using LinearAlgebra: ldiv!, lu!, mul!, rmul!, lmul!, eigen!, eigen, svd!, norm, Diagonal
 using IterativeSolvers: bicgstabl
 using SparseArrays: similar
 
@@ -183,11 +183,11 @@ function dual_gen_feast!(X::AbstractMatrix, A::AbstractMatrix, B::AbstractMatrix
         mul!(temp, B, QR) ## why does this one allocate?
         mul!(Bq, QL', temp) ### Aq = Q' * A * Q
         ## Will have to manually use BLAS to get this without reallocation
-        F = eigen!(Aq, Bq)
+        F = eigen(Aq, Bq)
         Λ .= F.values
         Xqr .= F.vectors
         mul!(X, QR, Xqr) ### X = Q*Xq
-        FH = eigen!(copy(Aq'), copy(Bq'))
+        FH = eigen(copy(Aq'), copy(Bq'))
         ΛH .= FH.values
         Xql .= FH.vectors
         mul!(XL, QL, Xql) ### X = Q*Xq
