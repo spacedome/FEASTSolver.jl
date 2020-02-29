@@ -1,6 +1,3 @@
-using LinearAlgebra: ldiv!, lu!, mul!, eigen!, norm, Diagonal
-
-export beyn
 
 function beyn(T::Function, A::AbstractMatrix, X::AbstractMatrix, nodes::Integer;
                 c=complex(0.0,0.0), r=1.0)

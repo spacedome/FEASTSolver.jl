@@ -1,17 +1,4 @@
 
-using LinearAlgebra: ldiv!, lu!, mul!, rmul!, lmul!, eigen!, eigen, svd!, norm, Diagonal
-using IterativeSolvers: bicgstabl
-using SparseArrays: similar
-
-export feast!
-export ifeast!
-export gen_feast!, dual_gen_feast!
-
-function in_contour(λ, c, r)
-    abs(λ - c) <= r
-end
-
-
 ### Overwrites X₀
 function feast!(X₀::AbstractMatrix, A::AbstractMatrix;
                 nodes::Integer=8, iter::Integer=10, c=complex(0.0,0.0), r=1.0, debug=false, ϵ=1e-12)
