@@ -1,4 +1,4 @@
-
+import LinearAlgebra: qr, lu, Diagonal
 function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Integer;
     c=complex(0.0,0.0), r=1.0, debug=false, ϵ=0.05)
 
@@ -8,15 +8,21 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
     θ = LinRange(π/nodes, 2*π-π/nodes, nodes)
     Q₀, Q₁ = zeros(ComplexF64, N, m₀), zeros(ComplexF64, N, m₀)
     Tinv, R = similar(X, ComplexF64), similar(X, ComplexF64)
+    resolvent = similar(Λ)
+
+    TLU = [qr(T(r*exp(ang*im)+c)) for ang in θ]
 
     for i=1:nodes
-        z = (r*exp(θ[i]*im)+c)
-        Tinv .= (T(z)\X)
-        Q₀ .+= Tinv .* (r*exp(θ[i]*im)/nodes)
-        Q₁ .+= Tinv .* (r*exp(θ[i]*im)/nodes) .* (r*exp(θ[i]*im)+c)
+	# z = (r*exp(θ[i]*im)+c)
+	# Tinv .= (T(z)\X)
+	# Q₀ .+= Tinv .* (r*exp(θ[i]*im)/nodes)
+	# Q₁ .+= Tinv .* (r*exp(θ[i]*im)/nodes) .* (r*exp(θ[i]*im)+c)
+	Tinv .= (TLU[i] \ X) 
+	Q₀ .+= Tinv .* (r*exp(θ[i]*im)/nodes)
+	Q₁ .+= Tinv .* (r*exp(θ[i]*im)/nodes) .* (r*exp(θ[i]*im)+c)
     end
-
-    F = eigen(X' * Q₁, X' * Q₀)
+    
+    F = eigen!(X' * Q₁, X' * Q₀)
     X .= Q₀ * F.vectors
     Λ .= F.values
 
@@ -29,13 +35,17 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
 
         for i=1:nodes
             z = (r*exp(θ[i]*im)+c)
-	    resolvent = diagm(0 => 1 ./(z .- Λ))
-	    Tinv .= (X - T(z)\R)
-            Q₀ .+= Tinv * resolvent .* (r*exp(θ[i]*im)/nodes)
-            Q₁ .+= Tinv * resolvent .* (r*exp(θ[i]*im)/nodes) .* z
+	    resolvent .= (1 ./(z .- Λ))
+	    # Tinv .= (X - T(z)\R)
+	    # Q₀ .+= Tinv * resolvent .* (r*exp(θ[i]*im)/nodes)
+	    # Q₁ .+= Tinv * resolvent .* (r*exp(θ[i]*im)/nodes) .* z
+	    Tinv .= X
+	    Tinv .-= (TLU[i]\R)
+	    Q₀ .+= Tinv * Diagonal(resolvent) .* (r*exp(θ[i]*im)/nodes)
+	    Q₁ .+= Tinv * Diagonal(resolvent) .* (r*exp(θ[i]*im)/nodes) .* (r*exp(θ[i]*im)+c)
         end
 
-        F = eigen(X' * Q₁, X' * Q₀)
+        F = eigen!(X' * Q₁, X' * Q₀)
         X .= Q₀ * F.vectors
         Λ .= F.values
 

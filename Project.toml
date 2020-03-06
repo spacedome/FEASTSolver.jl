@@ -7,6 +7,7 @@ version = "0.1.0"
 FastGaussQuadrature = "442a2c76-b920-505d-bb47-c5924d526838"
 IterativeSolvers = "42fd0dbc-a981-5370-80f2-aaf504508153"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MatrixMarket = "4d4711f2-db25-561a-b6b3-d35e7d4047d3"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [compat]
