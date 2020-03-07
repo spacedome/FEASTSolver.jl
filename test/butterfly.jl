@@ -29,7 +29,7 @@ end
 
 T = bf()
 e, v, res = nlfeast!(T, rand(ComplexF64,64,30), 2^1, 0, c=complex(1.0,1.0), r=0.5)
-e, v, res = @timev nlfeast!(T, rand(ComplexF64,64,30), 2^3, 20, c=complex(1.0,1.0), r=0.5)
+e, v, res = @timev nlfeast!(T, rand(ComplexF64,64,30), 2^5, 20, c=complex(1.0,1.0), r=0.5)
 # display(e)
 print("\nmax res inside: ")
 println(maximum(res[inside.(e)]))

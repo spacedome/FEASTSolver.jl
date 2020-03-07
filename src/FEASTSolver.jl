@@ -6,7 +6,7 @@ using LinearAlgebra: ldiv!, lu!, mul!, rmul!, lmul!, eigen!, eigen, svd!, norm, 
 using IterativeSolvers: bicgstabl
 using SparseArrays: similar
 
-export feast!, ifeast!, nlfeast!
+export feast!, ifeast!, nlfeast!, nlfeast_opt!
 export gen_feast!, dual_gen_feast!
 export beyn
 
@@ -14,6 +14,7 @@ function in_contour(λ, c, r)
     abs(λ - c) <= r
 end
 
+include("lapack.jl")
 include("feast.jl")
 include("nlfeast.jl")
 include("beyn.jl")
