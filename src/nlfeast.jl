@@ -13,17 +13,18 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
     TLU = [qr(T(r*exp(ang*im)+c)) for ang in θ]
 
     for i=1:nodes
-	# z = (r*exp(θ[i]*im)+c)
+	z = (r*exp(θ[i]*im)+c)
 	# Tinv .= (T(z)\X)
 	# Q₀ .+= Tinv .* (r*exp(θ[i]*im)/nodes)
 	# Q₁ .+= Tinv .* (r*exp(θ[i]*im)/nodes) .* (r*exp(θ[i]*im)+c)
-	Tinv .= (TLU[i] \ X) 
-	Q₀ .+= Tinv .* (r*exp(θ[i]*im)/nodes)
-	Q₁ .+= Tinv .* (r*exp(θ[i]*im)/nodes) .* (r*exp(θ[i]*im)+c)
+	Tinv .= (TLU[i] \ X) .* (r*exp(θ[i]*im)/nodes) 
+	Q₀ .+= Tinv 
+	Q₁ .+= Tinv .* z
     end
     
     F = eigen!(X' * Q₁, X' * Q₀)
-    X .= Q₀ * F.vectors
+    # X .= Q₀ * F.vectors
+    mul!(X, Q₀, F.vectors)
     Λ .= F.values
 
     for nit=1:iter
@@ -41,12 +42,14 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
 	    # Q₁ .+= Tinv * resolvent .* (r*exp(θ[i]*im)/nodes) .* z
 	    Tinv .= X
 	    Tinv .-= (TLU[i]\R)
-	    Q₀ .+= Tinv * Diagonal(resolvent) .* (r*exp(θ[i]*im)/nodes)
-	    Q₁ .+= Tinv * Diagonal(resolvent) .* (r*exp(θ[i]*im)/nodes) .* (r*exp(θ[i]*im)+c)
+	    rmul!(Tinv, (r*exp(θ[i]*im)/nodes) .* Diagonal(resolvent)) 
+	    Q₀ .+= Tinv 
+	    Q₁ .+= Tinv .* z
         end
 
         F = eigen!(X' * Q₁, X' * Q₀)
-        X .= Q₀ * F.vectors
+        # X .= Q₀ * F.vectors
+        mul!(X, Q₀, F.vectors)
         Λ .= F.values
 
         if debug println(nit) end
