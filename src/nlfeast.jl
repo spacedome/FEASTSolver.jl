@@ -17,10 +17,12 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
 	Q₁ .+= Tinv .* z
     end
 
-    mul!(A, X', Q₁)
-    mul!(B, X', Q₀)
-    F = eigen!(A, B)
-    mul!(X, Q₀, F.vectors)
+    S = svd!(Q₀)
+    mul!(A, S.U', Q₁)
+    mul!(B, A, S.V)
+    mul!(A, B, Diagonal(1 ./ S.S))
+    F = eigen!(A)
+    mul!(X, S.U, F.vectors)
     Λ .= F.values
 
     for nit=1:iter
@@ -38,12 +40,19 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
 	    Q₀ .+= Tinv
 	    Q₁ .+= Tinv .* z
         end
+    S = svd!(Q₀)
+    mul!(A, S.U', Q₁)
+    mul!(B, A, S.V)
+    mul!(A, B, Diagonal(1 ./ S.S))
+    F = eigen!(A)
+    mul!(X, S.U, F.vectors)
+    Λ .= F.values
 	
-        mul!(A, X', Q₁)
-        mul!(B, X', Q₀)
-	F = eigen!(A, B)
-	mul!(X, Q₀, F.vectors)
-	Λ .= F.values
+        # mul!(A, X', Q₁)
+        # mul!(B, X', Q₀)
+	# F = eigen!(A, B)
+	# mul!(X, Q₀, F.vectors)
+	# Λ .= F.values
 
         if debug println(nit) end
     end
