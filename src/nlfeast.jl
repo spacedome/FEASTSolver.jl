@@ -1,7 +1,7 @@
 import LinearAlgebra: qr, lu, Diagonal, svd
 import IterativeSolvers: gmres!
 function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Integer;
-    c=complex(0.0,0.0), r=1.0, debug=false, ϵ=0.05)
+    c=complex(0.0,0.0), r=1.0, debug=false, ϵ=10e-12)
 
     N, m₀ = size(X)
     Λ = zeros(ComplexF64, m₀)
@@ -10,6 +10,7 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
     Tinv, R = similar(X, ComplexF64), similar(X, ComplexF64)
     resolvent = similar(Λ)
     A, B = zeros(ComplexF64, m₀, m₀), zeros(ComplexF64, m₀, m₀)
+    res = Array{Float64}(undef, size(R, 2))
 
     for i=1:nodes
 	z = (r*exp(θ[i]*im)+c)
@@ -18,27 +19,27 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
 	Q₁ .+= Tinv .* z
     end
 
-    # S = svd!(Q₀)
-    # mul!(A, S.U', Q₁)
-    # mul!(B, A, S.V)
-    # mul!(A, B, Diagonal(1 ./ S.S))
-    # F = eigen!(A)
-    # mul!(X, S.U, F.vectors)
-    # Λ .= F.values 
+    S = svd!(Q₀)
+    mul!(A, S.U', Q₁)
+    mul!(B, A, S.V)
+    mul!(A, B, Diagonal(1 ./ S.S))
+    F = eigen!(A)
+    mul!(X, S.U, F.vectors)
+    Λ .= F.values 
 
-    qt, rt = qr(Q₀)
-    qt = Matrix(qt)
-    F = eigen!(qt' * Q₁ * inv(rt))
-    mul!(X, qt, F.vectors)
-    Λ .= F.values
+    # qt, rt = qr(Q₀)
+    # qt = Matrix(qt)
+    # F = eigen!(qt' * Q₁ * inv(rt))
+    # mul!(X, qt, F.vectors)
+    # Λ .= F.values
+
+    update_R!(X, R, Λ, T)
 
     if (iter == 0)
-        update_R!(X, R, Λ, T)
+	res = residuals(R, Λ, T)
     end
 
     for nit=1:iter
-
-        update_R!(X, R, Λ, T)
 
         Q₀ .= 0
         Q₁ .= 0
@@ -52,31 +53,45 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
 	    Q₁ .+= Tinv .* z
         end
 
-    # S = svd!(Q₀)
-    # mul!(A, S.U', Q₁)
-    # mul!(B, A, S.V)
-    # mul!(A, B, Diagonal(1 ./ S.S))
-    # F = eigen!(A)
-    # mul!(X, S.U, F.vectors)
-    # Λ .= F.values 
+        S = svd!(Q₀)
+        mul!(A, S.U', Q₁)
+        mul!(B, A, S.V)
+        mul!(A, B, Diagonal(1 ./ S.S))
+        F = eigen!(A)
+        mul!(X, S.U, F.vectors)
+        Λ .= F.values 
 
-    qt, rt = qr(Q₀)
-    qt = Matrix(qt)
-    F = eigen!(qt' * Q₁ * inv(rt))
-    mul!(X, qt, F.vectors)
-    Λ .= F.values
+        # qt, rt = qr(Q₀)
+        # qt = Matrix(qt)
+        # F = eigen!(qt' * Q₁ * inv(rt))
+        # mul!(X, qt, F.vectors)
+        # Λ .= F.values
 	
 	# mul!(A, X', Q₁)
 	# mul!(B, X', Q₀)
 	# F = eigen!(A, B)
 	# mul!(X, Q₀, F.vectors)
 	# Λ .= F.values
+	
+        update_R!(X, R, Λ, T)
+	res = residuals(R, Λ, T)
 
-        if debug println(nit) end
+        if debug
+	    print(nit)
+	    print(":\t")
+	    print(sum(in_contour.(Λ, c, r)))
+	    print("\t")
+	    print(maximum(res[in_contour.(Λ, c, r)]))
+	    println()
+        end
+
+	if maximum(res[in_contour.(Λ, c, r)]) < ϵ
+		break	
+	end
     end
     
     normalize!(X)
-    Λ, X, residuals(R, Λ, T)
+    Λ, X, res
 end
 
 function nlfeast_it!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Integer;
