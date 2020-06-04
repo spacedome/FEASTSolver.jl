@@ -75,11 +75,6 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
         if debug println(nit) end
     end
     
-    Y = S.V * Diagonal(1 ./ S.S) * F.vectors
-    for i=1:size(Y,2)
-        Y[:,i] .= Y[:,i]/norm(Y[:,i])
-    end
-
     normalize!(X)
     Λ, X, residuals(R, Λ, T)
 end
