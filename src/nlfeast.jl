@@ -1,4 +1,5 @@
-import LinearAlgebra: qr, lu, Diagonal
+import LinearAlgebra: qr, lu, Diagonal, svd
+import IterativeSolvers: gmres!
 function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Integer;
     c=complex(0.0,0.0), r=1.0, debug=false, ϵ=0.05)
 
@@ -17,13 +18,23 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
 	Q₁ .+= Tinv .* z
     end
 
-    S = svd!(Q₀)
-    mul!(A, S.U', Q₁)
-    mul!(B, A, S.V)
-    mul!(A, B, Diagonal(1 ./ S.S))
-    F = eigen!(A)
-    mul!(X, S.U, F.vectors)
-    Λ .= F.values
+    # S = svd!(Q₀)
+    # mul!(A, S.U', Q₁)
+    # mul!(B, A, S.V)
+    # mul!(A, B, Diagonal(1 ./ S.S))
+    # F = eigen!(A)
+    # mul!(X, S.U, F.vectors)
+    # Λ .= F.values 
+
+    qt, rt = qr(Q₀)
+    qt = Matrix(qt)
+    F = eigen!(qt' * Q₁ * inv(rt))
+    mul!(X, qt, F.vectors)
+    Λ .= F.values .+ c
+
+    if (iter == 0)
+        update_R!(X, R, Λ, T)
+    end
 
     for nit=1:iter
 
@@ -40,16 +51,112 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
 	    Q₀ .+= Tinv
 	    Q₁ .+= Tinv .* z
         end
-    S = svd!(Q₀)
-    mul!(A, S.U', Q₁)
-    mul!(B, A, S.V)
-    mul!(A, B, Diagonal(1 ./ S.S))
-    F = eigen!(A)
-    mul!(X, S.U, F.vectors)
+
+    # S = svd!(Q₀)
+    # mul!(A, S.U', Q₁)
+    # mul!(B, A, S.V)
+    # mul!(A, B, Diagonal(1 ./ S.S))
+    # F = eigen!(A)
+    # mul!(X, S.U, F.vectors)
+    # Λ .= F.values 
+
+    qt, rt = qr(Q₀)
+    qt = Matrix(qt)
+    F = eigen!(qt' * Q₁ * inv(rt))
+    mul!(X, qt, F.vectors)
+    Λ .= F.values .+ c
+	
+	# mul!(A, X', Q₁)
+	# mul!(B, X', Q₀)
+	# F = eigen!(A, B)
+	# mul!(X, Q₀, F.vectors)
+	# Λ .= F.values
+
+        if debug println(nit) end
+    end
+    
+    Y = S.V * Diagonal(1 ./ S.S) * F.vectors
+    for i=1:size(Y,2)
+        Y[:,i] .= Y[:,i]/norm(Y[:,i])
+    end
+
+    normalize!(X)
+    Λ, X, residuals(R, Λ, T)
+end
+
+function nlfeast_it!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Integer;
+    c=complex(0.0,0.0), r=1.0, debug=false, ϵ=0.05)
+
+    N, m₀ = size(X)
+    Λ = zeros(ComplexF64, m₀)
+    θ = LinRange(π/nodes, 2*π-π/nodes, nodes)
+    Q₀, Q₁ = zeros(ComplexF64, N, m₀), zeros(ComplexF64, N, m₀)
+    Tinv, R = similar(X, ComplexF64), similar(X, ComplexF64)
+    resolvent = similar(Λ)
+    A, B = zeros(ComplexF64, m₀, m₀), zeros(ComplexF64, m₀, m₀)
+
+    for i=1:nodes
+	z = (r*exp(θ[i]*im)+c)
+	# Tinv .= (T(z)\X) .* (r*exp(θ[i]*im)/nodes)
+	for j=1:m₀
+		gmres!(Tinv[:,j], T(z), X[:,j]; tol=1e-3)
+	end
+	Tinv .*= (r*exp(θ[i]*im)/nodes)
+	Q₀ .+= Tinv
+	Q₁ .+= Tinv .* z
+    end
+
+    # S = svd!(Q₀)
+    # mul!(A, S.U', Q₁)
+    # mul!(B, A, S.V)
+    # mul!(A, B, Diagonal(1 ./ S.S))
+    # F = eigen!(A)
+    # mul!(X, S.U, F.vectors)
+    # Λ .= F.values
+
+    qt, rt = qr(Q₀)
+    qt = Matrix(qt)
+    F = eigen!(qt' * Q₁ * inv(rt))
+    mul!(X, qt, F.vectors)
+    Λ .= F.values
+    
+    for nit=1:iter
+
+        update_R!(X, R, Λ, T)
+
+        Q₀ .= 0
+        Q₁ .= 0
+	# Tinv .= 0
+
+        for i=1:nodes
+            z = (r*exp(θ[i]*im)+c)
+	    resolvent .= (1 ./(z .- Λ))
+	    Tinv .= (X - T(z)\R)
+	    # for j=1:m₀
+		 # gmres!(Tinv[:,j], T(z), R[:,j]; tol=1e-3)
+	    # end
+	    # Tinv .= X - Tinv
+	    rmul!(Tinv, (r*exp(θ[i]*im)/nodes) .* Diagonal(resolvent)) 
+	    Q₀ .+= Tinv
+	    Q₁ .+= Tinv .* z
+        end
+
+    # S = svd!(Q₀)
+    # mul!(A, S.U', Q₁)
+    # mul!(B, A, S.V)
+    # mul!(A, B, Diagonal(1 ./ S.S))
+    # F = eigen!(A)
+    # mul!(X, S.U, F.vectors)
+    # Λ .= F.values
+
+    qt, rt = qr(Q₀)
+    qt = Matrix(qt)
+    F = eigen!(qt' * Q₁ * inv(rt))
+    mul!(X, qt, F.vectors)
     Λ .= F.values
 	
-        # mul!(A, X', Q₁)
-        # mul!(B, X', Q₀)
+	# mul!(A, X', Q₁)
+	# mul!(B, X', Q₀)
 	# F = eigen!(A, B)
 	# mul!(X, Q₀, F.vectors)
 	# Λ .= F.values
