@@ -30,7 +30,7 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
     qt = Matrix(qt)
     F = eigen!(qt' * Q₁ * inv(rt))
     mul!(X, qt, F.vectors)
-    Λ .= F.values .+ c
+    Λ .= F.values
 
     if (iter == 0)
         update_R!(X, R, Λ, T)
@@ -64,7 +64,7 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
     qt = Matrix(qt)
     F = eigen!(qt' * Q₁ * inv(rt))
     mul!(X, qt, F.vectors)
-    Λ .= F.values .+ c
+    Λ .= F.values
 	
 	# mul!(A, X', Q₁)
 	# mul!(B, X', Q₀)
