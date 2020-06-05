@@ -25,14 +25,16 @@ end
 
 
 T = bf()
-# e, v, res = nlfeast!(T, rand(ComplexF64,64,30), 2^1, 0, c=complex(1.0,1.0), r=0.5)
-e, v, res = @timev nlfeast!(T, rand(ComplexF64,64,30), 2^5, 0, c=complex(1.0,1.0), r=0.5)
+e, v, res = nlfeast!(T, rand(ComplexF64,64,30), 2^3, 0, c=complex(1.0,1.0), r=0.5)
+e, v, res = @timev nlfeast!(T, rand(ComplexF64,64,30), 2^4, 20, c=complex(1.0,1.0), r=0.5, debug=true, ϵ=10e-16)
+# e, v, res = nlfeast_it!(T, rand(ComplexF64,64,30), 2^3, 0, c=complex(1.0,1.0), r=0.5)
+# e, v, res = nlfeast_it!(T, rand(ComplexF64,64,30), 2^3, 20, c=complex(1.0,1.0), r=0.5, debug=true, ϵ=10e-8)
 # display(e)
 inside(x) = in_contour(x, complex(1.0, 1.0), 0.5)
 in_eig = e[inside.(e)]
 in_res = res[inside.(e)]
-in_res_conv = in_res[in_res .<= 1e-3] 
-in_eig_conv = in_eig[in_res .<= 1e-3] 
+in_res_conv = in_res[in_res .<= 1e-3]
+in_eig_conv = in_eig[in_res .<= 1e-3]
 print("\nmax res inside: ")
 println(maximum(res[inside.(e)]))
 print("max res inside non spurious: ")
