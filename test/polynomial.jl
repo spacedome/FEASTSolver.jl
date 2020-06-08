@@ -14,8 +14,10 @@ R = 0.05
 # C = complex(-0.8, 0.8)
 C = complex(-1.55, 0.0)
 
-# e, v, res = @timev nlfeast!(T, rand(ComplexF64,1000,30), 2^3, 30, c=complex(-1.55,0.0), r=0.05)
-e, v, res = nlfeast_moments!(T, rand(ComplexF64,1000,80), 2^3, 10, c=C, r=R, debug=true, moments=3)
+# e, v, res = nlfeast!(T, rand(ComplexF64,1000,3), 2^2, 0, c=complex(-1.55,0.0), r=0.05)
+# e, v, res = @timev nlfeast!(T, rand(ComplexF64,1000,30), 2^3, 10, c=complex(-1.55,0.0), r=0.05)
+e, v, res = nlfeast_moments!(T, rand(ComplexF64,1000,10), 2^2, 0, c=C, r=R, debug=false, moments=3)
+e, v, res = @timev nlfeast_moments!(T, rand(ComplexF64,1000,80), 2^3, 10, c=C, r=R, debug=true, moments=3, ϵ=10e-16)
 # e, v, res = beyn(T, A0, rand(ComplexF64,1000,120), 2^9; c=complex(-1.55,0.0), r=0.05)
 # display(e)
 # display(res)

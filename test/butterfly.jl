@@ -1,5 +1,6 @@
 using FEASTSolver
 using LinearAlgebra
+using Profile
 
 function bf()
     N = diagm(-1 => [1,1,1,1,1,1,1])
@@ -26,9 +27,11 @@ end
 
 T = bf()
 e, v, res = nlfeast!(T, rand(ComplexF64,64,30), 2^3, 0, c=complex(1.0,1.0), r=0.5)
-e, v, res = @timev nlfeast!(T, rand(ComplexF64,64,30), 2^4, 20, c=complex(1.0,1.0), r=0.5, debug=true, ϵ=10e-16)
+e, v, res = @timev nlfeast!(T, rand(ComplexF64,64,30), 2^4, 50, c=complex(1.0,1.0), r=0.5, debug=true, ϵ=10e-16)
+# e, v, res = @profile nlfeast!(T, rand(ComplexF64,64,30), 2^4, 20, c=complex(1.0,1.0), r=0.5, debug=true, ϵ=10e-16)
+# Profile.print()
 # e, v, res = nlfeast_it!(T, rand(ComplexF64,64,30), 2^3, 0, c=complex(1.0,1.0), r=0.5)
-# e, v, res = nlfeast_it!(T, rand(ComplexF64,64,30), 2^3, 20, c=complex(1.0,1.0), r=0.5, debug=true, ϵ=10e-8)
+# e, v, res = @timev nlfeast_it!(T, rand(ComplexF64,64,30), 2^3, 20, c=complex(1.0,1.0), r=0.5, debug=true, ϵ=10e-14)
 # display(e)
 inside(x) = in_contour(x, complex(1.0, 1.0), 0.5)
 in_eig = e[inside.(e)]

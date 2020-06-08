@@ -2,7 +2,7 @@ __precompile__(true)
 
 module FEASTSolver
 
-using LinearAlgebra: ldiv!, lu!, mul!, qr!, rmul!, lmul!, eigen!, svd!, norm, Diagonal, I, diagm
+using LinearAlgebra: ldiv!, lu!, LU, mul!, qr!, rmul!, lmul!, ldiv!, eigen!, svd!, norm, Diagonal, I, diagm
 using IterativeSolvers: bicgstabl
 using SparseArrays: similar
 
