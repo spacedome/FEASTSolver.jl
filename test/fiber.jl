@@ -23,13 +23,14 @@ function info(Λ, X, residuals, c, r)
 end
 
 
-nep = nep_gallery("dep_distributed")
+nep = nep_gallery("nlevp_native_fiber")
 T(x) = compute_Mder(nep, x)
 
 n = size(nep, 1)
-C = complex(-0.4, 0.0)
-R = 1.25
+C = complex(99.5, 0.0)
+R = 5.0
 
-e, v, res = nlfeast!(T, rand(ComplexF64,n,3), 2^4, 5, c=C, r=R, debug=true, ϵ=10e-16, store=true)
+e, v, res = nlfeast_moments!(T, ComplexF64.(rand(Float64,n,10)), 2^4, 10, c=C, moments=10, r=R, debug=true, ϵ=10e-16, store=true)
 
 info(e,v,res,C,R)
+println(e)

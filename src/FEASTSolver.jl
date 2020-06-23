@@ -6,9 +6,9 @@ using LinearAlgebra: ldiv!, lu!, LU, mul!, qr!, rmul!, lmul!, ldiv!, eigen!, svd
 using IterativeSolvers: bicgstabl
 using SparseArrays: similar
 
-export feast!, ifeast!, nlfeast!, nlfeast_opt!, nlfeast_it!, nlfeast_moments!
+export feast!, ifeast!, nlfeast!, nlfeast_opt!, nlfeast_it!, nlfeast_moments!, nlfeast_moments_SS!
 export gen_feast!, dual_gen_feast!
-export beyn
+export beyn, companion, block_SS!
 export in_contour
 
 function in_contour(λ, c, r)
@@ -19,5 +19,6 @@ include("lapack.jl")
 include("feast.jl")
 include("nlfeast.jl")
 include("beyn.jl")
+include("companion.jl")
 
 end # module

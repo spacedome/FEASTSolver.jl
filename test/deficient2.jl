@@ -11,8 +11,8 @@ function info(Λ, X, residuals, c, r)
     print("number inside : ")
     println(size(Λ[inside.(Λ)])[1])
     if sum(inside.(Λ)) > 0
-        in_res_conv = in_res[in_res .<= 1e-3]
-        in_eig_conv = in_eig[in_res .<= 1e-3]
+        in_res_conv = in_res[in_res .<= 1e-5]
+        in_eig_conv = in_eig[in_res .<= 1e-5]
         print("number inside converged : ")
         println(size(in_eig_conv)[1])
         print("max res inside: ")
@@ -42,7 +42,7 @@ function moments_expand!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter:
         z = (r*exp(θ[i]*im)+c)
 		Temp = (T(z)\X) .* (r*exp(θ[i]*im)/nodes)
         Q[1,:,:] .+= Temp
-        for j=2:2*moments
+        for j=1:2*moments
             Q[j,:,:] .+= Temp .* z^(j-1)
         end
     end
@@ -72,7 +72,7 @@ function moments_expand!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter:
 		Temp = (Y - T(z)\R) * Diagonal(resolvent)
 
         Q[1,:,:] .+= Temp
-        for j=2:2*moments
+        for j=1:2*moments
             Q[j,:,:] .+= Temp .* z^(j-1)
         end
     end
@@ -106,31 +106,33 @@ function moments_expand!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter:
 end
 
 
-A0 = Matrix(mmread("data/quadraticM0.mtx"))
-A1 = Matrix(mmread("data/quadraticM1.mtx"))
+#
+# A0 = Matrix(mmread("data/quadraticM0.mtx"))
+# A1 = Matrix(mmread("data/quadraticM1.mtx"))
 
-# Random.seed!(1234)
-# A0 = complex.(rand(15,15))
-# A1 = complex.(rand(15,15))
-# A0[:,1] .= 0
+Random.seed!(12345)
+A0 = complex.(rand(100,100))
+A1 = complex.(rand(100,100))
+A0[:,1] .= 0
 
 function T(z::ComplexF64)
-	return (z + 0.2)*(z - 0.1).*A1 .+ A0
+	return (z + 0.4)*(z - 0.5)*(z + 0.4im)*(z-0.5im).*A1 .+ A0
 end
 
-R = 0.25
+R = 0.525
 # C = complex(-0.8, 0.8)
 C = complex(0, 0.0)
 
 # e, v, res = nlfeast!(T, rand(ComplexF64,15,8), 2^6, 0, c=C, r=R, spurious=1e-3,debug=true)
-e, v, res = nlfeast_moments!(T, rand(ComplexF64,15,4), 2^4, 2, c=C, r=R, moments=2, debug=true, ϵ=10e-16, spurious=1e-3)
-# e, v, res = moments_expand!(T, rand(ComplexF64,15,7), 2^3, 1, c=C, r=R, moments=2, ϵ=10e-16, spurious=1e-3)
-# e, v, res = block_SS!(T, rand(ComplexF64,15,8), 2^8, 32, c=C, r=R)
+
+e, v, res = nlfeast_moments!(T, rand(ComplexF64,100,30), 2^3, 10, c=C, r=R, moments=5, debug=true, ϵ=10e-16, store=false, spurious=1e-5)
+
+# e, v, res = moments_expand!(T, rand(ComplexF64,15,7), 2^6, 1, c=C, r=R, moments=2, ϵ=10e-16, spurious=1e-3)
 # e, v, res = beyn(T, A0, rand(ComplexF64,1000,120), 2^9; c=complex(-1.55,0.0), r=0.05)
 # display(e)
 # display(res)
 #
-# inside(x) = in_contour(x, C, R)
+inside(x) = in_contour(x, C, R)
 # # print("\nmax res inside: ")
 # # println(maximum(res[inside.(e)]))
 # # print("number inside : ")
@@ -153,10 +155,11 @@ e, v, res = nlfeast_moments!(T, rand(ComplexF64,15,4), 2^4, 2, c=C, r=R, moments
 # print("number inside converged : ")
 # println(size(in_eig_conv)[1])
 
-# e, v, res = companion([(A0 .- 0.02.*A1), (0.1.*A1), A1])
+# Z = zeros(100,100)
+# e, v, res = companion([(A0 .- 0.04.*A1), ((0.02im-0.02).*A1), (0.01im.*A1), ((-0.1-0.1im).*A1), A1])
 
 info(e, v, res, C, R)
 
-display(res)
-println()
-display(e)
+# display(res)
+# println()
+display(e[inside.(e)])

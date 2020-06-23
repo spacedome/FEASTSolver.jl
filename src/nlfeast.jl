@@ -1,6 +1,6 @@
 import IterativeSolvers: gmres!, bicgstabl!, gmres, bicgstabl
 function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Integer;
-    c=complex(0.0,0.0), r=1.0, debug=false, ϵ=10e-12)
+    c=complex(0.0,0.0), r=1.0, debug=false, ϵ=10e-12, store=true, spurious=1e-5)
 
     N, m₀ = size(X)
     Λ = zeros(ComplexF64, m₀)
@@ -10,32 +10,41 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
     resolvent = similar(Λ)
     A, B = zeros(ComplexF64, m₀, m₀), zeros(ComplexF64, m₀, m₀)
     res = Array{Float64}(undef, m₀)
-    M = Array{ComplexF64}(undef, (nodes, N,N))
-    facts = Array{LU}(undef, nodes)
+	if store
+	    M = Array{ComplexF64}(undef, (nodes, N,N))
+	    facts = Array{LU}(undef, nodes)
+	end
+
+    qt, rt = qr!(X)
+    X .= Matrix(qt)
 
     for i=1:nodes
         z = (r*exp(θ[i]*im)+c)
 
-        M[i,:,:] .= T(z)
-        facts[i] = lu!(M[i,:,:])
-        Tinv .= X
-        ldiv!(facts[i], Tinv)
-        Tinv .*= (r*exp(θ[i]*im)/nodes)
-
-        # Tinv .= (T(z)\X) .* (r*exp(θ[i]*im)/nodes)
+		if store
+	        M[i,:,:] .= T(z)
+	        facts[i] = lu!(M[i,:,:])
+	        Tinv .= X
+	        ldiv!(facts[i], Tinv)
+	        Tinv .*= (r*exp(θ[i]*im)/nodes)
+		else
+        	Tinv .= (T(z)\X) .* (r*exp(θ[i]*im)/nodes)
+		end
 
         Q₀ .+= Tinv
         Q₁ .+= Tinv .* z
+
+		if debug print(".") end
     end
+	if debug println() end
 
     beyn_svd_step!(Q₀, Q₁, A, B, X, Λ)
-    # beyn_qr_step!(Q₀, Q₁, X, Λ)
 
     update_R!(X, R, Λ, T)
     res .= residuals(R, Λ, T)
 
     if debug
-        iter_debug_print(0, Λ, res, c, r)
+        iter_debug_print(0, Λ, res, c, r, spurious)
     end
 
     for nit=1:iter
@@ -47,42 +56,43 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
             z = (r*exp(θ[i]*im)+c)
             resolvent .= (1 ./(z .- Λ)) .* (r*exp(θ[i]*im)/nodes)
 
-            # Tinv .= (X - T(z)\R)
-
-            # M .= T(z)
-            # LU = lu!(M)
-            Tinv .= R
-            ldiv!(facts[i], Tinv)
-            Tinv .= X - Tinv
-
-            # Tinv .= (X - (ComplexF32.(T(z))\ComplexF32.(R)))
-            # Tinv .= T(z)\R
-            # Tinv .= X - (10e-14*norm(Tinv)*randn(ComplexF64, size(Tinv)) .+ Tinv)
+			if store
+	            Tinv .= R
+	            ldiv!(facts[i], Tinv)
+	            Tinv .= X - Tinv
+			else
+				Tinv .= (X - T(z)\R)
+			end
 
             rmul!(Tinv,  Diagonal(resolvent))
             Q₀ .+= Tinv
             Q₁ .+= Tinv .* z
+			if debug print(".") end
         end
+		if debug println() end
 
-        beyn_svd_step!(Q₀, Q₁, A, B, X, Λ)
-        # beyn_rr_step!(Q₀, Q₁, A, B, X, Λ)
-        # beyn_qr_step!(Q₀, Q₁, X, Λ)
+		beyn_svd_step!(Q₀, Q₁, A, B, X, Λ)
 
         update_R!(X, R, Λ, T)
         res .= residuals(R, Λ, T)
 
         if debug
-            iter_debug_print(nit, Λ, res, c, r)
+            iter_debug_print(nit, Λ, res, c, r, spurious)
         end
 
-        if size(res[in_contour.(Λ, c, r)],1) > 0 && maximum(res[in_contour.(Λ, c, r)]) < ϵ
+		res_inside = res[in_contour.(Λ, c, r)]
+        if size(res_inside,1) > 0 && maximum(res_inside) < ϵ
             break
         end
+		if nit>1 && sum(res_inside .< spurious) > 0 && maximum(res_inside[res_inside .< spurious]) < ϵ
+			break
+		end
     end
 
     normalize!(X)
     Λ, X, res
 end
+
 
 function nlfeast_it!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Integer;
     c=complex(0.0,0.0), r=1.0, debug=false, ϵ=0.05)
@@ -103,12 +113,14 @@ function nlfeast_it!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Int
         # Temp .= (T(z)\X) .* (r*exp(θ[i]*im)/nodes)
         for j=1:m₀
             # Tinv[i,:,j], log = gmres(T(z), X[:,j]; tol=10e-8, log=true)
-            Tinv[i,:,j] .= bicgstabl(T(z), X[:,j], 2; tol=1e-8)
+            Tinv[i,:,j] .= bicgstabl(T(z), X[:,j], 2; tol=1e-3)
         end
         Temp .= Tinv[i,:,:] .* (r*exp(θ[i]*im)/nodes)
         Q₀ .+= Temp
         Q₁ .+= Temp .* z
+		if debug print(".") end
     end
+	if debug println() end
 
     beyn_svd_step!(Q₀, Q₁, A, B, X, Λ)
     # beyn_qr_step!(Q₀, Q₁, X, Λ)
@@ -134,7 +146,7 @@ function nlfeast_it!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Int
             for j=1:m₀
                 # Tinv[i,:,j], log = gmres!(Tinv[i,:,j], T(z), R[:,j]; log=true, maxiter=1000, tol=1e-3)
                 # Tinv[i,:,j], log = gmres(T(z), R[:,j]; log=true, maxiter=1000, tol=1e-3)
-                Tinv[i,:,j], log = bicgstabl!(Tinv[i,:,j], T(z), R[ :,j], 1; log=true, max_mv_products=1000, tol=1e-8)
+                Tinv[i,:,j], log = bicgstabl!(Tinv[i,:,j], T(z), R[ :,j], 1; log=true, tol=1e-8)
                 # Tinv[i,:,j], log = bicgstabl(T(z), R[:,j], 2; log=true, max_mv_products=1000, tol=1e-3)
                 # if !log.isconverged println(log) end
                 # print(log.iters)
@@ -145,7 +157,9 @@ function nlfeast_it!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Int
             rmul!(Temp, (r*exp(θ[i]*im)/nodes) .* Diagonal(resolvent))
             Q₀ .+= Temp
             Q₁ .+= Temp .* z
+			if debug print(".") end
         end
+		if debug println() end
 
         beyn_svd_step!(Q₀, Q₁, A, B, X, Λ)
         # beyn_qr_step!(Q₀, Q₁, X, Λ)
@@ -167,7 +181,7 @@ function nlfeast_it!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Int
 end
 
 function nlfeast_moments!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Integer;
-    c=complex(0.0,0.0), r=1.0, debug=false, ϵ=10e-12, moments=2)
+    c=complex(0.0,0.0), r=1.0, debug=false, ϵ=10e-12, moments=2, store=true, spurious=1e-5)
 
     N, m₀ = size(X)
     Λ = zeros(ComplexF64, moments*m₀)
@@ -175,28 +189,35 @@ function nlfeast_moments!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter
     Q = zeros(ComplexF64, 2*moments, N, m₀)
     Y = zeros(ComplexF64, N, m₀*moments)
     Q₀, Q₁ = zeros(ComplexF64, moments*N, moments*m₀), zeros(ComplexF64, moments*N, moments*m₀)
-    Tinv, Temp, R = similar(X, ComplexF32), similar(X, ComplexF64), similar(Y, ComplexF64)
+    Tinv, Temp, R = similar(X, ComplexF64), similar(X, ComplexF64), similar(Y, ComplexF64)
     resolvent = zeros(ComplexF64, m₀)
     A, B = zeros(ComplexF64, moments*m₀, moments*m₀), zeros(ComplexF64, moments*m₀, moments*m₀)
     res = Array{Float64}(undef, size(R, 2))
     Y = zeros(ComplexF64, N, m₀*moments)
-    M = Array{ComplexF32}(undef, (nodes, N,N))
-    facts = Array{LU}(undef, nodes)
+	if store
+	    M = Array{ComplexF64}(undef, (nodes, N,N))
+	    facts = Array{LU}(undef, nodes)
+	end
 
     for i=1:nodes
         z = (r*exp(θ[i]*im)+c)
 
-        M[i,:,:] .= ComplexF32.(T(z))
-        facts[i] = lu!(M[i,:,:])
-        Tinv .= X
-        ldiv!(facts[i], Tinv)
-        Tinv .*= (r*exp(θ[i]*im)/nodes)
+		if store
+			# M[i,:,:] .= ComplexF32.(T(z))
+			M[i,:,:] .= T(z)
+	        facts[i] = lu!(M[i,:,:])
+	        Tinv .= X
+	        ldiv!(facts[i], Tinv)
+	        Temp .= (r*exp(θ[i]*im)/nodes) .* Tinv
+		else
+			Temp .= (T(z)\X) .* (r*exp(θ[i]*im)/nodes)
+			# Tinv .= (ComplexF32.(T(z))\ComplexF32.(X)) .* (r*exp(θ[i]*im)/nodes)
+		end
 
-        # Tinv .= (T(z)\X) .* (r*exp(θ[i]*im)/nodes)
-        # Tinv .= (ComplexF32.(T(z))\ComplexF32.(X)) .* (r*exp(θ[i]*im)/nodes)
-        Q[1,:,:] .+= Tinv
-        for j=1:2*moments
-            Q[j,:,:] .+= Tinv .* z^(j-1)
+
+        Q[1,:,:] .+= Temp
+        for j=2:2*moments
+            Q[j,:,:] .+= Temp .* z^(j-1)
         end
     end
     for i=1:moments, j=1:moments
@@ -211,6 +232,159 @@ function nlfeast_moments!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter
     F = eigen!(A)
     mul!(Y, S.U[1:N,:], F.vectors)
     Λ .= F.values
+
+    # beyn_svd_step!(Q₀, Q₁, A, B, X, Λ)
+    # beyn_qr_step!(Q₀, Q₁, X, Λ)
+
+	update_R_moments!(Y, R, Λ, res, T, c, r)
+	X .= Y[:,1:m₀]
+    # update_R!(Y, R, Λ, T)
+    # res .= residuals(R, Λ, T)
+    # p = sortperm(res)
+	# p = sortperm(abs.(Λ .- c))
+    # res .= res[p]
+    # X .= Y[:, p][:,1:m₀]
+    # Λ .= Λ[p]
+    # R .= R[:, p]
+
+    if debug
+        iter_debug_print(0, Λ[1:m₀], res[1:m₀], c, r, spurious)
+		# iter_debug_print(0, Λ, res, c, r, spurious)
+    end
+
+    for nit=1:iter
+
+        Q .= 0
+
+        for i=1:nodes
+            z = (r*exp(θ[i]*im)+c)
+            resolvent .= (1 ./(z .- Λ[1:m₀])) .* (r*exp(θ[i]*im)/nodes)
+
+
+			if store
+	            Tinv .= R[:, 1:m₀]
+	            ldiv!(facts[i], Tinv)
+	            Temp .= X - Tinv
+			else
+				Temp .= (X - T(z)\R[:, 1:m₀])
+				# Tinv .= (X - (ComplexF32.(T(z))\ComplexF32.(R[:, 1:m₀])))
+			end
+            rmul!(Temp, Diagonal(resolvent))
+
+            Q[1,:,:] .+= Temp
+            for j=2:2*moments
+                Q[j,:,:] .+= Temp .* z^(j-1)
+            end
+        end
+
+        for i=1:moments, j=1:moments
+            Q₀[(i-1)*N+1:i*N, (j-1)*m₀+1:j*m₀] .= Q[i+j-1,:,:]
+            Q₁[(i-1)*N+1:i*N, (j-1)*m₀+1:j*m₀] .= Q[i+j,:,:]
+        end
+
+        S = svd!(Q₀)
+        mul!(A, S.U', Q₁)
+        mul!(B, A, S.V)
+        mul!(A, B, Diagonal(1 ./ S.S))
+        F = eigen!(A)
+        mul!(Y, S.U[1:N,:], F.vectors)
+        Λ .= F.values
+
+        # beyn_svd_step!(Q₀, Q₁, A, B, X, Λ)
+        # beyn_rr_step!(Q₀, Q₁, A, B, X, Λ)
+        # beyn_qr_step!(Q₀, Q₁, X, Λ)
+
+        update_R_moments!(Y, R, Λ, res, T, c, r)
+		X .= Y[:,1:m₀]
+        # res .= residuals(R, Λ, T)
+        # # p = sortperm(res)
+        # # res .= res[p]
+        # # X .= Y[:, p][:,1:m₀]
+        # # Λ .= Λ[p]
+        # # R .= R[:, p]
+
+        if debug
+            iter_debug_print(nit, Λ[1:m₀], res[1:m₀], c, r, spurious)
+			# iter_debug_print(nit, Λ, res, c, r, spurious)
+        end
+		res_inside = res[1:m₀][in_contour.(Λ[1:m₀], c, r)]
+        if size(res_inside, 1) > 0 && maximum(res_inside) < ϵ
+            break
+        end
+		if nit>1 && sum(res_inside .< spurious) > 0 && maximum(res_inside[res_inside .< spurious]) < ϵ
+			break
+		end
+    end
+
+	p = sortperm(res)
+	res .= res[p]
+	X .= Y[:, p][:,1:m₀]
+	Λ .= Λ[p]
+	R .= R[:, p]
+
+    normalize!(X)
+    Λ[1:m₀], X, res[1:m₀]
+end
+
+function nlfeast_moments_SS!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Integer;
+    c=complex(0.0,0.0), r=1.0, debug=false, ϵ=10e-12, moments=2, spurious=1e-5)
+
+    N, m₀ = size(X)
+    Λ = zeros(ComplexF64, moments*m₀)
+    θ = LinRange(π/nodes, 2*π-π/nodes, nodes)
+    Q = zeros(ComplexF64, N, (2*moments+1)*m₀)
+    Y = zeros(ComplexF64, N, m₀*moments)
+    Q₀, Q₁ = zeros(ComplexF64, moments*m₀, moments*m₀), zeros(ComplexF64, moments*m₀, moments*m₀)
+    Tinv, Temp, V, R = similar(X, ComplexF64), similar(X, ComplexF64), similar(X, ComplexF64), similar(Y, ComplexF64)
+    resolvent = zeros(ComplexF64, m₀)
+    A, B = zeros(ComplexF64, moments*m₀, moments*m₀), zeros(ComplexF64, moments*m₀, moments*m₀)
+    res = Array{Float64}(undef, size(R, 2))
+    Y = zeros(ComplexF64, N, m₀*moments)
+    M = Array{ComplexF64}(undef, (nodes, N,N))
+    facts = Array{LU}(undef, nodes)
+
+	V .= rand(ComplexF64, N, m₀)
+
+    for i=1:nodes
+        z = (r*exp(θ[i]*im)+c)
+
+        # M[i,:,:] .= T(z)
+        # facts[i] = lu!(M[i,:,:])
+        # Tinv .= X
+        # ldiv!(facts[i], Tinv)
+        # Tinv .*= (r*exp(θ[i]*im)/nodes)
+
+        Tinv .= (T(z)\X) .* (r*exp(θ[i]*im)/nodes)
+        # Tinv .= (ComplexF32.(T(z))\ComplexF32.(X)) .* (r*exp(θ[i]*im)/nodes)
+        Q[:,1:m₀] .+= Tinv
+        for j=2:2*moments
+            Q[:,j*m₀+1:(j+1)*m₀] .+= Tinv .* z^(j-1)
+        end
+    end
+    for i=1:moments, j=1:moments
+        Q₀[(i-1)*m₀+1:i*m₀, (j-1)*m₀+1:j*m₀] .= X' * Q[:,(i+j-2)*m₀+1:(i+j-1)*m₀]
+        Q₁[(i-1)*m₀+1:i*m₀, (j-1)*m₀+1:j*m₀] .= X' * Q[:,(i+j-1)*m₀+1:(i+j)*m₀]
+    end
+
+    # S = svd!(Q₀)
+    # mul!(A, S.U', Q₁)
+    # mul!(B, A, S.V)
+    # mul!(A, B, Diagonal(1 ./ S.S))
+    # F = eigen!(A)
+    # mul!(Y, S.U[1:N,:], F.vectors)
+	# F = eigen!(Q₁, Q₀)
+	# Y .= Q[:,1:moments*m₀]*F.vectors
+	# Λ .= F.values
+
+	V = svd(Q₀)
+	n = min(count(V.S/V.S[1] .> 1e-13), K)
+
+	H1 = V.U[:,1:n]' * Q₁ * V.V[:,1:n]
+    H0 = V.U[:,1:n]' * Q₀ * V.V[:,1:n]
+
+    Λ, Xq = eigen!(H1, H0)
+    X = S[:,1:K] * V.V[:,1:n] *  Xq
+    # Λ = Λ .+ c
 
     # beyn_svd_step!(Q₀, Q₁, A, B, X, Λ)
     # beyn_qr_step!(Q₀, Q₁, X, Λ)
@@ -235,33 +409,46 @@ function nlfeast_moments!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter
             z = (r*exp(θ[i]*im)+c)
             resolvent .= (1 ./(z .- Λ[1:m₀])) .* (r*exp(θ[i]*im)/nodes)
 
-            # Tinv .= (X - T(z)\R[:, 1:m₀])
+            Tinv .= (X - T(z)\R[:, 1:m₀])
             # Tinv .= (X - (ComplexF32.(T(z))\ComplexF32.(R[:, 1:m₀])))
 
-            Tinv .= ComplexF32.(R[:, 1:m₀])
-            ldiv!(facts[i], Tinv)
-            Temp .= X - Tinv
+            # Tinv .=R[:, 1:m₀]
+            # ldiv!(facts[i], Tinv)
+            # Temp .= X - Tinv
 
             rmul!(Temp, Diagonal(resolvent))
 
-            Q[1,:,:] .+= Temp
-            for j=1:2*moments
-                Q[j,:,:] .+= Temp .* z^(j-1)
-            end
+			Q[:,1:m₀] .+= Tinv
+	        for j=2:2*moments
+	            Q[:,j*m₀+1:(j+1)*m₀] .+= Tinv .* z^(j-1)
+	        end
         end
 
         for i=1:moments, j=1:moments
-            Q₀[(i-1)*N+1:i*N, (j-1)*m₀+1:j*m₀] .= Q[i+j-1,:,:]
-            Q₁[(i-1)*N+1:i*N, (j-1)*m₀+1:j*m₀] .= Q[i+j,:,:]
+			Q₀[(i-1)*m₀+1:i*m₀, (j-1)*m₀+1:j*m₀] .= X' * Q[:,(i+j-2)*m₀+1:(i+j-1)*m₀]
+	        Q₁[(i-1)*m₀+1:i*m₀, (j-1)*m₀+1:j*m₀] .= X' * Q[:,(i+j-1)*m₀+1:(i+j)*m₀]
         end
 
-        S = svd!(Q₀)
-        mul!(A, S.U', Q₁)
-        mul!(B, A, S.V)
-        mul!(A, B, Diagonal(1 ./ S.S))
-        F = eigen!(A)
-        mul!(Y, S.U[1:N,:], F.vectors)
-        Λ .= F.values
+        # S = svd!(Q₀)
+        # mul!(A, S.U', Q₁)
+        # mul!(B, A, S.V)
+        # mul!(A, B, Diagonal(1 ./ S.S))
+        # F = eigen!(A)
+        # mul!(Y, S.U[1:N,:], F.vectors)
+		# F = eigen!(Q₁, Q₀)
+		# Y .= Q[:,1:moments*m₀]*F.vectors
+		# Λ .= F.values
+
+		V = svd(Q₀)
+		n = min(count(V.S/V.S[1] .> 1e-13), K)
+
+		H1 = V.U[:,1:n]' * Q₁ * V.V[:,1:n]
+	    H0 = V.U[:,1:n]' * Q₀ * V.V[:,1:n]
+
+	    Λ, Xq = eigen!(H1, H0)
+	    X = S[:,1:K] * V.V[:,1:n] *  Xq
+	    # Λ = Λ .+ c
+
 
         # beyn_svd_step!(Q₀, Q₁, A, B, X, Λ)
         # beyn_rr_step!(Q₀, Q₁, A, B, X, Λ)
@@ -279,21 +466,33 @@ function nlfeast_moments!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter
             iter_debug_print(nit, Λ[1:m₀], res[1:m₀], c, r)
         end
 
-        if maximum(res[1:m₀][in_contour.(Λ[1:m₀], c, r)]) < ϵ
-            break
-        end
+        # if maximum(res[1:m₀][in_contour.(Λ[1:m₀], c, r)]) < ϵ
+        #     break
+        # end
     end
 
     normalize!(X)
     Λ[1:m₀], X, res[1:m₀]
 end
 
-function iter_debug_print(nit, Λ, res, c, r)
+function iter_debug_print(nit, Λ, res, c, r, spurious=1e-5)
     print(nit)
     print(":\t")
+	in_eig = Λ[in_contour.(Λ, c, r)]
+	in_res = res[in_contour.(Λ, c, r)]
     print(sum(in_contour.(Λ, c, r)))
-    print("\t")
-    print(maximum(res[in_contour.(Λ, c, r)]))
+    print(" (")
+    print(sum(in_res .< spurious))
+    print(")\t")
+	if sum(in_contour.(Λ, c, r)) > 0
+		print(maximum(res[in_contour.(Λ, c, r)]))
+		in_res_conv = in_res[in_res .< spurious]
+		if size(in_res_conv, 1) > 0
+			print("\t(")
+			print(maximum(in_res_conv))
+			print(")")
+		end
+	end
     println()
 end
 
@@ -323,6 +522,14 @@ function beyn_rr_step!(Q₀::AbstractMatrix, Q₁::AbstractMatrix, A::AbstractMa
     Λ .= F.values
 end
 
+function beyn_rr_step2!(Q₀::AbstractMatrix, Q₁::AbstractMatrix, A::AbstractMatrix, B::AbstractMatrix, X::AbstractMatrix{ComplexF64}, Λ::Array)
+    mul!(A, Q₀', Q₁)
+    mul!(B, Q₀', Q₀)
+    F = eigen!(A, B)
+    mul!(X, Q₀, F.vectors)
+    Λ .= F.values
+end
+
 
 function update_R!(X::AbstractMatrix, R::AbstractMatrix, Λ::Array, T::Function)
     for i=1:size(X, 2)
@@ -331,14 +538,40 @@ function update_R!(X::AbstractMatrix, R::AbstractMatrix, Λ::Array, T::Function)
     end
 end
 
+function update_R_moments!(X::AbstractMatrix, R::AbstractMatrix, Λ::Array, res::Array, T::Function, c, r)
+    for i=1:size(X, 2)
+        X[:,i] ./= norm(X[:,i])
+        R[:,i] .= T(Λ[i]) * X[:,i]
+    end
+	residuals!(res, R, Λ, T)
+	# p = sortperm(res .- in_contour.(Λ, c, r))
+	p = sortperm(res)
+	# p = sortperm(abs.(Λ .- c))
+	# a = copy(abs.(Λ .- c))
+	# b = copy(res)
+	# p = sortperm(normalize!(a) .+ normalize!(b))
+	res .= res[p]
+	X .= X[:, p]
+	Λ .= Λ[p]
+	R .= R[:, p]
+end
+
 function normalize!(X::AbstractVecOrMat)
     for i=1:size(X, 2)
         X[:,i] ./= norm(X[:,i])
     end
+	X
 end
 
 function residuals(R::AbstractMatrix, Λ::Array, T::Function)
     res = Array{Float64}(undef, size(R, 2))
+    for i=1:size(R, 2)
+        res[i] = norm(R[:,i])/norm(T(Λ[i]))
+    end
+    res
+end
+
+function residuals!(res::Array, R::AbstractMatrix, Λ::Array, T::Function)
     for i=1:size(R, 2)
         res[i] = norm(R[:,i])/norm(T(Λ[i]))
     end
