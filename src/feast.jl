@@ -1,4 +1,4 @@
-
+import LinearAlgebra: qr
 ### Overwrites X₀
 function feast!(X₀::AbstractMatrix, A::AbstractMatrix;
                 nodes::Integer=8, iter::Integer=10, c=complex(0.0,0.0), r=1.0, debug=false, ϵ=1e-12)
@@ -29,7 +29,7 @@ function feast!(X₀::AbstractMatrix, A::AbstractMatrix;
             ldiv!(temp, lu!(ZmA), X)
             Q .+= temp .* exp(θ[i]*im)./nodes
         end
-        ### Q .= Matrix(qr(Q).Q)
+        Q .= Matrix(qr(Q).Q)
         mul!(resvecs, A, Q) ## why does this one allocate?
         mul!(Aq, Q', resvecs) ### Aq = Q' * A * Q
         mul!(Bq, Q', Q) ### Bq = Q' * Q
@@ -55,11 +55,11 @@ function feast!(X₀::AbstractMatrix, A::AbstractMatrix;
             res[i]=norm(@view resvecs[:,i])
         end
         contour_nonempty = reduce(|, in_contour.(Λ, c, r))
+        if debug iter_debug_print_feast(nit, Λ, res, c, r, 1e-5) end
         if contour_nonempty && maximum(res[in_contour.(Λ, c, r)]) < ϵ
             println("converged in $nit iteration")
             break
         end
-        if debug println(nit) end
     end
     contour_nonempty = reduce(|, in_contour.(Λ, c, r))
     if !contour_nonempty println("no eigenvalues found in contour!") end
@@ -281,4 +281,25 @@ function ifeast!(A::AbstractMatrix, X₀::AbstractMatrix, nodes::Integer, iter::
         if debug println(nit) end
     end
     Λ, X, res
+end
+
+function iter_debug_print_feast(nit, Λ, res, c, r, spurious=1e-5)
+    print(nit)
+    print(":\t")
+	in_eig = Λ[in_contour.(Λ, c, r)]
+	in_res = res[in_contour.(Λ, c, r)]
+    print(sum(in_contour.(Λ, c, r)))
+    print(" (")
+    print(sum(in_res .< spurious))
+    print(")\t")
+	if sum(in_contour.(Λ, c, r)) > 0
+		print(maximum(res[in_contour.(Λ, c, r)]))
+		in_res_conv = in_res[in_res .< spurious]
+		if size(in_res_conv, 1) > 0
+			print("\t(")
+			print(maximum(in_res_conv))
+			print(")")
+		end
+	end
+    println()
 end
