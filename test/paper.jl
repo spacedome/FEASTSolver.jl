@@ -60,7 +60,11 @@ function gun()
 	return T
 end
 
-
+function hadeler()
+	nep_hadeler = nep_gallery("nlevp_native_hadeler", 100, 200)
+	T(z) = compute_Mder(nep_hadeler, z)
+	return T
+end
 
 
 function info(Λ, X, residuals, c, r)
@@ -131,26 +135,33 @@ max_iter_all = 10
 
 Random.seed!(1729)
 
-println("\nButterfly Problem")
-bf_feast_call(X, N, iter, err_tol) = nlfeast!(bf(), X, N, iter, c=complex(1.0,1.0), r=0.5, ϵ=err_tol)
-bf_res = res_table(bf_feast_call, (64,30), max_iter_all, 7, 1e-2, complex(1.0,1.0), 0.5, err_tol_all)
-writedlm("test/data/bf.dat", zip(1:max_iter_all, eachcol(bf_res)...))
+# println("\nButterfly Problem")
+# max_iter_butterfly = 25
+# bf_feast_call(X, N, iter, err_tol) = nlfeast!(bf(), X, N, iter, c=complex(1.0,1.0), r=0.5, ϵ=err_tol)
+# bf_res = res_table(bf_feast_call, (64,20), max_iter_butterfly, 7, 1e-0, complex(1.0,1.0), 0.5, err_tol_all)
+# writedlm("test/data/bf.dat", zip(1:max_iter_butterfly, eachcol(bf_res)...))
+#
+#
+# println("\nDeficient Quadratic Problem")
+#
+# deficient_feast_call(X, N, iter, err_tol) = nlfeast_moments!(deficient(), X, N, iter, c=complex(0.0,0.0), r=0.25, ϵ=err_tol, moments=2, store=true)
+# def_res = res_table(deficient_feast_call, (15,4), max_iter_all, 7, 1e-5, complex(0.0,0.0), 0.25, err_tol_all)
+# writedlm("test/data/deficient.dat", zip(1:max_iter_all, eachcol(def_res)...))
+#
+#
+# println("\nLarger Quadratic Problem")
+# quad_feast_call(X, N, iter, err_tol) = nlfeast_moments!(quadratic(), X, N, iter, c=complex(-1.55,0.0), r=0.05, ϵ=err_tol, moments=2, store=true)
+# quad_res = res_table(quad_feast_call, (1000,70), max_iter_all, 6, 1e-6, complex(-1.55,0.0), 0.05, err_tol_all)
+# writedlm("test/data/quad.dat", zip(1:max_iter_all, eachcol(quad_res)...))
+#
+#
+# println("\nGun Cavity Problem")
+# gun_feast_call(X, N, iter, err_tol) = nlfeast!(gun(), X, N, iter, c=complex(140000.0, 0.0), r=30000, ϵ=err_tol, store=false)
+# gun_res = res_table(gun_feast_call, (9956,32), max_iter_all, 6, 1e-6, complex(140000.0, 0.0), 30000, err_tol_all)
+# writedlm("test/data/gun.dat", zip(1:max_iter_all, eachcol(gun_res)...))
 
 
-println("\nDeficient Quadratic Problem")
-
-deficient_feast_call(X, N, iter, err_tol) = nlfeast_moments!(deficient(), X, N, iter, c=complex(0.0,0.0), r=0.25, ϵ=err_tol, moments=2, store=true)
-def_res = res_table(deficient_feast_call, (15,4), max_iter_all, 7, 1e-5, complex(0.0,0.0), 0.25, err_tol_all)
-writedlm("test/data/deficient.dat", zip(1:max_iter_all, eachcol(def_res)...))
-
-
-println("\nLarger Quadratic Problem")
-quad_feast_call(X, N, iter, err_tol) = nlfeast_moments!(quadratic(), X, N, iter, c=complex(-1.55,0.0), r=0.05, ϵ=err_tol, moments=2, store=true)
-quad_res = res_table(quad_feast_call, (1000,70), max_iter_all, 6, 1e-6, complex(-1.55,0.0), 0.05, err_tol_all)
-writedlm("test/data/quad.dat", zip(1:max_iter_all, eachcol(quad_res)...))
-
-
-println("\nGun Cavity Problem")
-gun_feast_call(X, N, iter, err_tol) = nlfeast!(gun(), X, N, iter, c=complex(140000.0, 0.0), r=30000, ϵ=err_tol, store=false)
-gun_res = res_table(gun_feast_call, (9956,32), max_iter_all, 6, 1e-6, complex(140000.0, 0.0), 30000, err_tol_all)
-writedlm("test/data/gun.dat", zip(1:max_iter_all, eachcol(gun_res)...))
+println("\nHadeler Problem")
+hadeler_feast_call(X, N, iter, err_tol) = nlfeast!(hadeler(), X, N, iter, c=complex(-30.0, 0.0), r=10.0, ϵ=err_tol, store=true)
+hadeler_res = res_table(hadeler_feast_call, (200,15), max_iter_all, 6, 1e-4, complex(-30.0, 0.0), 10.0, err_tol_all)
+writedlm("test/data/hadeler.dat", zip(1:max_iter_all, eachcol(hadeler_res)...))

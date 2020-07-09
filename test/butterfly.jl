@@ -68,8 +68,9 @@ C = complex(1.0,1.0)
 R = 0.5
 
 T = bf()
-# # e, v, res = nlfeast!(T, rand(ComplexF64,64,30), 2^2, 0, c=complex(1.0,1.0), r=0.5)
-# # e, v, res = @timev nlfeast!(T, rand(ComplexF64,64,30), 2^4, 20, c=complex(1.0,1.0), r=0.5, debug=true, ϵ=10e-16, spurious=5e-3)
+e, v, res = nlfeast!(T, rand(ComplexF64,64,30), 2^2, 0, c=complex(1.0,1.0), r=0.5)
+e, v, res = @timev nlfeast!(T, rand(ComplexF64,64,20), 2^9, 0, c=complex(1.0,1.0), r=0.5, debug=false, ϵ=10e-16, spurious=5e-3)
+# e, v, res = nlfeast_moments!(T, rand(ComplexF64,64,15), 2^4, 40, moments=2, c=complex(1.0,1.0), r=0.5, debug=true, ϵ=10e-16, spurious=5e-3)
 # # e, v, res = companion(bf_arrays())
 # # e, v, res = @profile nlfeast!(T, rand(ComplexF64,64,30), 2^4, 20, c=complex(1.0,1.0), r=0.5, debug=true, ϵ=10e-16)
 # # Profile.print()
@@ -93,26 +94,27 @@ T = bf()
 # println()
 # display(in_res)
 
-inside(x) = in_contour(x, complex(1.0, 1.0), 0.5)
-
-nep = PEP(bf_arrays())
-# e,v = polyeig(nep)
-e, v = contour_block_SS(nep, radius=R, σ=C, N=2^8, k=30,K=8)
-res = zeros(size(e,1))
-for i=1:size(e,1)
-    res[i] = norm(compute_Mlincomb(nep, e[i], v[:,i]))
-end
-
-info(e, v, res, C, R)
-in_eig = e[inside.(e)]
-display(in_eig)
-
-println()
-
-e, v, res = block_SS!(T, rand(ComplexF64,64,30), 2^6, 4, c=C, r=R)
-info(e, v, res, C, R)
-inside(x) = in_contour(x, complex(1.0, 1.0), 0.5)
-in_eig = e[inside.(e)]
-in_res = res[inside.(e)]
-display(in_eig)
-display(in_res)
+# inside(x) = in_contour(x, complex(1.0, 1.0), 0.5)
+#
+# nep = PEP(bf_arrays())
+# # e,v = polyeig(nep)
+# e, v = contour_block_SS(nep, radius=R, σ=C, N=2^8, k=30,K=8)
+# res = zeros(size(e,1))
+# for i=1:size(e,1)
+#     res[i] = norm(compute_Mlincomb(nep, e[i], v[:,i]))
+# end
+#
+# info(e, v, res, C, R)
+# in_eig = e[inside.(e)]
+# display(in_eig)
+#
+# println()
+#
+# e, v, res = block_SS!(T, rand(ComplexF64,64,30), 2^6, 4, c=C, r=R)
+# # e, v, res = nlfeast_moments_SS!(T, rand(ComplexF64,64,16), 2^6, 1, c=C, r=R, moments=2, debug=true, ϵ=10e-16, spurious=1e-3)
+# info(e, v, res, C, R)
+# inside(x) = in_contour(x, complex(1.0, 1.0), 0.5)
+# in_eig = e[inside.(e)]
+# in_res = res[inside.(e)]
+# display(in_eig)
+# display(in_res)

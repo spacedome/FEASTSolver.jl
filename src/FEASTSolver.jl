@@ -8,7 +8,7 @@ using SparseArrays: similar
 
 export feast!, ifeast!, nlfeast!, nlfeast_opt!, nlfeast_it!, nlfeast_moments!, nlfeast_moments_SS!
 export gen_feast!, dual_gen_feast!
-export beyn, companion, block_SS!
+export beyn, companion, block_SS!, nlfeast_moments_all!
 export in_contour
 
 function in_contour(λ, c, r)

@@ -29,31 +29,34 @@ T(x) = compute_Mder(nep, x)
 
 n = size(nep, 1)
 
-function hadeler(n=200, b₀=100)
-    M0 = zeros(ComplexF64, n, n)
-    M1 = zeros(ComplexF64, n, n)
-    M2 = zeros(ComplexF64, n, n)
-
-    M0 .= b₀ * Matrix(I, n, n)
-    for i=1:n
-        for j=1:n
-            M1[i,j] = (n+1-max(i,j))*i*j
-            M2[i,j] = (n*(i == j)) + 1/(i+j)
-        end
-    end
-
-    function prob(B0, B1, B2)
-        f(z) =  (exp(z)-1).*B1 .+ z^2 .* B2 .- B0
-    end
-
-    return prob(M0, M1, M2)
-end
-
-C = complex(-3.5, 0.0)
-R = 0.05
+#
+# function hadeler(n=200, b₀=100)
+#     M0 = zeros(ComplexF64, n, n)
+#     M1 = zeros(ComplexF64, n, n)
+#     M2 = zeros(ComplexF64, n, n)
+#
+#     M0 .= b₀ * Matrix(I, n, n)
+#     for i=1:n
+#         for j=1:n
+#             M1[i,j] = (n+1-max(i,j))*i*j
+#             M2[i,j] = (n*(i == j)) + 1/(i+j)
+#         end
+#     end
+#
+#     function prob(B0, B1, B2)
+#         f(z) =  (exp(z)-1).*B1 .+ z^2 .* B2 .- B0
+#     end
+#
+#     return prob(M0, M1, M2)
+# end
+#
+# C = complex(-3.5, 0.0)
+# R = 0.05
+C = complex(-30.0, 0.0)
+R = 10.0
 # T = hadeler()
-# e, v, res = nlfeast!(T, rand(ComplexF64,200,10), 2^3, 0, c=C, r=R)
-e, v, res = nlfeast!(T, (rand(ComplexF64,200,5)), 2^7, 0, c=C, r=R, debug=true, ϵ=10e-16, spurious=1e-6)
+# e, v, res = nlfeast!(T, rand(ComplexF64,n,10), 2^3, 0, c=C, r=R)
+e, v, res = nlfeast!(T, (rand(ComplexF64,n,15)), 2^3, 30, c=C, r=R, debug=true, ϵ=10e-16, spurious=1e-2)
 # e, v, res = nlfeast_moments!(T, (rand(ComplexF64,1000,20)), 2^6, 10,store=false, moments=2, c=C, r=R, debug=true, ϵ=10e-16, spurious=1e-6)
 # e, v, res = @profile nlfeast!(T, rand(ComplexF64,64,30), 2^4, 20, c=complex(1.0,1.0), r=0.5, debug=true, ϵ=10e-16)
 # Profile.print()

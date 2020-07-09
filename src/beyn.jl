@@ -36,25 +36,38 @@ function block_SS!(T, X::AbstractMatrix{ComplexF64}, nodes=2^4, moments=2;
 
     N, m₀ = size(X)
     K = moments*m₀
+    X = Matrix(qr(X).Q)
 
-    Y = rand(N, m₀)
-
-    Q₀, Q₁ = zeros(ComplexF64, K, K), zeros(ComplexF64, K, K)
+    Temp = similar(X, ComplexF64)
     S = zeros(ComplexF64, N, (2*moments+1)*m₀)
+    # Y = copy(X)
+    Y = rand(ComplexF64,N, m₀)
+    # Y = Matrix(I, N,N)
+    l = size(Y,2)
 
     θ = LinRange(π/nodes, 2*π-π/nodes, nodes)
     for i=1:nodes
         z = (r*exp(θ[i]*im)+c)
-        S[:, 1:m₀] .= (T(z) \ X) .* (exp(θ[i]*im)/nodes)
-        for j=2:2*moments+1
-            S[:, (j-1)*m₀+1:j*m₀] .+= (z-c)^(j-1) .* S[:, 1:m₀]
+        Temp .= (T(z) \ X) .* (r*exp(θ[i]*im)/nodes)
+        for j=1:2*moments+1
+            S[:, (j-1)*m₀+1:j*m₀] .+= z^(j-1) .* Temp
         end
     end
 
+    Q₀, Q₁ = zeros(ComplexF64, l*moments, K), zeros(ComplexF64, l*moments, K)
+
     for i=1:moments, j=1:moments
-        Q₀[(i-1)*m₀+1:i*m₀, (j-1)*m₀+1:j*m₀] .= X' * S[:, (i+j-1)*m₀+1:(i+j)*m₀]
-        Q₁[(i-1)*m₀+1:i*m₀, (j-1)*m₀+1:j*m₀] .= X' * S[:, (i+j)*m₀+1:(i+j+1)*m₀]
+        Q₀[(i-1)*l+1:i*l, (j-1)*m₀+1:j*m₀] .= Y' * S[:, (i+j-1)*m₀+1:(i+j)*m₀]
+        Q₁[(i-1)*l+1:i*l, (j-1)*m₀+1:j*m₀] .= Y' * S[:, (i+j)*m₀+1:(i+j+1)*m₀]
     end
+
+    # D = svd!(Q₀)
+    # Aq = D.U' * Q₁ * D.V * inv(Diagonal(D.S))
+    # Λ, Xq = eigen!(Aq)
+    # # X = D.U[1:N,:] * Xq
+    # X = inv(Y') \ (D.U * Xq)[1:l, :]
+    # # X = S[:,1:N] * D.U[1:N,:] * Xq
+    # # X = S[:,1:K] * D.U * Xq
 
     V = svd(Q₀)
     n = min(count(V.S/V.S[1] .> 1e-13), K)
@@ -64,7 +77,6 @@ function block_SS!(T, X::AbstractMatrix{ComplexF64}, nodes=2^4, moments=2;
 
     Λ, Xq = eigen!(H1, H0)
     X = S[:,1:K] * V.V[:,1:n] *  Xq
-    Λ = Λ .+ c
 
     # H1 = V.U[:,1:n]' * Q₁ * V.V[:,1:n] * Diagonal(1 ./ V.S[1:n])
     # Λ, Xq = eigen!(H1)
@@ -78,6 +90,5 @@ function block_SS!(T, X::AbstractMatrix{ComplexF64}, nodes=2^4, moments=2;
         res[i] = norm(T(Λ[i])*X[:,i])/norm(T(Λ[i]))
     end
     # p = sortperm(res)
-    p = 1:n
-    Λ[p], X[:, p], res[p]
+    Λ, X, res
 end

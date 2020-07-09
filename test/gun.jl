@@ -1,4 +1,4 @@
-using NonlinearEigenproblems: nep_gallery, compute_Mder
+using NonlinearEigenproblems: nep_gallery, compute_Mder, contour_block_SS, contour_beyn
 using FEASTSolver
 
 function info(Λ, X, residuals, c, r)
@@ -30,6 +30,12 @@ n = size(nep, 1)
 C = complex(140000.0, 0.0)
 R = 30000
 
-e, v, res = nlfeast!(T, rand(ComplexF64,n,20), 2^7, 0, c=C, r=R, debug=true, ϵ=10e-16, store=false)
-
+# e, v, res = nlfeast!(T, rand(ComplexF64,n,32), 2^5, 1, c=C, r=R, debug=true, ϵ=10e-16, store=false)
+# e, v, res = nlfeast!(T, rand(ComplexF64,n,50), 2^4, 10, c=C, r=2*R, debug=true, ϵ=10e-16, store=false)
+#
+e, v, res = nlfeast_moments!(T, rand(ComplexF64,n,4), 2^5, 0, moments=8, c=C, r=R, debug=true, ϵ=10e-16, store=false)
 info(e,v,res,C,R)
+
+# e, v = contour_beyn(nep, radius=R, σ=C, N=2^8, k=80)
+# e, v = contour_block_SS(nep, radius=2*R, σ=C, N=2^8, k=80, K=4)
+# print(e)

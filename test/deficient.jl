@@ -106,6 +106,98 @@ function moments_expand!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter:
 end
 
 
+function moments_all!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Integer;
+    c=complex(0.0,0.0), r=1.0, debug=false, ϵ=10e-12, moments=2, spurious=1e-5)
+
+    N, m₀ = size(X)
+    Λ = zeros(ComplexF64, moments*m₀)
+    θ = LinRange(π/nodes, 2*π-π/nodes, nodes)
+    Q = zeros(ComplexF64, 2*moments, N, m₀)
+    Q₀, Q₁ = zeros(ComplexF64, moments*N, moments*m₀), zeros(ComplexF64, moments*N, moments*m₀)
+	Y = zeros(ComplexF64, N, m₀*moments)
+    R = similar(Y, ComplexF64)
+
+
+    for i=1:nodes
+        z = (r*exp(θ[i]*im)+c)
+		Temp = (T(z)\X) .* (r*exp(θ[i]*im)/nodes)
+        Q[1,:,:] .+= Temp
+        for j=2:2*moments
+            Q[j,:,:] .+= Temp .* z^(j-1)
+        end
+    end
+    for i=1:moments, j=1:moments
+        Q₀[(i-1)*N+1:i*N, (j-1)*m₀+1:j*m₀] .= Q[i+j-1,:,:]
+        Q₁[(i-1)*N+1:i*N, (j-1)*m₀+1:j*m₀] .= Q[i+j,:,:]
+    end
+
+    S = svd!(Q₀)
+    F = eigen!(S.U' * Q₁ * S.V * Diagonal(1 ./ S.S))
+    Y = S.U[1:N,:] * F.vectors
+    Λ = F.values
+
+    update_R!(Y, R, Λ, T)
+    res = residuals(R, Λ, T)
+
+	p = sortperm(res)
+	res .= res[p]
+	Y .= Y[:, p]
+	Λ .= Λ[p]
+	R .= R[:, p]
+
+
+	iter_debug_print(0, Λ, res, c, r, spurious)
+
+	m₁ = moments*m₀
+    Q₀, Q₁ = zeros(ComplexF64, moments*N, m₁), zeros(ComplexF64, moments*N, m₁)
+	Q = zeros(ComplexF64, 2*moments, N, m₀)
+
+    for i=1:nodes
+        z = (r*exp(θ[i]*im)+c)
+        resolvent = (1 ./(z .- Λ)) .* (r*exp(θ[i]*im)/nodes)
+
+		# Temp = (Y - T(z)\R) #* Diagonal(resolvent)
+		Temp = (Y[:,1:m₀] .- T(z)\R[:,1:m₀])
+
+        Q[1,:,:] .+= Temp[:,1:m₀]  * Diagonal(resolvent[1:m₀])
+		Q[1+moments,:,:] .+= z^(moments) .* Temp[:,1:m₀] * Diagonal(resolvent[1:m₀])
+        for j=2:moments
+			Q[j,:,:] .+= z^(j-1) .* Temp[:,1:m₀] * Diagonal(resolvent[1:m₀])
+			Q[j+moments,:,:] .+= z^(j-1+moments) .* Temp[:,1:m₀] * Diagonal(resolvent[1:m₀])
+			# Q[j,:,:] .= z^(j-1) .* Temp[:,(j-1)*m₀+1:j*m₀]
+			# Q[j+moments,:,:] .= z^(j-1+moments) .* Temp[:,(j-1)*m₀+1:j*m₀]
+        end
+    end
+
+    for i=1:moments, j=1:moments
+        Q₀[(i-1)*N+1:i*N, (j-1)*m₀+1:j*m₀] .= Q[i+j-1,:,:]
+        Q₁[(i-1)*N+1:i*N, (j-1)*m₀+1:j*m₀] .= Q[i+j,:,:]
+    end
+
+	S = svd!(Q₀)
+    F = eigen!(S.U' * Q₁ * S.V * Diagonal(1 ./ S.S))
+    Y = S.U[1:N,:] * F.vectors
+    Λ = F.values
+
+	R = similar(Y, ComplexF64)
+
+	update_R!(Y, R, Λ, T)
+    res = residuals(R, Λ, T)
+
+	iter_debug_print(1, Λ, res, c, r, spurious)
+
+
+	# p = sortperm(res)
+	# res .= res[p]
+	# X .= Y[:, p][:,1:m₀]
+	# Λ .= Λ[p]
+	# R .= R[:, p]
+
+    normalize!(Y)
+    Λ, Y, res
+end
+
+
 A0 = Matrix(mmread("data/quadraticM0.mtx"))
 A1 = Matrix(mmread("data/quadraticM1.mtx"))
 
@@ -123,8 +215,10 @@ R = 0.25
 C = complex(0, 0.0)
 
 # e, v, res = nlfeast!(T, rand(ComplexF64,15,8), 2^6, 0, c=C, r=R, spurious=1e-3,debug=true)
-e, v, res = nlfeast_moments!(T, rand(ComplexF64,15,4), 2^4, 2, c=C, r=R, moments=2, debug=true, ϵ=10e-16, spurious=1e-3)
+# e, v, res = nlfeast_moments!(T, rand(ComplexF64,15,4), 2^4, 2, c=C, r=R, moments=2, debug=true, ϵ=10e-16, spurious=1e-3)
+e, v, res = nlfeast_moments_SS!(T, rand(ComplexF64,15,6), 2^4, 1, c=C, r=R, moments=2, debug=true, ϵ=10e-16, spurious=1e-3)
 # e, v, res = moments_expand!(T, rand(ComplexF64,15,7), 2^3, 1, c=C, r=R, moments=2, ϵ=10e-16, spurious=1e-3)
+# e, v, res = moments_all!(T, rand(ComplexF64,15,7), 2^3, 1, c=C, r=R, moments=2, ϵ=10e-16, spurious=1e-3)
 # e, v, res = block_SS!(T, rand(ComplexF64,15,8), 2^8, 32, c=C, r=R)
 # e, v, res = beyn(T, A0, rand(ComplexF64,1000,120), 2^9; c=complex(-1.55,0.0), r=0.05)
 # display(e)
