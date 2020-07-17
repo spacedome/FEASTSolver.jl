@@ -41,6 +41,31 @@ function iter_debug_print(nit, Λ, res, contour::Contour, spurious=1e-5)
     println()
 end
 
+function convergence_info(Λ, X, residuals, contour::Contour, spurious=1e-3)
+	in_ind = in_contour(Λ, contour)
+    in_eig = Λ[in_ind] # eigenvalues inside contour
+    in_res = residuals[in_ind] # residuals of eigenvalues inside contour
+    print("Number of eigenvalues inside contour: ")
+    println(size(in_eig, 1))
+    if sum(in_ind) > 0
+        in_res_conv = in_res[in_res .<= spurious]
+        in_eig_conv = in_eig[in_res .<= spurious]
+        print("Number inside converged : ")
+        println(size(in_eig_conv, 1))
+        print("Max res inside: ")
+        println(maximum(in_res))
+        if size(in_res_conv, 1) > 0
+            print("Max res inside non spurious: ")
+            println(maximum(in_res_conv))
+        end
+    end
+end
+
+function convergence_info(Λ, X, residuals, c, r, spurious=1e-3)
+	contour = circular_contour_trapezoidal(c, r, 4)
+	convergence_info(Λ, X, residuals, contour, spurious)
+end
+
 function beyn_svd_step!(Q₀::AbstractMatrix, Q₁::AbstractMatrix, A::AbstractMatrix, B::AbstractMatrix, X::AbstractMatrix{ComplexF64}, Λ::Array)
     S = svd!(Q₀)
     mul!(A, S.U', Q₁)

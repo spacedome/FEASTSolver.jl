@@ -14,6 +14,7 @@ export feast!, ifeast!, nlfeast!, nlfeast_opt!, nlfeast_it!, nlfeast_moments!, n
 export gen_feast!, dual_gen_feast!
 export beyn, companion, block_SS!, nlfeast_moments_all!
 export in_contour, circular_contour_trapezoidal, rectangular_contour_gauss, rectangular_contour_trapezoidal
+export convergence_info, rational_func
 
 include("contour.jl")
 include("lapack.jl")

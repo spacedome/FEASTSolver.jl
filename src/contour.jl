@@ -83,5 +83,13 @@ end
 
 # takes single complex number or an array
 function in_contour(λ, contour::RectangularContour)
-    (real.(contour.bottom_left) .< real.(λ) .< real.(contour.top_right)) .& (real.(contour.bottom_left) .< real.(λ) .< real.(contour.top_right))
+    (real.(contour.bottom_left) .< real.(λ) .< real.(contour.top_right)) .& (imag.(contour.bottom_left) .< imag.(λ) .< imag.(contour.top_right))
+end
+
+function rational_func(z, contour)
+    S = 0.0+0.0im
+    for i=1:size(contour.nodes,1)
+        S += contour.weights[i]  / (contour.nodes[i] - z)
+    end
+    S
 end

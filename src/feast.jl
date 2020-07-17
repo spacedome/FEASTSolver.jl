@@ -1,4 +1,4 @@
-import LinearAlgebra: qr
+import LinearAlgebra: qr, lu
 
 function feast!(X₀::AbstractMatrix, A::AbstractMatrix;
                 nodes::Integer=8, iter::Integer=10, c=complex(0.0,0.0), r=1.0, debug=false, ϵ=1e-12)
@@ -32,7 +32,7 @@ function feast!(X₀::AbstractMatrix, A::AbstractMatrix, contour::Contour;
                     ZmA[j,j] = contour.nodes[i]
                 end
             ZmA .-= A
-            ldiv!(temp, lu!(ZmA), X)
+            ldiv!(temp, lu(ZmA), X)
             Q .+= temp .* contour.weights[i]
         end
         Q .= Matrix(qr(Q).Q)
