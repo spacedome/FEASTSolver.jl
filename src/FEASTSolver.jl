@@ -2,11 +2,13 @@ __precompile__(true)
 
 module FEASTSolver
 
-using LinearAlgebra: ldiv!, lu!, LU, mul!, qr!, rmul!, lmul!, ldiv!, eigen!, svd!, norm, Diagonal, I, diagm
+using LinearAlgebra: ldiv!, lu!, LU,Factorization, mul!, qr!, rmul!, lmul!, ldiv!, eigen!, svd!, norm, Diagonal, I, diagm
 using IterativeSolvers: bicgstabl
 using SparseArrays: similar
 using IterativeSolvers: gmres!, bicgstabl!, gmres, bicgstabl
 using FastGaussQuadrature: gausslegendre
+using Distributed: @distributed
+using SharedArrays: SharedArray
 
 import Base: length
 

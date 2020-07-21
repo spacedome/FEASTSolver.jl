@@ -24,8 +24,7 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
 		if store
 	        M[i,:,:] .= T(z)
 	        facts[i] = lu!(M[i,:,:])
-	        Tinv .= X
-	        ldiv!(facts[i], Tinv)
+	        ldiv!(Tinv, facts[i], X)
 	        Tinv .*= (r*exp(θ[i]*im)/nodes)
 		else
         	Tinv .= (T(z)\X) .* (r*exp(θ[i]*im)/nodes)
@@ -57,8 +56,7 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
             resolvent .= (1 ./(z .- Λ)) .* (r*exp(θ[i]*im)/nodes)
 
 			if store
-	            Tinv .= R
-	            ldiv!(facts[i], Tinv)
+	            ldiv!(Tinv, facts[i], R)
 	            Tinv .= X - Tinv
 			else
 				Tinv .= (X - T(z)\R)
