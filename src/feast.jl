@@ -20,7 +20,7 @@ function feast!(X::AbstractMatrix, A::AbstractMatrix, contour::Contour;
     Ctype = if mixed_prec ComplexF32 else ComplexF64 end
 
     Λ, resolvent, res = zeros(ComplexF64, m₀), zeros(ComplexF64, m₀), zeros(m₀)
-    temp, R, Q = zeros(Ctype, N, m₀), similar(X, ComplexF64), copy(X)
+    temp, R, Q = zeros(Ctype, N, m₀), similar(X, ComplexF64), deepcopy(X)
     Aq, Xq = zeros(ComplexF64, m₀, m₀), zeros(ComplexF64, m₀, m₀)
 
     ZmA = similar(A, Ctype)
@@ -62,9 +62,9 @@ function feast!(X::AbstractMatrix, A::AbstractMatrix, contour::Contour;
                     linsolve(temp, ZmA, R)
                 end
 
-                R .= X - temp # using R as work array
-                rmul!(R, Diagonal(resolvent .* contour.weights[i]))
-                Q .+= R
+                temp .= X - temp
+                rmul!(temp, Diagonal(resolvent .* contour.weights[i]))
+                Q .+= temp
             end
         end
     end
