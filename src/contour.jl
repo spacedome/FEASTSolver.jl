@@ -30,6 +30,19 @@ function circular_contour_trapezoidal(c, r, N=16)
     CircularContour(c, r, nodes, weights)
 end
 
+function circular_contour_gauss(c, r, N=16)
+    if ( N % 2 != 0) error("Number of nodes must be multiple of 2") end
+    n = Integer(N//2)
+    nodes, weights = zeros(ComplexF64, N), zeros(ComplexF64, N)
+    gq_nodes, gq_w = gausslegendre(n)
+    gq_nodes .= (pi/2.0) .* (gq_nodes .+ 1.0)
+    nodes[1:n] = [r*exp(gq_nodes[i]*im)+c for i in 1:n]
+    nodes[n+1:2n] = [r*exp((gq_nodes[i]+pi)*im)+c for i in 1:n]
+    weights[1:n] = [r*exp(gq_nodes[i]*im)*gq_w[i]/4.0 for i in 1:n]
+    weights[n+1:2n] = [r*exp((gq_nodes[i]+pi)*im)*gq_w[i]/4.0 for i in 1:n]
+    CircularContour(c, r, nodes, weights)
+end
+
 # nodes in clockwise order: top, right, bottom, left,
 function rectangular_contour_gauss(bottom_left, top_right, N=16)
     if ( N % 4 != 0) error("Number of nodes must be multiple of 4") end
