@@ -1,7 +1,7 @@
 
 function contour_estimate_eig(A::AbstractMatrix, contour::Contour;
                 samples::Integer=min(100, size(A,1)), ϵ=1e-12, debug=false,
-                store=false, mixed_prec=false, linsolve=lu_solve!)
+                mixed_prec=false, linsolve=lu_solve!)
 
 
     N, m₀ = size(A,1), samples
@@ -21,13 +21,8 @@ function contour_estimate_eig(A::AbstractMatrix, contour::Contour;
     est = 0.0
 
     for i=1:nodes
-        if store
-            ldiv!(temp, facts[i], X)
-        else
-            ZmA .= Ctype.(I*contour.nodes[i] - A)
-            linsolve(temp, ZmA, X)
-        end
-
+        ZmA .= Ctype.(I*contour.nodes[i] - A)
+        linsolve(temp, ZmA, X)
         mul!(P, X', temp)
         est += tr(P)*contour.weights[i]/samples
         if debug print(".") end
