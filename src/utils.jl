@@ -108,6 +108,13 @@ function update_R!(X::AbstractMatrix, R::AbstractMatrix, Λ::Array, T::Function)
     end
 end
 
+function update_R!(X::AbstractMatrix, R::AbstractMatrix, Λ::Array, A::AbstractMatrix, B=I)
+    for i=1:size(X, 2)
+        X[:,i] ./= norm(X[:,i])
+        R[:,i] .= (A - Λ[i]*B) * X[:,i]
+    end
+end
+
 function update_R_moments!(X::AbstractMatrix, R::AbstractMatrix, Λ::Array, res::Array, T::Function, c, r)
     for i=1:size(X, 2)
         X[:,i] ./= norm(X[:,i])
@@ -152,6 +159,13 @@ end
 function residuals!(res::Array, R::AbstractMatrix, Λ::Array, T::Function)
     for i=1:size(Λ, 1)
         res[i] = norm(R[:,i])/norm(T(Λ[i]))
+    end
+    res
+end
+
+function residuals!(res::Array, R::AbstractMatrix, Λ::Array, A::AbstractMatrix)
+    for i=1:size(Λ, 1)
+        res[i] = norm(R[:,i])
     end
     res
 end
