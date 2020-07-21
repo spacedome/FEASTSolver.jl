@@ -30,7 +30,7 @@ function feast!(X::AbstractMatrix, A::AbstractMatrix, contour::Contour;
     if store
         Threads.@threads for i=1:nodes
             ZmA .= (A - I*contour.nodes[i])
-            facts[i] = lu(A - I*contour.nodes[i])
+            facts[i] = lu(ZmA)
         end
     end
 
