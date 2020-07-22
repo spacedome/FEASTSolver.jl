@@ -74,6 +74,9 @@ function feast!(X::AbstractMatrix, A::AbstractMatrix, contour::Contour;
             end
         end
     end
+    if store
+        foreach(finalize!, facts)
+    end
     contour_nonempty = reduce(|, in_contour(Λ, contour))
     if !contour_nonempty println("no eigenvalues found in contour!") end
     Λ[in_contour(Λ, contour)], X[:,in_contour(Λ, contour)], res[in_contour(Λ, contour)]
