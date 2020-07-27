@@ -1,5 +1,5 @@
 
-function contour_estimate_eig(A::AbstractMatrix, contour::Contour, B::AbstractMatrix=I;
+function contour_estimate_eig(A::AbstractMatrix, contour::Contour, B=I;
                 samples::Integer=min(100, size(A,1)), ϵ=1e-12, debug=false,
                 mixed_prec=false, factorizer=lu, left_divider=ldiv!)
 
@@ -29,5 +29,5 @@ function contour_estimate_eig(A::AbstractMatrix, contour::Contour, B::AbstractMa
     end
     if debug println() end
 
-    return est
+    return real(est)
 end
