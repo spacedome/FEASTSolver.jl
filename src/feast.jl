@@ -7,9 +7,6 @@ function feast!(X::AbstractMatrix, A::AbstractMatrix;
     feast!(X, A, contour; iter=iter, debug=debug, ϵ=ϵ, store=store, mixed_prec=mixed_prec, factorizer=factorizer, left_divider=left_divider)
 end
 
-finalize!(x::Any) = nothing
-
-
 function feast!(X::AbstractMatrix, A::AbstractMatrix, contour::Contour;
                      iter::Integer=10, ϵ=1e-12, debug=false, store=false, mixed_prec=false, factorizer=lu, left_divider=ldiv!)
     N, m₀ = size(X)
@@ -259,8 +256,3 @@ function dual_gen_feast!(Xr::AbstractMatrix, Xl::AbstractMatrix, A::AbstractMatr
     Λ[in_contour(Λ, contour)], Xr[:,in_contour(Λ, contour)], Xl[:,in_contour(Λ, contour)], resr[in_contour(Λ, contour)]
 end
 
-function linsolve!(Y, C, X, factorizer, left_divider)
-     F = factorizer(C)
-     left_divider(Y, F, X)
-     finalize!(F)
-end

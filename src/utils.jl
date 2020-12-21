@@ -169,3 +169,11 @@ function residuals!(res::Array, R::AbstractMatrix, Λ::Array, A::AbstractMatrix)
     end
     res
 end
+
+finalize!(x::Any) = nothing
+
+function linsolve!(Y, C, X, factorizer, left_divider)
+    F = factorizer(C)
+    left_divider(Y, F, X)
+    finalize!(F)
+end
