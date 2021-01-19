@@ -12,19 +12,26 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
     qt, rt = qr!(X)
     X .= Matrix(qt)
 
+    l = ReentrantLock()
+
     if store
         facts = Array{Factorization}(undef, nodes)
-        for i = 1:nodes
+        Threads.@threads for i = 1:nodes
             z = (r * exp(θ[i] * im) + c)
-            facts[i] = factorizer(T(z))
+            tempfact = factorizer(T(z))
+            lock(l) do
+                facts[i] = tempfact
+            end
+            if debug print("*") end
         end
+        if debug println() end
     end
 
     for nit = 0:iter
 
         Q₀ .= 0
         Q₁ .= 0
-        l = ReentrantLock()
+        # l = ReentrantLock()
 
         Threads.@threads for i = 1:nodes
             z = (r * exp(θ[i] * im) + c)
