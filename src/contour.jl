@@ -22,7 +22,7 @@ struct CustomContour{N<:AbstractArray,W<:AbstractArray} <: Contour
     weights::W
 end
 
-length(contour::Contour) = 1
+length(contour::Contour) = length(contour.nodes)
 
 function circular_contour_trapezoidal(c, r, N=16)
     θ = LinRange(π/N, 2*π-π/N, N)

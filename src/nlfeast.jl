@@ -13,7 +13,7 @@ contour algorithms needed for defective, clustered, or highly nonlinear spectra.
 """
 function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Integer;
     c=complex(0.0, 0.0), r=1.0, debug=false, ϵ=10e-12, store=true, spurious=1e-5,
-    factorizer=lu, left_divider=ldiv!)
+    factorizer=lu, left_divider=ldiv!, stats::Union{Nothing,DenseFeastStats}=nothing)
 
     N, m₀ = size(X)
     Λ, res = zeros(ComplexF64, m₀), Array{Float64}(undef, m₀)
@@ -39,12 +39,18 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
         if debug println() end
     end
 
+    solve_start_ns = time_ns()
     for nit = 0:iter
+        iter_start_ns = time_ns()
+        rayleigh_ritz_ns = UInt64(0)
+        residual_ns = UInt64(0)
+        filter_ns = UInt64(0)
 
         Q₀ .= 0
         Q₁ .= 0
         # l = ReentrantLock()
 
+        start_ns = time_ns()
         Threads.@threads for i = 1:nodes
             z = (r * exp(θ[i] * im) + c)
             Tinv = similar(X, ComplexF64)
@@ -71,24 +77,51 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
             end
     		if debug print(".") end
         end
+        filter_ns = time_ns() - start_ns
 		if debug println() end
 
+        start_ns = time_ns()
 		beyn_svd_step!(Q₀, Q₁, A, B, X, Λ)
+        rayleigh_ritz_ns = time_ns() - start_ns
 
+        start_ns = time_ns()
         update_R!(X, R, Λ, T)
         res .= residuals(R, Λ, T)
+        inside = in_contour.(Λ, c, r)
+        max_res_inside, contour_nonempty = maximum_masked(res, inside)
+        residual_ns = time_ns() - start_ns
 
         if debug
             iter_debug_print(nit, Λ, res, c, r, spurious)
         end
 
-		res_inside = res[in_contour.(Λ, c, r)]
-        if size(res_inside, 1) > 0 && maximum(res_inside) < ϵ
+        res_inside = res[inside]
+        converged = contour_nonempty && max_res_inside < ϵ
+        spurious_converged = nit > 1 && sum(res_inside .< spurious) > 0 && maximum(res_inside[res_inside .< spurious]) < ϵ
+        _record_dense_feast_iteration!(
+            stats,
+            :nonlinear,
+            nit,
+            res,
+            inside,
+            max_res_inside,
+            contour_nonempty,
+            iter_start_ns,
+            UInt64(0),
+            rayleigh_ritz_ns,
+            residual_ns,
+            filter_ns,
+            debug,
+        )
+        if converged
             break
         end
-		if nit > 1 && sum(res_inside .< spurious) > 0 && maximum(res_inside[res_inside .< spurious]) < ϵ
+		if spurious_converged
 			break
 		end
+    end
+    if stats !== nothing
+        stats.solve_total_ns += time_ns() - solve_start_ns
     end
 
     normalize!(X)
@@ -128,10 +161,7 @@ function nlfeast_it!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Int
     # beyn_qr_step!(Q₀, Q₁, X, Λ)
 
     update_R!(X, R, Λ, T)
-
-    if (iter == 0)
-        res .= residuals(R, Λ, T)
-    end
+    res .= residuals(R, Λ, T)
     if debug
         iter_debug_print(0, Λ, res, c, r)
     end
@@ -173,7 +203,8 @@ function nlfeast_it!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Int
             iter_debug_print(nit, Λ, res, c, r)
         end
 
-        if maximum(res[in_contour.(Λ, c, r)]) < ϵ
+        res_inside = res[in_contour.(Λ, c, r)]
+        if !isempty(res_inside) && maximum(res_inside) < ϵ
             break
         end
     end

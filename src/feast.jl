@@ -11,13 +11,15 @@ each contour node.
 """
 function feast!(X::AbstractMatrix, A::AbstractMatrix;
                 nodes::Integer=8, iter::Integer=10, c=complex(0.0,0.0), r=1.0, ϵ=1e-12,
-                debug=false, store=false, mixed_prec=false, factorizer=lu, left_divider=ldiv!)
+                debug=false, store=false, mixed_prec=false, factorizer=lu, left_divider=ldiv!,
+                stats::Union{Nothing,DenseFeastStats}=nothing)
     contour = circular_contour_trapezoidal(c, r, nodes)
-    feast!(X, A, contour; iter=iter, debug=debug, ϵ=ϵ, store=store, mixed_prec=mixed_prec, factorizer=factorizer, left_divider=left_divider)
+    feast!(X, A, contour; iter=iter, debug=debug, ϵ=ϵ, store=store, mixed_prec=mixed_prec, factorizer=factorizer, left_divider=left_divider, stats=stats)
 end
 
 function feast!(X::AbstractMatrix, A::AbstractMatrix, contour::Contour;
-                     iter::Integer=10, ϵ=1e-12, debug=false, store=false, mixed_prec=false, factorizer=lu, left_divider=ldiv!)
+                     iter::Integer=10, ϵ=1e-12, debug=false, store=false, mixed_prec=false, factorizer=lu, left_divider=ldiv!,
+                     stats::Union{Nothing,DenseFeastStats}=nothing)
     N, m₀ = size(X)
     if size(A, 1) != size(A, 2)
          error("Incorrect dimensions of A, must be square")
@@ -52,31 +54,46 @@ function feast!(X::AbstractMatrix, A::AbstractMatrix, contour::Contour;
         end
     end
 
+    solve_start_ns = time_ns()
     for nit=0:iter
+        iter_start_ns = time_ns()
+        orthogonalization_ns = UInt64(0)
+        rayleigh_ritz_ns = UInt64(0)
+        residual_ns = UInt64(0)
+        filter_ns = UInt64(0)
+
         # Rayleigh-Ritz extraction on the current filtered subspace.
+        start_ns = time_ns()
         if qr_ws === nothing
             Q .= Matrix(qr(Q).Q)
         else
             dense_lapack_qr!(Q, qr_ws)
         end
+        orthogonalization_ns = time_ns() - start_ns
+
+        start_ns = time_ns()
         mul!(R, A, Q)
         mul!(Aq, Q', R)
         dense_lapack_eigen!(Λ, Xq, Aq, eigen_ws)
         mul!(X, Q, Xq)
+        rayleigh_ritz_ns = time_ns() - start_ns
 
         # R holds `(A - λI)x` and is reused as the right-hand side in RII.
+        start_ns = time_ns()
         update_R!(X, R, Λ, A)
         residuals!(res, R, Λ, A)
         in_contour!(inside, Λ, contour)
         max_res_inside, contour_nonempty = maximum_masked(res, inside)
+        residual_ns = time_ns() - start_ns
         if debug iter_debug_print(nit, Λ, res, contour, 1e-5) end
-        if contour_nonempty && max_res_inside < ϵ
+        converged = contour_nonempty && max_res_inside < ϵ
+        if converged
             if debug println("converged in $nit iteration") end
-            break
         end
-        if nit < iter
+        if !converged && nit < iter
             # Rational inverse iteration update:
             # Q = Σ_j w_j (X - (z_j I - A)^(-1) R) diag((z_j - Λ)^(-1)).
+            start_ns = time_ns()
             Q .= 0.00
             for i=1:nodes
                 fill_resolvent!(resolvent, contour.nodes[i], Λ)
@@ -94,7 +111,29 @@ function feast!(X::AbstractMatrix, A::AbstractMatrix, contour::Contour;
                 scale_columns!(temp, resolvent, contour.weights[i])
                 Q .+= temp
             end
+            filter_ns = time_ns() - start_ns
         end
+        _record_dense_feast_iteration!(
+            stats,
+            :standard,
+            nit,
+            res,
+            inside,
+            max_res_inside,
+            contour_nonempty,
+            iter_start_ns,
+            orthogonalization_ns,
+            rayleigh_ritz_ns,
+            residual_ns,
+            filter_ns,
+            debug,
+        )
+        if converged
+            break
+        end
+    end
+    if stats !== nothing
+        stats.solve_total_ns += time_ns() - solve_start_ns
     end
     if store
         foreach(finalize!, facts)
@@ -107,9 +146,10 @@ end
 
 function gen_feast!(X::AbstractMatrix, A::AbstractMatrix, B;
                     nodes::Integer=8, iter::Integer=10, c=complex(0.0,0.0), r=1.0,
-                    debug=false, store=false, ϵ=1e-12, factorizer=lu, left_divider=ldiv!)
+                    debug=false, store=false, ϵ=1e-12, factorizer=lu, left_divider=ldiv!,
+                    stats::Union{Nothing,DenseFeastStats}=nothing)
     contour = circular_contour_trapezoidal(c, r, nodes)
-    gen_feast!(X, A, B, contour; iter=iter, debug=debug, store=store, ϵ=ϵ, factorizer=factorizer, left_divider=left_divider)
+    gen_feast!(X, A, B, contour; iter=iter, debug=debug, store=store, ϵ=ϵ, factorizer=factorizer, left_divider=left_divider, stats=stats)
 end
 
 """
@@ -119,7 +159,8 @@ Dense generalized FEAST for `Ax = λBx`. This mirrors `feast!`, but the reduced
 problem is `Q'AQ y = λ Q'BQ y` and each contour solve uses `A - zB`.
 """
 function gen_feast!(X::AbstractMatrix, A::AbstractMatrix, B, contour::Contour;
-                    iter::Integer=10, debug=false, store=false, ϵ=1e-12, factorizer=lu, left_divider=ldiv!)
+                    iter::Integer=10, debug=false, store=false, ϵ=1e-12, factorizer=lu, left_divider=ldiv!,
+                    stats::Union{Nothing,DenseFeastStats}=nothing)
     N, m₀ = size(X)
     if size(A, 1) != size(A, 2)
         error("Incorrect dimensions of A, must be square")
@@ -151,32 +192,47 @@ function gen_feast!(X::AbstractMatrix, A::AbstractMatrix, B, contour::Contour;
          end
     end
 
+    solve_start_ns = time_ns()
     for nit=0:iter
+        iter_start_ns = time_ns()
+        orthogonalization_ns = UInt64(0)
+        rayleigh_ritz_ns = UInt64(0)
+        residual_ns = UInt64(0)
+        filter_ns = UInt64(0)
+
         # Rayleigh-Ritz extraction for the projected generalized pencil.
+        start_ns = time_ns()
         if qr_ws === nothing
             Q .= Matrix(qr(Q).Q)
         else
             dense_lapack_qr!(Q, qr_ws)
         end
+        orthogonalization_ns = time_ns() - start_ns
+
+        start_ns = time_ns()
         mul!(R, A, Q)
         mul!(Aq, Q', R)
         mul!(R, B, Q)
         mul!(Bq, Q', R)
         dense_lapack_generalized_eigen!(Λ, Xq, Aq, Bq, eigen_ws)
         mul!(X, Q, Xq)
+        rayleigh_ritz_ns = time_ns() - start_ns
 
         # R holds `(A - λB)x` and is reused as the right-hand side in RII.
+        start_ns = time_ns()
         update_R!(X, R, Λ, A, B, temp)
         residuals!(res, R, Λ, A)
         in_contour!(inside, Λ, contour)
         max_res_inside, contour_nonempty = maximum_masked(res, inside)
+        residual_ns = time_ns() - start_ns
         if debug iter_debug_print(nit, Λ, res, contour, 1e-5) end
-        if contour_nonempty && max_res_inside < ϵ
+        converged = contour_nonempty && max_res_inside < ϵ
+        if converged
               if debug println("converged in $nit iteration") end
-              break
         end
-        if nit < iter
+        if !converged && nit < iter
             # Rational inverse iteration update with shifted pencil `A - zB`.
+            start_ns = time_ns()
             Q .= 0.00
             for i=1:nodes
                 fill_resolvent!(resolvent, contour.nodes[i], Λ)
@@ -193,7 +249,29 @@ function gen_feast!(X::AbstractMatrix, A::AbstractMatrix, B, contour::Contour;
                 scale_columns!(temp, resolvent, contour.weights[i])
                 Q .+= temp
             end
+            filter_ns = time_ns() - start_ns
         end
+        _record_dense_feast_iteration!(
+            stats,
+            :generalized,
+            nit,
+            res,
+            inside,
+            max_res_inside,
+            contour_nonempty,
+            iter_start_ns,
+            orthogonalization_ns,
+            rayleigh_ritz_ns,
+            residual_ns,
+            filter_ns,
+            debug,
+        )
+        if converged
+            break
+        end
+    end
+    if stats !== nothing
+        stats.solve_total_ns += time_ns() - solve_start_ns
     end
     if store
         foreach(finalize!, facts)
@@ -206,9 +284,10 @@ end
 
 function dual_gen_feast!(Xr::AbstractMatrix, Xl::AbstractMatrix, A::AbstractMatrix, B;
                     nodes::Integer=8, iter::Integer=10, c=complex(0.0,0.0), r=1.0,
-                    debug=false, store=false, ϵ=1e-12, factorizer=lu, left_divider=ldiv!)
+                    debug=false, store=false, ϵ=1e-12, factorizer=lu, left_divider=ldiv!,
+                    stats::Union{Nothing,DenseFeastStats}=nothing)
     contour = circular_contour_trapezoidal(c, r, nodes)
-    dual_gen_feast!(Xr, Xl, A, B, contour; iter=iter, debug=debug, store=store, ϵ=ϵ, factorizer=factorizer, left_divider=left_divider)
+    dual_gen_feast!(Xr, Xl, A, B, contour; iter=iter, debug=debug, store=store, ϵ=ϵ, factorizer=factorizer, left_divider=left_divider, stats=stats)
 end
 
 """
@@ -219,7 +298,8 @@ subspaces are filtered together, then paired through a small SVD so the reduced
 generalized eigenproblem is well conditioned.
 """
 function dual_gen_feast!(Xr::AbstractMatrix, Xl::AbstractMatrix, A::AbstractMatrix, B, contour::Contour;
-                    iter::Integer=10, debug=false, store=false, ϵ=1e-12, factorizer=lu, left_divider=ldiv!)
+                    iter::Integer=10, debug=false, store=false, ϵ=1e-12, factorizer=lu, left_divider=ldiv!,
+                    stats::Union{Nothing,DenseFeastStats}=nothing)
     N, m₀ = size(Xl)
     if size(A, 1) != size(A, 2)
         error("Incorrect dimensions of A, must be square")
@@ -267,8 +347,16 @@ function dual_gen_feast!(Xr::AbstractMatrix, Xl::AbstractMatrix, A::AbstractMatr
          end
     end
 
+    solve_start_ns = time_ns()
     for nit=0:iter
+        iter_start_ns = time_ns()
+        orthogonalization_ns = UInt64(0)
+        rayleigh_ritz_ns = UInt64(0)
+        residual_ns = UInt64(0)
+        filter_ns = UInt64(0)
+
         # Bi-orthogonalize the left/right subspaces through the B inner product.
+        start_ns = time_ns()
         mul!(Rr, B, Qr)
         mul!(Bq, Ql', Rr)
         U, S, Vt = dense_lapack_svd!(Bq, svd_ws)
@@ -278,8 +366,10 @@ function dual_gen_feast!(Xr::AbstractMatrix, Xl::AbstractMatrix, A::AbstractMatr
         mul!(Rl, Ql, U)
         Ql .= Rl
         inv_scale_columns!(Ql, S)
+        orthogonalization_ns = time_ns() - start_ns
 
         # Rayleigh-Ritz extraction for the paired left/right subspaces.
+        start_ns = time_ns()
         mul!(Rr, A, Qr)
         mul!(Aq, Ql', Rr)
         mul!(Rr, B, Qr)
@@ -287,21 +377,25 @@ function dual_gen_feast!(Xr::AbstractMatrix, Xl::AbstractMatrix, A::AbstractMatr
         dense_lapack_generalized_eigen!(Λ, Xql, Xqr, Aq, Bq, eigen_ws)
         mul!(Xr, Qr, Xqr)
         mul!(Xl, Ql, Xql)
+        rayleigh_ritz_ns = time_ns() - start_ns
 
         # Right and left residuals drive the next rational filter update.
+        start_ns = time_ns()
         update_R_shifted!(Xr, Rr, Λ, A, B, residual_shift, residual_x, residual_y)
         update_R_shifted!(Xl, Rl, Λ, A', B', residual_shift, residual_x, residual_y)
         residuals!(resr, Rr, Λ, A)
         in_contour!(inside, Λ, contour)
         max_res_inside, contour_nonempty = maximum_masked(resr, inside)
+        residual_ns = time_ns() - start_ns
         if debug iter_debug_print(nit, Λ, resr, contour, 1e-5) end
-        if contour_nonempty && max_res_inside < ϵ
+        converged = contour_nonempty && max_res_inside < ϵ
+        if converged
               if debug println("converged in $nit iteration") end
-              break
         end
-        if nit < iter
+        if !converged && nit < iter
             # Filter the right subspace with `A - zB` and the left subspace
             # with its adjoint. Standard LU factors can be reused via `trans='C'`.
+            start_ns = time_ns()
             Qr .= 0.00
             Ql .= 0.00
             for i=1:nodes
@@ -337,7 +431,29 @@ function dual_gen_feast!(Xr::AbstractMatrix, Xl::AbstractMatrix, A::AbstractMatr
                 scale_columns!(temp, resolvent, conj(contour.weights[i]))
                 Ql .+= temp
             end
+            filter_ns = time_ns() - start_ns
         end
+        _record_dense_feast_iteration!(
+            stats,
+            :dual_generalized,
+            nit,
+            resr,
+            inside,
+            max_res_inside,
+            contour_nonempty,
+            iter_start_ns,
+            orthogonalization_ns,
+            rayleigh_ritz_ns,
+            residual_ns,
+            filter_ns,
+            debug,
+        )
+        if converged
+            break
+        end
+    end
+    if stats !== nothing
+        stats.solve_total_ns += time_ns() - solve_start_ns
     end
     if store
         foreach(finalize!, rfacts)

@@ -32,6 +32,7 @@
   - Proposed Julia support target:
     - First-class: dense standard `feast!`, dense generalized `gen_feast!`, and dense non-Hermitian/generalized dual `dual_gen_feast!`, all with clean contour handling, stable tests, and low allocation per iteration.
     - First-class nonlinear: keep `nlfeast!`/Beyn-style nonlinear variants in scope, but test and document them separately from linear dense FEAST.
+    - API boundary: export the first-class dense serial family, the canonical nonlinear prototype, and the explicit distributed FEAST plan/stat types. Keep unfinished IFEAST, iterative nonlinear, and moment/SS experiments available as qualified `FEASTSolver.*` names rather than treating them as the default user interface.
     - Near-term: make sparse matrices work through the same dense-facing API only where the shifted solve abstraction is clean; do not copy the FORTRAN CSR API shape into Julia unless performance forces it.
     - Later: iterative FEAST/IFEAST, after dense and sparse-direct variants have shared workspace abstractions and meaningful convergence diagnostics.
     - Later: contour-level parallelism using Julia mechanisms rather than MPI-first PFEAST compatibility.
@@ -48,13 +49,14 @@
   - We should disable BLAS threading on the calls where we have `Distributed` parallelism.
   - We mostly want local-to-the-node parallelism. Multi-node is interesting but not worth it right now.
   - First-pass design decision: keep the normal `feast!` serial/BLAS-threaded path separate from an explicit `distributed_feast!` path. The distributed path has worker lifecycle, shared-memory, and BLAS-thread policy semantics that should not be hidden behind a boolean keyword on the main API.
-  - First-pass implementation target: dense standard FEAST only. Generalized and dual generalized FEAST need the same contour-node executor shape, but should wait until the standard dense version has benchmark data.
+  - Dense standard, dense generalized, and dense dual generalized FEAST now have explicit distributed variants and corresponding persistent plan types.
+  - Distributed layering: keep separate public plan types for each solver family because they own different subspaces and work buffers, but share worker preparation, fixed node assignment, shared matrix construction, cleanup, stats logging, and the contour-worker execution model.
   - Use fixed process-to-contour-node assignment so each worker can keep node-local memory and, for `store=true`, cached LU factors across iterations.
   - Use `SharedArray` for dense `A`, iteration inputs `X`/`R`, and worker output partial sums on one host. This intentionally does not target multi-node MPI-style distribution.
-  - Persistent ownership is required for the FEAST execution model. The first-pass dense standard implementation now has `DenseDistributedFeastPlan`, which owns shared buffers, fixed worker assignments, and worker-local workspaces/cached factors. The convenience `distributed_feast!` wrapper still exists, but it is intentionally a one-shot allocate-use-cleanup path.
+  - Persistent ownership is required for the FEAST execution model. `DenseDistributedFeastPlan`, `DenseDistributedGeneralizedFeastPlan`, and `DenseDistributedDualGeneralizedFeastPlan` own shared buffers, fixed worker assignments, and worker-local workspaces/cached factors. The convenience `distributed_*feast!` wrappers still exist, but they are intentionally one-shot allocate-use-cleanup paths.
   - Process 1 is currently treated as the coordinator/driver, not a contour worker. In this Julia `Distributed` design it handles QR/Ritz/residual/reduction and remote dispatch, so assigning contour nodes to it would serialize part of the solve unless we redesign the driver around a true MPI-rank style loop.
   - Lightweight profiling is part of the distributed abstraction. `DenseDistributedFeastStats` records setup phase totals, solve phase totals, and a per-iteration log with convergence counts, max residual inside the contour, and QR/Ritz/residual/shared-copy/worker/reduction timings. This is useful both for development and for diagnosing user problems where FEAST is sensitive to contour/subspace/conditioning choices.
-  - Benchmark target: compare serial `feast!` against `distributed_feast!` with 1, 2, 4, and 8 worker processes while forcing worker BLAS threads to 1.
+  - Benchmark target: compare serial `feast!`/`gen_feast!`/`dual_gen_feast!` against their distributed variants with 1, 2, 4, and 8 worker processes while forcing worker BLAS threads to 1.
   - Initial benchmark result: small diagonal/near-diagonal cases around `N=256`/`512` are dominated by overhead and can misleadingly make 4/8 processes look worse. A full perturbed dense Hermitian case with `N=4096`, `M0=16`, 16 contour nodes, `store=false`, one forced FEAST iteration, and BLAS threads set to 1 produced serial `66.45s`, distributed 1 worker `65.40s`, 2 workers `39.45s`, 4 workers `25.00s`, and 8 workers `19.56s`.
   - Repeated-iteration benchmark result: `N=2048`, `M0=16`, 16 contour nodes, `store=false`, three forced FEAST iterations gave serial `25.06s`, distributed 1 worker `25.35s`, 2 workers `15.56s`, 4 workers `10.32s`, and 8 workers `7.74s`.
   - Stored-factor benchmark result after parallelizing worker initialization: `N=2048`, `M0=16`, 16 contour nodes, `store=true`, three forced FEAST iterations gave serial `4.70s`, distributed 1 worker `10.51s`, 2 workers `6.68s`, 4 workers `4.51s`, and 8 workers `3.58s`. The one-worker distributed path is still slower than serial due process/shared-memory overhead, but multi-process now beats serial.
@@ -63,6 +65,7 @@
 
 - [ ] Library ergonomics: it should be easy to use, easy to understand, have good diagnostics, and have no unpleasant surprises.
   - For example, when we want debug output there are lots of statistics to follow in each iteration.
+  - Dense serial FEAST and the canonical `nlfeast!` now accept `stats=DenseFeastStats()` for lightweight iteration diagnostics and phase timing, mirroring the distributed diagnostics without exposing distributed planning details.
 
 - [ ] Contour abstraction
   - The default should always be circular contour with trapezoidal rule quadrature.
@@ -116,9 +119,9 @@ This ordering is based on the current code layout:
   - Keep `just notes` current with repo assumptions and caveats.
 
 - [ ] Reconcile the public API with the module layout
-  - `src/FEASTSolver.jl` exports `nlfeast_opt!`, but the implementation is in `src/nlfeast_lapack.jl`, which is not currently included.
-  - Decide whether `nlfeast_lapack.jl` is supported code, an experiment, or dead code.
-  - Make the supported and experimental exports explicit.
+  - Previously, `src/FEASTSolver.jl` exported `nlfeast_opt!`, but the implementation lived in `src/nlfeast_lapack.jl`, which was not included.
+  - Removed obsolete `nlfeast_opt!`; the old LAPACK-specific prototype is obviated by the shared FastLapackInterface helpers.
+  - The exported API is now limited to first-class dense serial FEAST, the canonical nonlinear prototype, explicit distributed FEAST, stable research utilities, contours, and diagnostics. Experimental solvers remain in-tree but are no longer exported by default.
 
 - [x] Convert the current test directory into a deliberate test/experiment split
   - `test/runtests.jl` is the only automated test entrypoint right now.

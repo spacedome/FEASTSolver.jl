@@ -17,3 +17,20 @@ experiments.
 The maintained automated tests live in `test/runtests.jl`. Historical research
 scripts and old experiment drivers live under `experiments/legacy_tests/` until
 they are curated into tests, benchmarks, or examples.
+
+## API shape
+
+The first-class dense serial solvers are `feast!`, `gen_feast!`,
+`dual_gen_feast!`, and the canonical nonlinear prototype `nlfeast!`. Pass a
+`DenseFeastStats()` object as `stats=` when iteration diagnostics and phase
+timings are wanted.
+
+Contour-parallel dense FEAST is deliberately explicit: use
+`distributed_feast!`, `distributed_gen_feast!`, or
+`distributed_dual_gen_feast!` for one-shot runs. Use the corresponding plan type
+when workers should retain fixed contour-node ownership and cached workspace
+across runs.
+
+Experimental routines remain in-tree for research, but are not part of the
+normal exported interface; call them as qualified `FEASTSolver.*` names if you
+need to inspect or resurrect them.

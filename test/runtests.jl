@@ -37,6 +37,7 @@ end
 @testset "standard dense FEAST finds requested eigenvalues" begin
     A = Matrix(Diagonal(1.0:12.0))
     expected = complex.(1.0:4.0)
+    stats = DenseFeastStats()
 
     λ, _, res = feast!(
         initial_subspace(12, 4, 101),
@@ -46,10 +47,15 @@ end
         c=2.5,
         r=1.6,
         ϵ=1e-12,
+        stats=stats,
     )
 
     assert_eigenvalues_found(λ, expected; atol=1e-10)
     assert_converged(res; atol=1e-10)
+    @test stats.iterations == length(stats.iteration_log)
+    @test stats.iterations > 0
+    @test stats.iteration_log[end].variant == :standard
+    @test stats.iteration_log[end].eigenvalues_inside == length(expected)
 end
 
 @testset "distributed dense FEAST finds requested eigenvalues" begin
@@ -89,6 +95,7 @@ end
         assert_eigenvalues_found(λ, expected; atol=1e-10)
         assert_converged(res; atol=1e-10)
 
+        stats = DenseDistributedFeastStats()
         plan = DenseDistributedFeastPlan(
             A,
             4;
@@ -98,6 +105,7 @@ end
             store=true,
             worker_ids=external_workers()[1:2],
             worker_blas_threads=1,
+            stats=stats,
         )
         try
             for seed in (113, 114)
@@ -110,6 +118,8 @@ end
                 assert_eigenvalues_found(λ, expected; atol=1e-10)
                 assert_converged(res; atol=1e-10)
             end
+            @test !isempty(stats.iteration_log)
+            @test stats.iterations == length(stats.iteration_log)
         finally
             close(plan)
         end
@@ -125,6 +135,8 @@ end
     B = Matrix(Diagonal(2.0 .+ (1.0:12.0) ./ 10.0))
     exact = diag(A) ./ diag(B)
     expected = complex.(exact[in_contour(exact, 1.05, 0.7)])
+    gen_stats = DenseFeastStats()
+    dual_stats = DenseFeastStats()
 
     λ, _, res = gen_feast!(
         initial_subspace(12, 6, 201),
@@ -135,10 +147,13 @@ end
         c=1.05,
         r=0.7,
         ϵ=1e-12,
+        stats=gen_stats,
     )
 
     assert_eigenvalues_found(λ, expected; atol=1e-10)
     assert_converged(res; atol=1e-10)
+    @test gen_stats.iterations == length(gen_stats.iteration_log)
+    @test gen_stats.iteration_log[end].variant == :generalized
 
     λ, _, _, res = dual_gen_feast!(
         initial_subspace(12, 6, 202),
@@ -150,10 +165,81 @@ end
         c=1.05,
         r=0.7,
         ϵ=1e-12,
+        stats=dual_stats,
     )
 
     assert_eigenvalues_found(λ, expected; atol=1e-10)
     assert_converged(res; atol=1e-10)
+    @test dual_stats.iterations == length(dual_stats.iteration_log)
+    @test dual_stats.iteration_log[end].variant == :dual_generalized
+end
+
+@testset "distributed generalized FEAST variants find requested eigenvalues" begin
+    added = ensure_workers(2)
+    try
+        A = Matrix(Diagonal(1.0:12.0))
+        B = Matrix(Diagonal(2.0 .+ (1.0:12.0) ./ 10.0))
+        exact = diag(A) ./ diag(B)
+        expected = complex.(exact[in_contour(exact, 1.05, 0.7)])
+
+        λ, _, res = distributed_gen_feast!(
+            initial_subspace(12, 6, 211),
+            A,
+            B;
+            nodes=12,
+            iter=30,
+            c=1.05,
+            r=0.7,
+            ϵ=1e-12,
+            worker_ids=external_workers()[1:2],
+            worker_blas_threads=1,
+        )
+
+        assert_eigenvalues_found(λ, expected; atol=1e-10)
+        assert_converged(res; atol=1e-10)
+
+        stats = DenseDistributedFeastStats()
+        λ, _, _, res = distributed_dual_gen_feast!(
+            initial_subspace(12, 6, 212),
+            initial_subspace(12, 6, 213),
+            A,
+            B;
+            nodes=12,
+            iter=30,
+            c=1.05,
+            r=0.7,
+            ϵ=1e-12,
+            store=true,
+            worker_ids=external_workers()[1:2],
+            worker_blas_threads=1,
+            stats=stats,
+        )
+
+        assert_eigenvalues_found(λ, expected; atol=1e-10)
+        assert_converged(res; atol=1e-10)
+        @test stats.iterations == length(stats.iteration_log)
+        @test !isempty(stats.iteration_log)
+
+        λ, _, res = distributed_gen_feast!(
+            initial_subspace(8, 4, 214),
+            Matrix(Diagonal(1.0:8.0)),
+            I;
+            nodes=8,
+            iter=10,
+            c=2.0,
+            r=1.2,
+            ϵ=1e-10,
+            worker_ids=external_workers()[1:2],
+            worker_blas_threads=1,
+        )
+
+        assert_eigenvalues_found(λ, complex.(1.0:3.0); atol=1e-10)
+        assert_converged(res; atol=1e-10)
+    finally
+        if !isempty(added)
+            rmprocs(added)
+        end
+    end
 end
 
 @testset "generalized FEAST accepts identity operator" begin
@@ -220,6 +306,7 @@ end
     A = Matrix(Diagonal(1.0:n))
     T(z) = z * Matrix{Float64}(I, n, n) - A
     expected = complex.(1.0:4.0)
+    stats = DenseFeastStats()
 
     λ, _, res = nlfeast!(
         T,
@@ -230,11 +317,14 @@ end
         r=1.6,
         ϵ=1e-12,
         store=true,
+        stats=stats,
     )
 
     inside = in_contour(λ, 2.5, 1.6)
     assert_eigenvalues_found(λ[inside], expected; atol=1e-10)
     assert_converged(res[inside]; atol=1e-10)
+    @test stats.iterations == length(stats.iteration_log)
+    @test stats.iteration_log[end].variant == :nonlinear
 end
 
 @testset "dual generalized FEAST handles a small non-normal problem" begin
