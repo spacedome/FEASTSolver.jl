@@ -88,8 +88,11 @@
   - Important note: some very important historical "test" files are experiments showing significant results. These now live under `experiments/legacy_tests/` so they are preserved but no longer confused with automated tests.
   - Keep dense serial FEAST implementations readable as educational/research references while preserving the preallocated LAPACK paths.
   - Keep distributed FEAST focused on making persistent contour-node ownership and synchronization explicit. Users can read the serial implementation for the mathematical algorithm.
-  - Next module-layout cleanup: decide whether `src/*experimental.jl` should remain included in the main module, move under `experiments/`, or become explicitly named experimental APIs.
-  - Next nonlinear cleanup: identify the core nonlinear variant under active research and separate it from historical moment/SS experiments enough that it can be tested and documented.
+  - Keep `src/feast_experimental.jl` in-tree for now as the unfinished IFEAST/inexact-FEAST prototype.
+  - Keep `src/nlfeast_experimental.jl` in-tree for now as nonlinear moment/Beyn/Sakurai-Sugiura research code.
+  - Canonical nonlinear path: `nlfeast!` in `src/nlfeast.jl`, the NLFEAST-Beyn hybrid that applies residual inverse iteration directly to Beyn-style contour moments and reduces to linear FEAST in the appropriate sense.
+  - Next module-layout cleanup: when a real hierarchy exists, consider moving experimental implementations into an `src/experimental/` folder while keeping them importable.
+  - Next nonlinear cleanup: separate the canonical nonlinear implementation from moment/SS experiments enough that the canonical variant can be tested, documented, and profiled independently.
 
 - [ ] Now that package extensions exist, split things into subdirectories and have optional dependencies where useful, for example plots and pseudospectra.
   - <https://discourse.julialang.org/t/quick-tutorial-on-package-extensions/130923>

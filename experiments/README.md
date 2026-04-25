@@ -13,3 +13,11 @@ into one of:
 - `benchmark/` scripts when the point is timing or scaling.
 - documented examples when the point is explaining an algorithm or problem.
 
+Research orientation:
+
+- `src/nlfeast.jl` contains the canonical nonlinear FEAST-Beyn hybrid prototype.
+- `src/nlfeast_experimental.jl` contains higher-moment experiments related to
+  Beyn and Sakurai-Sugiura style methods.
+- `src/feast_experimental.jl` contains unfinished IFEAST/inexact-FEAST work.
+- `article.tex` is the main local reference for the nonlinear contour-method
+  research framing.

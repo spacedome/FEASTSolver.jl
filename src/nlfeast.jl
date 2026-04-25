@@ -1,4 +1,16 @@
 
+"""
+    nlfeast!(T, X, nodes, iter; kwargs...)
+
+Canonical nonlinear FEAST-Beyn hybrid prototype. The method applies the
+NLFEAST residual inverse iteration idea directly to Beyn-style contour moments:
+the first iteration is a Beyn solve, and subsequent iterations reuse the contour
+nodes as fixed shifts to refine the subspace through residual solves.
+
+This is the main nonlinear research implementation. The moment-expanded
+variants below and in `nlfeast_experimental.jl` explore the broader family of
+contour algorithms needed for defective, clustered, or highly nonlinear spectra.
+"""
 function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Integer;
     c=complex(0.0, 0.0), r=1.0, debug=false, ϵ=10e-12, store=true, spurious=1e-5,
     factorizer=lu, left_divider=ldiv!)

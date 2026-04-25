@@ -1,4 +1,12 @@
 
+"""
+Experimental inexact FEAST prototype.
+
+This file is intentionally kept in `src/` while the research code is being
+curated. It explores IFEAST-style shifted solves with iterative linear solvers,
+but it is unfinished and should not be treated as the reference FEAST
+implementation. See `feast.jl` for the maintained dense direct variants.
+"""
 function ifeast!(A::AbstractMatrix, X₀::AbstractMatrix, nodes::Integer, iter::Integer;
                 c=complex(0.0,0.0), r=1.0, debug=false, ϵ=0.05)
     N, m₀ = size(X₀)
