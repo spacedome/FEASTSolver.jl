@@ -1,77 +1,68 @@
 {
-  description = "Julia2Nix development environment";
+  description = "Development shell for FEASTSolver.jl";
 
   inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    flake-utils.inputs.nixpkgs.follows = "nixpkgs";
-    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-
-    devshell.url = "github:numtide/devshell";
-    devshell.inputs.nixpkgs.follows = "nixpkgs";
-
-    julia2nix.url = "github:JuliaCN/Julia2Nix.jl";
   };
 
-  outputs = inputs @ {
-    self,
-    julia2nix,
-    ...
-  }:
-    (
-      inputs.flake-utils.lib.eachDefaultSystem
-      (system: let
-        pkgs = inputs.nixpkgs.legacyPackages.${system}.appendOverlays [
-          inputs.devshell.overlays.default
-          self.overlays.default
+  outputs = { self, nixpkgs, flake-utils }:
+    flake-utils.lib.eachDefaultSystem (system:
+      let
+        pkgs = import nixpkgs { inherit system; };
+        runtimeLibs = [
+          pkgs.stdenv.cc.cc.lib
         ];
-        julia-wrapped = inputs.julia2nix.lib.${system}.julia-wrapped {
-          # package = pkgs.julia_17-bin;
-          package = julia2nix.packages.${system}.julia_19-bin;
-          enable = {
-            # only x86_64-linux is supported
-            GR = true;
-            python =
-              pkgs.python3.buildEnv.override
-              {
-                extraLibs = with pkgs.python3Packages; [xlrd matplotlib pyqt5];
-                # ignoreCollisions = true;
-              };
-          };
-        };
+        juliaLsp = pkgs.writeShellScriptBin "julia-lsp" ''
+          set -euo pipefail
 
-        # run this command in your project: nix run github:JuliaCN/Julia2Nix.jl#packages.x86_64-linux.julia2nix
-        # we need to generate the julia2nix.toml first
-        project = inputs.julia2nix.lib.${system}.buildProject {
-          src = ./.;
-          name = "your julia project";
-          package = julia-wrapped;
-        };
-      in {
-        packages = {
-          # make sure you have generated the julia2nix.toml
-          # default = project;
-        };
-        devShells.default = pkgs.devshell.mkShell {
-          imports = [
-            # you can keep either one of them devshellProfiles.packages or julia-wrapped
-            # inputs.julia2nix.${pkgs.system}.julia2nix.devshellProfiles.packages
+          lsp_project="''${JULIA_LSP_PROJECT:-$PWD/.julia/environments/lsp}"
 
-            # add dev-tools in your devshell
-            inputs.julia2nix.${pkgs.system}.julia2nix.devshellProfiles.dev
+          if [ ! -f "$lsp_project/Project.toml" ]; then
+            echo "julia-lsp: missing LSP environment at $lsp_project" >&2
+            echo "Enter the dev shell once to bootstrap LanguageServer.jl." >&2
+            exit 1
+          fi
 
-            # add nightly julia
-            # inputs.julia2nix.${pkgs.system}.julia2nix.devshellProfiles.nightly
-          ];
-          commands = [
-            {
-              package = julia-wrapped;
-              help = julia2nix.packages.${pkgs.system}.julia_19-bin.meta.description;
-            }
-          ];
+          exec julia --project="$lsp_project" --startup-file=no -e 'using LanguageServer; runserver()'
+        '';
+      in
+      {
+        devShells.default = pkgs.mkShell {
+          packages = [
+            pkgs.julia-bin
+            pkgs.git
+            pkgs.gnumake
+            pkgs.pkg-config
+            juliaLsp
+          ] ++ runtimeLibs;
+
+          JULIA_PROJECT = "@.";
+          JULIA_LOAD_PATH = "@:@stdlib";
+          JULIA_NUM_THREADS = "auto";
+          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath runtimeLibs;
+
+          shellHook = ''
+            export JULIA_DEPOT_PATH="$PWD/.julia:''${JULIA_DEPOT_PATH:-$HOME/.julia}"
+            export JULIA_LSP_PROJECT="$PWD/.julia/environments/lsp"
+
+            mkdir -p "$JULIA_LSP_PROJECT"
+            if [ ! -f "$JULIA_LSP_PROJECT/Project.toml" ]; then
+              echo "Bootstrapping Julia LSP environment in $JULIA_LSP_PROJECT"
+              julia --project="$JULIA_LSP_PROJECT" --startup-file=no -e '
+                using Pkg
+                Pkg.add([
+                  PackageSpec(name="LanguageServer"),
+                  PackageSpec(name="SymbolServer")
+                ])
+              '
+            fi
+
+            echo "FEASTSolver.jl dev shell"
+            echo "  julia project: $JULIA_PROJECT"
+            echo "  julia depot:   $JULIA_DEPOT_PATH"
+            echo "  julia lsp:     $JULIA_LSP_PROJECT"
+          '';
         };
-      })
-    )
-    // {
-      overlays.default = final: prev: {};
-    };
+      });
 }

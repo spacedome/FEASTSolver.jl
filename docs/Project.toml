@@ -1,2 +1,6 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+FEASTSolver = "65ce2ba6-bba3-11e9-165b-677ad58e09bb"
+
+[compat]
+Documenter = "1"

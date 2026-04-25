@@ -6,3 +6,5 @@
 /docs/build/
 /docs/site/
 /test/data
+/.julia/
+/.helix
