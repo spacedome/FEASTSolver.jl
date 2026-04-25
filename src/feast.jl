@@ -41,16 +41,30 @@ function feast!(X::AbstractMatrix, A::AbstractMatrix, contour::Contour;
     eigen_ws = EigenWs(Aq, rvecs=true)
     nodes = size(contour.nodes, 1)
 
+    use_dense_lapack_store = store && factorizer === lu && left_divider === ldiv! &&
+                             A isa StridedMatrix && Ctype <: DenseLapackScalar
+    stored_shifts = nothing
+    stored_lu_ws = nothing
+    facts = nothing
     if store
-        materialize_standard_shift!(ZmA, A, contour.nodes[1])
-        facts1 = factorizer(ZmA)
-        facts = Array{typeof(facts1)}(undef, nodes)
-        facts[1] = facts1
+        if use_dense_lapack_store
+            stored_shifts = [similar(ZmA) for _ in 1:nodes]
+            stored_lu_ws = [dense_lapack_lu_workspace(stored_shifts[i]) for i in 1:nodes]
+            Threads.@threads for i in 1:nodes
+                materialize_standard_shift!(stored_shifts[i], A, contour.nodes[i])
+                dense_lapack_factor!(stored_shifts[i], stored_lu_ws[i])
+            end
+        else
+            materialize_standard_shift!(ZmA, A, contour.nodes[1])
+            facts1 = factorizer(ZmA)
+            facts = Array{typeof(facts1)}(undef, nodes)
+            facts[1] = facts1
 
-        Threads.@threads for i=2:nodes
-              local_shift = similar(ZmA)
-              materialize_standard_shift!(local_shift, A, contour.nodes[i])
-              facts[i] = factorizer(local_shift)
+            Threads.@threads for i=2:nodes
+                  local_shift = similar(ZmA)
+                  materialize_standard_shift!(local_shift, A, contour.nodes[i])
+                  facts[i] = factorizer(local_shift)
+            end
         end
     end
 
@@ -97,7 +111,9 @@ function feast!(X::AbstractMatrix, A::AbstractMatrix, contour::Contour;
             Q .= 0.00
             for i=1:nodes
                 fill_resolvent!(resolvent, contour.nodes[i], Λ)
-                if store
+                if use_dense_lapack_store
+                    dense_lapack_solve_factored!(temp, stored_shifts[i], R, stored_lu_ws[i])
+                elseif store
                     left_divider(temp, facts[i], R)
                 elseif lapack_lu_ws !== nothing
                     materialize_standard_shift!(ZmA, A, contour.nodes[i])
@@ -107,9 +123,7 @@ function feast!(X::AbstractMatrix, A::AbstractMatrix, contour::Contour;
                     linsolve!(temp, ZmA, R, factorizer, left_divider)
                 end
 
-                temp .= X .- temp
-                scale_columns!(temp, resolvent, contour.weights[i])
-                Q .+= temp
+                accumulate_filtered_columns!(Q, X, temp, resolvent, contour.weights[i])
             end
             filter_ns = time_ns() - start_ns
         end
@@ -135,7 +149,7 @@ function feast!(X::AbstractMatrix, A::AbstractMatrix, contour::Contour;
     if stats !== nothing
         stats.solve_total_ns += time_ns() - solve_start_ns
     end
-    if store
+    if facts !== nothing
         foreach(finalize!, facts)
     end
     in_contour!(inside, Λ, contour)
@@ -179,16 +193,30 @@ function gen_feast!(X::AbstractMatrix, A::AbstractMatrix, B, contour::Contour;
     eigen_ws = GeneralizedEigenWs(Aq, lvecs=true, rvecs=true)
     nodes = size(contour.nodes, 1)
 
+    use_dense_lapack_store = store && factorizer === lu && left_divider === ldiv! &&
+                             A isa StridedMatrix && B isa Union{StridedMatrix, UniformScaling}
+    stored_shifts = nothing
+    stored_lu_ws = nothing
+    facts = nothing
     if store
-         materialize_generalized_shift!(ZmA, A, B, contour.nodes[1])
-         facts1 = factorizer(ZmA)
-         facts = Array{typeof(facts1)}(undef, nodes)
-         facts[1] = facts1
+         if use_dense_lapack_store
+             stored_shifts = [similar(ZmA) for _ in 1:nodes]
+             stored_lu_ws = [dense_lapack_lu_workspace(stored_shifts[i]) for i in 1:nodes]
+             Threads.@threads for i in 1:nodes
+                   materialize_generalized_shift!(stored_shifts[i], A, B, contour.nodes[i])
+                   dense_lapack_factor!(stored_shifts[i], stored_lu_ws[i])
+             end
+         else
+             materialize_generalized_shift!(ZmA, A, B, contour.nodes[1])
+             facts1 = factorizer(ZmA)
+             facts = Array{typeof(facts1)}(undef, nodes)
+             facts[1] = facts1
 
-         Threads.@threads for i=2:nodes
-               local_shift = similar(ZmA)
-               materialize_generalized_shift!(local_shift, A, B, contour.nodes[i])
-               facts[i] = factorizer(local_shift)
+             Threads.@threads for i=2:nodes
+                   local_shift = similar(ZmA)
+                   materialize_generalized_shift!(local_shift, A, B, contour.nodes[i])
+                   facts[i] = factorizer(local_shift)
+             end
          end
     end
 
@@ -236,7 +264,9 @@ function gen_feast!(X::AbstractMatrix, A::AbstractMatrix, B, contour::Contour;
             Q .= 0.00
             for i=1:nodes
                 fill_resolvent!(resolvent, contour.nodes[i], Λ)
-                if store
+                if use_dense_lapack_store
+                    dense_lapack_solve_factored!(temp, stored_shifts[i], R, stored_lu_ws[i])
+                elseif store
                     left_divider(temp, facts[i], R)
                 elseif lapack_lu_ws !== nothing
                     materialize_generalized_shift!(ZmA, A, B, contour.nodes[i])
@@ -245,9 +275,7 @@ function gen_feast!(X::AbstractMatrix, A::AbstractMatrix, B, contour::Contour;
                     materialize_generalized_shift!(ZmA, A, B, contour.nodes[i])
                     linsolve!(temp, ZmA, R, factorizer, left_divider)
                 end
-                temp .= X .- temp
-                scale_columns!(temp, resolvent, contour.weights[i])
-                Q .+= temp
+                accumulate_filtered_columns!(Q, X, temp, resolvent, contour.weights[i])
             end
             filter_ns = time_ns() - start_ns
         end
@@ -273,7 +301,7 @@ function gen_feast!(X::AbstractMatrix, A::AbstractMatrix, B, contour::Contour;
     if stats !== nothing
         stats.solve_total_ns += time_ns() - solve_start_ns
     end
-    if store
+    if facts !== nothing
         foreach(finalize!, facts)
     end
     in_contour!(inside, Λ, contour)
@@ -323,27 +351,42 @@ function dual_gen_feast!(Xr::AbstractMatrix, Xl::AbstractMatrix, A::AbstractMatr
     residual_y = zeros(ComplexF64, N)
     nodes = size(contour.nodes, 1)
 
+    use_dense_lapack_store = store && factorizer === lu && left_divider === ldiv! &&
+                             A isa StridedMatrix && B isa Union{StridedMatrix, UniformScaling}
+    stored_shifts = nothing
+    stored_lu_ws = nothing
+    rfacts = nothing
+    lfacts = nothing
     if store
-         materialize_generalized_shift!(ZmA, A, B, contour.nodes[1])
-         rfacts1 = factorizer(ZmA)
-         rfacts = Array{typeof(rfacts1)}(undef, nodes)
-         rfacts[1] = rfacts1
-         if !share_adjoint_factors
-             materialize_adjoint_generalized_shift!(ZmA, A, B, contour.nodes[1])
-             lfacts1 = factorizer(ZmA)
-             lfacts = Array{typeof(lfacts1)}(undef, nodes)
-             lfacts[1] = lfacts1
-         end
+         if use_dense_lapack_store
+             stored_shifts = [similar(ZmA) for _ in 1:nodes]
+             stored_lu_ws = [dense_lapack_lu_workspace(stored_shifts[i]) for i in 1:nodes]
+             Threads.@threads for i in 1:nodes
+                   materialize_generalized_shift!(stored_shifts[i], A, B, contour.nodes[i])
+                   dense_lapack_factor!(stored_shifts[i], stored_lu_ws[i])
+             end
+         else
+             materialize_generalized_shift!(ZmA, A, B, contour.nodes[1])
+             rfacts1 = factorizer(ZmA)
+             rfacts = Array{typeof(rfacts1)}(undef, nodes)
+             rfacts[1] = rfacts1
+             if !share_adjoint_factors
+                 materialize_adjoint_generalized_shift!(ZmA, A, B, contour.nodes[1])
+                 lfacts1 = factorizer(ZmA)
+                 lfacts = Array{typeof(lfacts1)}(undef, nodes)
+                 lfacts[1] = lfacts1
+             end
 
-         Threads.@threads for i=2:nodes
-               local_shift = similar(ZmA)
-               materialize_generalized_shift!(local_shift, A, B, contour.nodes[i])
-               rfacts[i] = factorizer(local_shift)
-               if !share_adjoint_factors
-                   local_adjoint_shift = similar(ZmA)
-                   materialize_adjoint_generalized_shift!(local_adjoint_shift, A, B, contour.nodes[i])
-                   lfacts[i] = factorizer(local_adjoint_shift)
-               end
+             Threads.@threads for i=2:nodes
+                   local_shift = similar(ZmA)
+                   materialize_generalized_shift!(local_shift, A, B, contour.nodes[i])
+                   rfacts[i] = factorizer(local_shift)
+                   if !share_adjoint_factors
+                       local_adjoint_shift = similar(ZmA)
+                       materialize_adjoint_generalized_shift!(local_adjoint_shift, A, B, contour.nodes[i])
+                       lfacts[i] = factorizer(local_adjoint_shift)
+                   end
+             end
          end
     end
 
@@ -400,7 +443,9 @@ function dual_gen_feast!(Xr::AbstractMatrix, Xl::AbstractMatrix, A::AbstractMatr
             Ql .= 0.00
             for i=1:nodes
                 fill_resolvent!(resolvent, contour.nodes[i], Λ)
-                if store
+                if use_dense_lapack_store
+                    dense_lapack_solve_factored!(temp, stored_shifts[i], Rr, stored_lu_ws[i], 'N')
+                elseif store
                     left_divider(temp, rfacts[i], Rr)
                 elseif lapack_lu_ws !== nothing
                     materialize_generalized_shift!(ZmA, A, B, contour.nodes[i])
@@ -410,12 +455,12 @@ function dual_gen_feast!(Xr::AbstractMatrix, Xl::AbstractMatrix, A::AbstractMatr
                     materialize_generalized_shift!(ZmA, A, B, contour.nodes[i])
                     linsolve!(temp, ZmA, Rr, factorizer, left_divider)
                 end
-                temp .= Xr .- temp
-                scale_columns!(temp, resolvent, contour.weights[i])
-                Qr .+= temp
+                accumulate_filtered_columns!(Qr, Xr, temp, resolvent, contour.weights[i])
 
                 fill_adjoint_resolvent!(resolvent, contour.nodes[i], Λ)
-                if store
+                if use_dense_lapack_store
+                    dense_lapack_solve_factored!(temp, stored_shifts[i], Rl, stored_lu_ws[i], 'C')
+                elseif store
                     if share_adjoint_factors
                         left_divider(temp, adjoint(rfacts[i]), Rl)
                     else
@@ -427,9 +472,7 @@ function dual_gen_feast!(Xr::AbstractMatrix, Xl::AbstractMatrix, A::AbstractMatr
                     materialize_adjoint_generalized_shift!(ZmA, A, B, contour.nodes[i])
                     linsolve!(temp, ZmA, Rl, factorizer, left_divider)
                 end
-                temp .= Xl .- temp
-                scale_columns!(temp, resolvent, conj(contour.weights[i]))
-                Ql .+= temp
+                accumulate_filtered_columns!(Ql, Xl, temp, resolvent, conj(contour.weights[i]))
             end
             filter_ns = time_ns() - start_ns
         end
@@ -455,9 +498,9 @@ function dual_gen_feast!(Xr::AbstractMatrix, Xl::AbstractMatrix, A::AbstractMatr
     if stats !== nothing
         stats.solve_total_ns += time_ns() - solve_start_ns
     end
-    if store
+    if rfacts !== nothing
         foreach(finalize!, rfacts)
-        if !share_adjoint_factors
+        if lfacts !== nothing
             foreach(finalize!, lfacts)
         end
     end

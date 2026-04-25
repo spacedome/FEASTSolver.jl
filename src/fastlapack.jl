@@ -173,6 +173,43 @@ function scale_columns!(A::AbstractMatrix, scales::AbstractVector, weight=one(el
     A
 end
 
+function accumulate_filtered_columns!(
+    Q::AbstractMatrix,
+    X::AbstractMatrix,
+    solve::AbstractMatrix,
+    resolvent::AbstractVector,
+    weight,
+)
+    @inbounds for j in axes(solve, 2)
+        α = resolvent[j] * weight
+        for i in axes(solve, 1)
+            Q[i, j] += (X[i, j] - solve[i, j]) * α
+        end
+    end
+    Q
+end
+
+function accumulate_filtered_moments!(
+    Q₀::AbstractMatrix,
+    Q₁::AbstractMatrix,
+    X::AbstractMatrix,
+    solve::AbstractMatrix,
+    resolvent::AbstractVector,
+    weight,
+    z,
+)
+    @inbounds for j in axes(solve, 2)
+        α₀ = resolvent[j] * weight
+        α₁ = α₀ * z
+        for i in axes(solve, 1)
+            q = X[i, j] - solve[i, j]
+            Q₀[i, j] += q * α₀
+            Q₁[i, j] += q * α₁
+        end
+    end
+    Q₀, Q₁
+end
+
 function inv_scale_columns!(A::AbstractMatrix, scales::AbstractVector)
     @inbounds for j in axes(A, 2)
         α = inv(scales[j])

@@ -66,7 +66,7 @@ end
 
 function _prepare_dense_feast_workers!(worker_ids)
     for pid in worker_ids
-        remotecall_wait(Main.eval, pid, :(using SharedArrays; using FEASTSolver))
+        remotecall_wait(Main.eval, pid, :(using LinearAlgebra; using SharedArrays; using FEASTSolver))
     end
     nothing
 end

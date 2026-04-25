@@ -10,10 +10,17 @@ nodes as fixed shifts to refine the subspace through residual solves.
 This is the main nonlinear research implementation. The moment-expanded
 variants below and in `nlfeast_experimental.jl` explore the broader family of
 contour algorithms needed for defective, clustered, or highly nonlinear spectra.
+
+`T(λ)` is the canonical matrix-valued nonlinear operator interface. For large
+operators where residuals should be computed by matrix-vector action rather
+than by materializing `T(λ)`, pass `residual_update=(res, X, R, Λ) -> ...`.
+That hook must normalize/update `X`, write residual vectors into `R`, and fill
+`res`.
 """
 function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Integer;
     c=complex(0.0, 0.0), r=1.0, debug=false, ϵ=10e-12, store=true, spurious=1e-5,
-    factorizer=lu, left_divider=ldiv!, stats::Union{Nothing,DenseFeastStats}=nothing)
+    factorizer=lu, left_divider=ldiv!, residual_update=nothing,
+    stats::Union{Nothing,DenseFeastStats}=nothing)
 
     N, m₀ = size(X)
     Λ, res = zeros(ComplexF64, m₀), Array{Float64}(undef, m₀)
@@ -90,8 +97,9 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
                 else
                     Tinv .= T(z) \ R
                 end
-                Tinv .= X .- Tinv
-                scale_columns!(Tinv, resolvent, contour_weights[i])
+                accumulate_filtered_moments!(Q₀, Q₁, X, Tinv, resolvent, contour_weights[i], z)
+                if debug print(".") end
+                continue
             end
             Q₀ .+= Tinv
             add_weighted_columns!(Q₁, Tinv, z)
@@ -109,9 +117,11 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
         rayleigh_ritz_ns = time_ns() - start_ns
 
         start_ns = time_ns()
-        if residual_matrix === nothing
-            update_R!(X, R, Λ, T)
-            residuals!(res, R, Λ, T)
+        if residual_update !== nothing
+            # Expert fast path for action-only NEPs that cannot cheaply form T(λ).
+            residual_update(res, X, R, Λ)
+        elseif residual_matrix === nothing
+            update_nonlinear_residuals!(res, X, R, Λ, T, residual_x, residual_y)
         else
             update_nonlinear_residuals!(res, X, R, Λ, T, residual_matrix, residual_x, residual_y)
         end
@@ -144,9 +154,9 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
         if converged
             break
         end
-		if spurious_converged
-			break
-		end
+        if spurious_converged
+            break
+        end
     end
     if stats !== nothing
         stats.solve_total_ns += time_ns() - solve_start_ns

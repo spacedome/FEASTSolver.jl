@@ -389,6 +389,77 @@ end
     @test stats.iteration_log[end].variant == :nonlinear
 end
 
+@testitem "distributed nonlinear FEAST handles small dense problems" tags=[:distributed] setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using Distributed
+    using LinearAlgebra
+    using .FEASTTestSetup: initial_subspace, assert_eigenvalues_found, assert_converged, ensure_workers, external_workers
+
+    added = ensure_workers(2)
+    try
+        worker_ids = external_workers()[1:2]
+
+        n = 12
+        A = Matrix(Diagonal(1.0:n))
+        Tlinear(z) = z * Matrix{Float64}(I, n, n) - A
+        expected_linear = complex.(1.0:4.0)
+        stats = DenseDistributedFeastStats()
+
+        λ, _, res = distributed_nlfeast!(
+            Tlinear,
+            initial_subspace(n, 4, 405),
+            8,
+            10;
+            c=2.5,
+            r=1.6,
+            ϵ=1e-12,
+            store=true,
+            worker_ids=worker_ids,
+            worker_blas_threads=1,
+            stats=stats,
+        )
+
+        inside = in_contour(λ, 2.5, 1.6)
+        assert_eigenvalues_found(λ[inside], expected_linear; atol=1e-10)
+        assert_converged(res[inside]; atol=1e-10)
+        @test stats.iterations == length(stats.iteration_log)
+        @test !isempty(stats.iteration_log)
+
+        roots1 = ComplexF64[0.6 + 0.05im, 0.75, 0.9 - 0.03im, 2.0, 2.3 + 0.1im, 2.6 - 0.1im]
+        roots2 = ComplexF64[-1.0, -1.2 + 0.2im, -1.4 - 0.1im, 3.0, 3.2, 3.4]
+        D1 = Diagonal(roots1 .+ roots2)
+        D0 = Diagonal(roots1 .* roots2)
+        V = Matrix{ComplexF64}(I, length(roots1), length(roots1))
+        V[1, 2] = 0.4
+        V[2, 3] = -0.2im
+        Vinv = inv(V)
+        Tquadratic(z) = V * (z^2 * I - z * D1 + D0) * Vinv
+        c, r = 0.75 + 0.0im, 0.25
+        expected_quadratic = roots1[in_contour(roots1, c, r)]
+
+        λ, _, res = distributed_nlfeast!(
+            Tquadratic,
+            initial_subspace(length(roots1), length(expected_quadratic) + 1, 406),
+            16,
+            20;
+            c=c,
+            r=r,
+            ϵ=1e-10,
+            store=false,
+            worker_ids=worker_ids,
+            worker_blas_threads=1,
+        )
+
+        inside = in_contour(λ, c, r)
+        assert_eigenvalues_found(λ[inside], expected_quadratic; atol=1e-9)
+        assert_converged(res[inside]; atol=1e-9)
+    finally
+        if !isempty(added)
+            rmprocs(added)
+        end
+    end
+end
+
 @testitem "nonlinear FEAST handles a quadratic matrix polynomial" setup=[FEASTTestSetup] begin
     using FEASTSolver
     using LinearAlgebra

@@ -19,8 +19,9 @@ export feast!, gen_feast!, dual_gen_feast!, nlfeast!
 export DenseFeastStats, DenseFeastIterationStats
 
 # Explicit contour-parallel dense FEAST API.
-export distributed_feast!, distributed_gen_feast!, distributed_dual_gen_feast!
+export distributed_feast!, distributed_gen_feast!, distributed_dual_gen_feast!, distributed_nlfeast!
 export DenseDistributedFeastPlan, DenseDistributedGeneralizedFeastPlan, DenseDistributedDualGeneralizedFeastPlan
+export DenseDistributedNonlinearFeastPlan
 export DenseDistributedFeastStats, DenseDistributedFeastIterationStats
 
 # Research utilities that are stable enough to use directly.
@@ -40,6 +41,7 @@ include("feast.jl")
 include("distributed/stats.jl")
 include("distributed_feast.jl")
 include("distributed/workers.jl")
+include("distributed/nonlinear.jl")
 include("feast_experimental.jl")
 include("nlfeast.jl")
 include("nlfeast_experimental.jl")

@@ -222,6 +222,35 @@ function update_nonlinear_residuals!(
     res
 end
 
+function update_nonlinear_residuals!(
+    res::AbstractVector,
+    X::AbstractMatrix,
+    R::AbstractMatrix,
+    Λ::AbstractVector,
+    T::Function,
+    x::AbstractVector,
+    y::AbstractVector,
+)
+    @inbounds for j in axes(X, 2)
+        xnorm = zero(real(eltype(X)))
+        for i in axes(X, 1)
+            xnorm += abs2(X[i, j])
+        end
+        inv_xnorm = inv(sqrt(xnorm))
+        for i in axes(X, 1)
+            x[i] = X[i, j] * inv_xnorm
+            X[i, j] = x[i]
+        end
+        Tλ = T(Λ[j])
+        mul!(y, Tλ, x)
+        for i in axes(R, 1)
+            R[i, j] = y[i]
+        end
+        res[j] = norm(y) / norm(Tλ)
+    end
+    res
+end
+
 function update_R!(X::AbstractMatrix, R::AbstractMatrix, Λ::Array, A::AbstractMatrix)
     normalize_columns!(X)
     mul!(R, A, X)

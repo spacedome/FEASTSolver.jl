@@ -17,9 +17,17 @@ test filter='':
 test-slow filter='':
     FEAST_TEST_SLOW=1 {{julia}} --project=. --startup-file=no -e 'using Pkg; filter = ARGS[1]; Pkg.test(test_args=isempty(filter) ? String[] : [filter])' {{quote(filter)}}
 
-# Run a simple dense FEAST contour-parallel scaling benchmark.
+# Run the older simple dense FEAST contour-parallel scaling benchmark.
 bench-parallel:
     {{julia}} --project=. --startup-file=no benchmark/dense_parallel_scaling.jl
+
+# Run BenchmarkTools-backed dense serial/distributed FEAST benchmarks.
+bench-dense:
+    {{julia}} --project=benchmark --startup-file=no benchmark/run_dense.jl
+
+# Run the research experiment comparing nonlinear FEAST against NEP-PACK NLEIGS.
+experiment-nleigs:
+    {{julia}} --project=. --startup-file=no experiments/nleigs_comparison/run.jl
 
 # Build local documentation.
 docs:
@@ -29,16 +37,19 @@ docs:
 instantiate:
     {{julia}} --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
     {{julia}} --project=docs --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+    {{julia}} --project=benchmark --startup-file=no -e 'using Pkg; Pkg.instantiate()'
 
 # Update package and docs environments.
 update:
     {{julia}} --project=. --startup-file=no -e 'using Pkg; Pkg.update()'
     {{julia}} --project=docs --startup-file=no -e 'using Pkg; Pkg.update()'
+    {{julia}} --project=benchmark --startup-file=no -e 'using Pkg; Pkg.update()'
 
 # Show package and docs dependency status.
 status:
     {{julia}} --project=. --startup-file=no -e 'using Pkg; Pkg.status()'
     {{julia}} --project=docs --startup-file=no -e 'using Pkg; Pkg.status()'
+    {{julia}} --project=benchmark --startup-file=no -e 'using Pkg; Pkg.status()'
 
 # Show the repo assumptions future agents should keep in mind.
 notes:
@@ -50,6 +61,8 @@ notes:
       'Run just test-slow to include TestItems tagged :slow.' \
       'test/runtests.jl is the automated TestItemRunner entrypoint.' \
       'just test uses Pkg.test(); test-only dependencies live in Project.toml extras/targets.' \
+      'Run just bench-dense for BenchmarkTools-backed dense FEAST benchmarks.' \
+      'Run just experiment-nleigs for the research comparison against NEP-PACK NLEIGS.' \
       'Historical research scripts live under experiments/legacy_tests/ until curated.' \
       'Julia 1.10-1.12 compat should eventually be checked in CI, not by expanding this dev shell.' \
-      'Optional plotting, benchmarking, and upstream FEAST binding work should use separate environments or package extensions.'
+      'Optional plotting and upstream FEAST binding work should use separate environments or package extensions.'

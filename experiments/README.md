@@ -13,6 +13,11 @@ into one of:
 - `benchmark/` scripts when the point is timing or scaling.
 - documented examples when the point is explaining an algorithm or problem.
 
+The `nleigs_comparison/` directory contains a current research experiment for
+comparing nonlinear FEAST against NEP-PACK's NLEIGS implementation on problems
+from `article.tex`. It is not an automated benchmark because the comparison
+depends on algorithm-specific parameters and target-region choices.
+
 Research orientation:
 
 - `src/nlfeast.jl` contains the canonical nonlinear FEAST-Beyn hybrid prototype.
