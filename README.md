@@ -8,7 +8,12 @@
 
 -----
 
-This is an implementation of the FEAST eigensolver in Julia, and is not meant to replace the reference FORTRAN implementation. 
-Despite this, it does aim to be performant, and should work well for large dense and sparse problems where spectral slicing is needed.
+This is a Julia research implementation of FEAST and related contour/subspace
+eigensolvers. It is not meant to replace the reference FORTRAN implementation:
+the primary goal is to keep the algorithms easy to inspect, modify, and compare
+while preserving the performance-critical structure needed for serious numerical
+experiments.
 
-For Julia bindings to the FORTRAN implementation see FEAST.jl (coming soon).
+The maintained automated tests live in `test/runtests.jl`. Historical research
+scripts and old experiment drivers live under `experiments/legacy_tests/` until
+they are curated into tests, benchmarks, or examples.

@@ -76,7 +76,7 @@ uuid = "2e619515-83b5-522b-bb60-26c02a35a201"
 version = "2.7.5+0"
 
 [[deps.FEASTSolver]]
-deps = ["Distributed", "FastGaussQuadrature", "IterativeSolvers", "LinearAlgebra", "MatrixMarket", "NonlinearEigenproblems", "SharedArrays", "SparseArrays"]
+deps = ["Distributed", "FastGaussQuadrature", "FastLapackInterface", "IterativeSolvers", "LinearAlgebra", "MatrixMarket", "NonlinearEigenproblems", "Random", "SharedArrays", "SparseArrays"]
 path = "/home/julien/Code/FEASTSolver.jl"
 uuid = "65ce2ba6-bba3-11e9-165b-677ad58e09bb"
 version = "0.1.0"
@@ -86,6 +86,12 @@ deps = ["LinearAlgebra", "SpecialFunctions", "StaticArrays"]
 git-tree-sha1 = "0044e9f5e49a57e88205e8f30ab73928b05fe5b6"
 uuid = "442a2c76-b920-505d-bb47-c5924d526838"
 version = "1.1.0"
+
+[[deps.FastLapackInterface]]
+deps = ["LinearAlgebra"]
+git-tree-sha1 = "438747a277cff4b11f93358d8376eeec8db0fed2"
+uuid = "29a986be-02c6-4525-aec4-84b980013641"
+version = "2.1.1"
 
 [[deps.FileWatching]]
 uuid = "7b1f6079-737a-58dc-b8bc-7a2ca5c1b5ee"

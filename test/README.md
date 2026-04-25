@@ -4,7 +4,7 @@
 
 The current test philosophy is narrow: given a matrix or matrix-valued function and a contour, the solver should recover the eigenvalues inside that contour to an appropriate tolerance. Small dense problems should use analytic eigenvalues or dense QR/QZ references. Harder non-normal or experimental problems may use residual convergence as the primary check when exact reference eigenvalues are not reliable or available.
 
-The other files in this directory are older research scripts and experiments. They contain useful candidate problems, but they should not be treated as automated tests until converted into deterministic `@testset`s with clear target eigenvalues or residual tolerances.
+Older research scripts and experiments live in `experiments/legacy_tests/`. They contain useful candidate problems, but they should not be treated as automated tests until converted into deterministic `@testset`s with clear target eigenvalues or residual tolerances.
 
 Current automated coverage:
 

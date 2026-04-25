@@ -1,5 +1,14 @@
 import LinearAlgebra: qr, lu, eigen
 
+"""
+    feast!(X, A; kwargs...)
+
+Dense standard FEAST for `Ax = λx`. `X` is the initial search subspace and is
+overwritten with Ritz vectors. The implementation is intentionally direct:
+orthogonalize the current subspace, solve the reduced eigenproblem, compute
+residuals, then apply the rational FEAST filter by solving shifted systems at
+each contour node.
+"""
 function feast!(X::AbstractMatrix, A::AbstractMatrix;
                 nodes::Integer=8, iter::Integer=10, c=complex(0.0,0.0), r=1.0, ϵ=1e-12,
                 debug=false, store=false, mixed_prec=false, factorizer=lu, left_divider=ldiv!)
@@ -44,18 +53,20 @@ function feast!(X::AbstractMatrix, A::AbstractMatrix, contour::Contour;
     end
 
     for nit=0:iter
+        # Rayleigh-Ritz extraction on the current filtered subspace.
         if qr_ws === nothing
             Q .= Matrix(qr(Q).Q)
         else
             dense_lapack_qr!(Q, qr_ws)
         end
-        mul!(R, A, Q) ## why does this one allocate?
-        mul!(Aq, Q', R) ### Aq = Q' * A * Q
-        # mul!(Bq, Q', Q) ### Bq = Q' * Q = I
+        mul!(R, A, Q)
+        mul!(Aq, Q', R)
         dense_lapack_eigen!(Λ, Xq, Aq, eigen_ws)
-        mul!(X, Q, Xq) ### Recover eigenvectors from Ritz vectors ( X = Q * Xq )
-        update_R!(X, R, Λ, A) ### compute residual vectors R for RII update
-        residuals!(res, R, Λ, A) ### compute actual residuals
+        mul!(X, Q, Xq)
+
+        # R holds `(A - λI)x` and is reused as the right-hand side in RII.
+        update_R!(X, R, Λ, A)
+        residuals!(res, R, Λ, A)
         in_contour!(inside, Λ, contour)
         max_res_inside, contour_nonempty = maximum_masked(res, inside)
         if debug iter_debug_print(nit, Λ, res, contour, 1e-5) end
@@ -63,7 +74,9 @@ function feast!(X::AbstractMatrix, A::AbstractMatrix, contour::Contour;
             if debug println("converged in $nit iteration") end
             break
         end
-        if nit < iter ### Do not solve linear systems / form Q on last iteration
+        if nit < iter
+            # Rational inverse iteration update:
+            # Q = Σ_j w_j (X - (z_j I - A)^(-1) R) diag((z_j - Λ)^(-1)).
             Q .= 0.00
             for i=1:nodes
                 fill_resolvent!(resolvent, contour.nodes[i], Λ)
@@ -96,9 +109,15 @@ function gen_feast!(X::AbstractMatrix, A::AbstractMatrix, B;
                     nodes::Integer=8, iter::Integer=10, c=complex(0.0,0.0), r=1.0,
                     debug=false, store=false, ϵ=1e-12, factorizer=lu, left_divider=ldiv!)
     contour = circular_contour_trapezoidal(c, r, nodes)
-    gen_feast!(X, A, B, contour; iter=iter, debug=debug, ϵ=ϵ, factorizer=factorizer, left_divider=left_divider)
+    gen_feast!(X, A, B, contour; iter=iter, debug=debug, store=store, ϵ=ϵ, factorizer=factorizer, left_divider=left_divider)
 end
 
+"""
+    gen_feast!(X, A, B, contour; kwargs...)
+
+Dense generalized FEAST for `Ax = λBx`. This mirrors `feast!`, but the reduced
+problem is `Q'AQ y = λ Q'BQ y` and each contour solve uses `A - zB`.
+"""
 function gen_feast!(X::AbstractMatrix, A::AbstractMatrix, B, contour::Contour;
                     iter::Integer=10, debug=false, store=false, ϵ=1e-12, factorizer=lu, left_divider=ldiv!)
     N, m₀ = size(X)
@@ -133,19 +152,22 @@ function gen_feast!(X::AbstractMatrix, A::AbstractMatrix, B, contour::Contour;
     end
 
     for nit=0:iter
+        # Rayleigh-Ritz extraction for the projected generalized pencil.
         if qr_ws === nothing
             Q .= Matrix(qr(Q).Q)
         else
             dense_lapack_qr!(Q, qr_ws)
         end
-        mul!(R, A, Q) ## why does this one allocate?
-        mul!(Aq, Q', R) ### Aq = Q' * A * Q
+        mul!(R, A, Q)
+        mul!(Aq, Q', R)
         mul!(R, B, Q)
-        mul!(Bq, Q', R) ### Bq = Q' * Q = I
+        mul!(Bq, Q', R)
         dense_lapack_generalized_eigen!(Λ, Xq, Aq, Bq, eigen_ws)
-        mul!(X, Q, Xq) ### Recover eigenvectors from Ritz vectors ( X = Q * Xq )
-        update_R!(X, R, Λ, A, B, temp) ### compute residual vectors R for RII update
-        residuals!(res, R, Λ, A) ### compute actual residuals
+        mul!(X, Q, Xq)
+
+        # R holds `(A - λB)x` and is reused as the right-hand side in RII.
+        update_R!(X, R, Λ, A, B, temp)
+        residuals!(res, R, Λ, A)
         in_contour!(inside, Λ, contour)
         max_res_inside, contour_nonempty = maximum_masked(res, inside)
         if debug iter_debug_print(nit, Λ, res, contour, 1e-5) end
@@ -153,7 +175,8 @@ function gen_feast!(X::AbstractMatrix, A::AbstractMatrix, B, contour::Contour;
               if debug println("converged in $nit iteration") end
               break
         end
-        if nit < iter ### Do not solve linear systems / form Q on last iteration
+        if nit < iter
+            # Rational inverse iteration update with shifted pencil `A - zB`.
             Q .= 0.00
             for i=1:nodes
                 fill_resolvent!(resolvent, contour.nodes[i], Λ)
@@ -185,9 +208,16 @@ function dual_gen_feast!(Xr::AbstractMatrix, Xl::AbstractMatrix, A::AbstractMatr
                     nodes::Integer=8, iter::Integer=10, c=complex(0.0,0.0), r=1.0,
                     debug=false, store=false, ϵ=1e-12, factorizer=lu, left_divider=ldiv!)
     contour = circular_contour_trapezoidal(c, r, nodes)
-    dual_gen_feast!(Xr, Xl, A, B, contour; iter=iter, debug=debug, ϵ=ϵ, factorizer=factorizer, left_divider=left_divider)
+    dual_gen_feast!(Xr, Xl, A, B, contour; iter=iter, debug=debug, store=store, ϵ=ϵ, factorizer=factorizer, left_divider=left_divider)
 end
 
+"""
+    dual_gen_feast!(Xr, Xl, A, B, contour; kwargs...)
+
+Bi-orthogonal generalized FEAST for non-normal pencils. Right and left
+subspaces are filtered together, then paired through a small SVD so the reduced
+generalized eigenproblem is well conditioned.
+"""
 function dual_gen_feast!(Xr::AbstractMatrix, Xl::AbstractMatrix, A::AbstractMatrix, B, contour::Contour;
                     iter::Integer=10, debug=false, store=false, ϵ=1e-12, factorizer=lu, left_divider=ldiv!)
     N, m₀ = size(Xl)
@@ -238,6 +268,7 @@ function dual_gen_feast!(Xr::AbstractMatrix, Xl::AbstractMatrix, A::AbstractMatr
     end
 
     for nit=0:iter
+        # Bi-orthogonalize the left/right subspaces through the B inner product.
         mul!(Rr, B, Qr)
         mul!(Bq, Ql', Rr)
         U, S, Vt = dense_lapack_svd!(Bq, svd_ws)
@@ -247,16 +278,20 @@ function dual_gen_feast!(Xr::AbstractMatrix, Xl::AbstractMatrix, A::AbstractMatr
         mul!(Rl, Ql, U)
         Ql .= Rl
         inv_scale_columns!(Ql, S)
-        mul!(Rr, A, Qr) ## why does this one allocate?
-        mul!(Aq, Ql', Rr) ### Aq = Q' * A * Q
+
+        # Rayleigh-Ritz extraction for the paired left/right subspaces.
+        mul!(Rr, A, Qr)
+        mul!(Aq, Ql', Rr)
         mul!(Rr, B, Qr)
-        mul!(Bq, Ql', Rr) ### Bq = Q' * Q = I
+        mul!(Bq, Ql', Rr)
         dense_lapack_generalized_eigen!(Λ, Xql, Xqr, Aq, Bq, eigen_ws)
-        mul!(Xr, Qr, Xqr) ### Recover eigenvectors from Ritz vectors ( X = Q * Xq )
-        mul!(Xl, Ql, Xql) ### Recover left eigenvectors from paired left Ritz vectors
-        update_R_shifted!(Xr, Rr, Λ, A, B, residual_shift, residual_x, residual_y) ### compute residual vectors R for RII update
-        update_R_shifted!(Xl, Rl, Λ, A', B', residual_shift, residual_x, residual_y) ### compute residual vectors R for RII update
-        residuals!(resr, Rr, Λ, A) ### compute actual residuals
+        mul!(Xr, Qr, Xqr)
+        mul!(Xl, Ql, Xql)
+
+        # Right and left residuals drive the next rational filter update.
+        update_R_shifted!(Xr, Rr, Λ, A, B, residual_shift, residual_x, residual_y)
+        update_R_shifted!(Xl, Rl, Λ, A', B', residual_shift, residual_x, residual_y)
+        residuals!(resr, Rr, Λ, A)
         in_contour!(inside, Λ, contour)
         max_res_inside, contour_nonempty = maximum_masked(resr, inside)
         if debug iter_debug_print(nit, Λ, resr, contour, 1e-5) end
@@ -264,7 +299,9 @@ function dual_gen_feast!(Xr::AbstractMatrix, Xl::AbstractMatrix, A::AbstractMatr
               if debug println("converged in $nit iteration") end
               break
         end
-        if nit < iter ### Do not solve linear systems / form Q on last iteration
+        if nit < iter
+            # Filter the right subspace with `A - zB` and the left subspace
+            # with its adjoint. Standard LU factors can be reused via `trans='C'`.
             Qr .= 0.00
             Ql .= 0.00
             for i=1:nodes

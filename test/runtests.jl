@@ -1,5 +1,6 @@
 using FEASTSolver
 using Test
+using Distributed
 using LinearAlgebra
 using MatrixDepot
 using Random
@@ -23,6 +24,16 @@ function assert_converged(residuals; atol)
     @test maximum(residuals) <= atol
 end
 
+external_workers() = filter(!=(myid()), workers())
+
+function ensure_workers(count)
+    ids = external_workers()
+    if length(ids) >= count
+        return Int[]
+    end
+    addprocs(count - length(ids); exeflags="--project=$(Base.active_project())")
+end
+
 @testset "standard dense FEAST finds requested eigenvalues" begin
     A = Matrix(Diagonal(1.0:12.0))
     expected = complex.(1.0:4.0)
@@ -39,6 +50,74 @@ end
 
     assert_eigenvalues_found(λ, expected; atol=1e-10)
     assert_converged(res; atol=1e-10)
+end
+
+@testset "distributed dense FEAST finds requested eigenvalues" begin
+    added = ensure_workers(2)
+    try
+        A = Matrix(Diagonal(1.0:12.0))
+        expected = complex.(1.0:4.0)
+
+        λ, _, res = distributed_feast!(
+            initial_subspace(12, 4, 111),
+            A;
+            nodes=8,
+            iter=10,
+            c=2.5,
+            r=1.6,
+            ϵ=1e-12,
+            worker_ids=external_workers()[1:2],
+            worker_blas_threads=1,
+        )
+
+        assert_eigenvalues_found(λ, expected; atol=1e-10)
+        assert_converged(res; atol=1e-10)
+
+        λ, _, res = distributed_feast!(
+            initial_subspace(12, 4, 112),
+            A;
+            nodes=8,
+            iter=10,
+            c=2.5,
+            r=1.6,
+            ϵ=1e-12,
+            store=true,
+            worker_ids=external_workers()[1:2],
+            worker_blas_threads=1,
+        )
+
+        assert_eigenvalues_found(λ, expected; atol=1e-10)
+        assert_converged(res; atol=1e-10)
+
+        plan = DenseDistributedFeastPlan(
+            A,
+            4;
+            nodes=8,
+            c=2.5,
+            r=1.6,
+            store=true,
+            worker_ids=external_workers()[1:2],
+            worker_blas_threads=1,
+        )
+        try
+            for seed in (113, 114)
+                λ, _, res = distributed_feast!(
+                    initial_subspace(12, 4, seed),
+                    plan;
+                    iter=10,
+                    ϵ=1e-12,
+                )
+                assert_eigenvalues_found(λ, expected; atol=1e-10)
+                assert_converged(res; atol=1e-10)
+            end
+        finally
+            close(plan)
+        end
+    finally
+        if !isempty(added)
+            rmprocs(added)
+        end
+    end
 end
 
 @testset "generalized FEAST variants find requested eigenvalues" begin

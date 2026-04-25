@@ -13,6 +13,10 @@ smoke:
 test:
     {{julia}} --project=. --startup-file=no -e 'using Pkg; Pkg.test()'
 
+# Run a simple dense FEAST contour-parallel scaling benchmark.
+bench-parallel:
+    {{julia}} --project=. --startup-file=no benchmark/dense_parallel_scaling.jl
+
 # Build local documentation.
 docs:
     {{julia}} --project=docs --startup-file=no docs/make.jl
@@ -40,6 +44,6 @@ notes:
       'Run just smoke, just test, and just docs for the normal local loop.' \
       'test/runtests.jl is the only automated test entrypoint right now.' \
       'just test uses Pkg.test(); test-only dependencies live in Project.toml extras/targets.' \
-      'Most other files in test/ are research scripts or experiments.' \
+      'Historical research scripts live under experiments/legacy_tests/ until curated.' \
       'Julia 1.10-1.12 compat should eventually be checked in CI, not by expanding this dev shell.' \
       'Optional plotting, benchmarking, and upstream FEAST binding work should use separate environments or package extensions.'

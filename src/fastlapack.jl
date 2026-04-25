@@ -1,11 +1,26 @@
 const DenseLapackScalar = Union{Float32, Float64, ComplexF32, ComplexF64}
 
+"""
+    dense_lapack_lu_workspace(A)
+
+Create the reusable FastLapackInterface LU workspace for dense strided LAPACK
+arrays. Returns `nothing` for arrays that should fall back to generic Julia
+factorization paths.
+"""
 function dense_lapack_lu_workspace(A::AbstractMatrix{T}) where {T}
     T <: DenseLapackScalar || return nothing
     A isa StridedMatrix || return nothing
     LUWs(A)
 end
 
+"""
+    use_dense_lapack_lu(A, X, store, factorizer, left_divider, T)
+
+True when the FEAST solve path can use in-place LAPACK factor/solve calls
+without changing user-visible semantics. Stored-factor mode intentionally uses
+the user-provided factorizer because the factors must persist across contour
+iterations.
+"""
 function use_dense_lapack_lu(A, X, store, factorizer, left_divider, ::Type{T}) where {T}
     !store || return false
     factorizer === lu || return false
@@ -15,6 +30,13 @@ function use_dense_lapack_lu(A, X, store, factorizer, left_divider, ::Type{T}) w
     T <: DenseLapackScalar
 end
 
+"""
+    materialize_standard_shift!(C, A, z)
+
+Overwrite `C` with `A - zI`. FEAST needs a fresh shifted matrix at each contour
+node; this helper makes that mutation explicit and keeps the input matrix `A`
+unchanged.
+"""
 function materialize_standard_shift!(C::AbstractMatrix, A::AbstractMatrix, z)
     copyto!(C, A)
     n = min(size(C)...)
@@ -24,6 +46,11 @@ function materialize_standard_shift!(C::AbstractMatrix, A::AbstractMatrix, z)
     C
 end
 
+"""
+    materialize_generalized_shift!(C, A, B, z)
+
+Overwrite `C` with the generalized shifted pencil `A - zB`.
+"""
 function materialize_generalized_shift!(C::AbstractMatrix, A::AbstractMatrix, B::AbstractMatrix, z)
     @inbounds for j in axes(C, 2), i in axes(C, 1)
         C[i, j] = A[i, j] - z * B[i, j]
@@ -40,6 +67,12 @@ function materialize_generalized_shift!(C::AbstractMatrix, A::AbstractMatrix, B:
     C
 end
 
+"""
+    materialize_adjoint_generalized_shift!(C, A, B, z)
+
+Overwrite `C` with `(A - zB)'`, used for the left subspace in dual FEAST when
+adjoint solves cannot reuse the right-side LU factors.
+"""
 function materialize_adjoint_generalized_shift!(C::AbstractMatrix, A::AbstractMatrix, B::AbstractMatrix, z)
     @inbounds for j in axes(C, 2), i in axes(C, 1)
         C[i, j] = conj(A[j, i]) - conj(z) * conj(B[j, i])
@@ -56,11 +89,18 @@ function materialize_adjoint_generalized_shift!(C::AbstractMatrix, A::AbstractMa
     C
 end
 
+"""Factor `C` in place with a preallocated LAPACK LU workspace."""
 function dense_lapack_factor!(C::AbstractMatrix, ws::LUWs)
     LAPACK.getrf!(ws, C; resize=false)
     C
 end
 
+"""
+    dense_lapack_solve_factored!(Y, C, X, ws, trans='N')
+
+Solve a system using an already-factorized matrix `C`, writing the result to
+`Y`. `X` is copied first because LAPACK overwrites the right-hand side.
+"""
 function dense_lapack_solve_factored!(
     Y::AbstractVecOrMat,
     C::AbstractMatrix,
@@ -73,11 +113,13 @@ function dense_lapack_solve_factored!(
     Y
 end
 
+"""Factor `C` and solve `C \\ X` into `Y` using reusable LAPACK workspaces."""
 function dense_lapack_linsolve!(Y::AbstractVecOrMat, C::AbstractMatrix, X::AbstractVecOrMat, ws::LUWs)
     dense_lapack_factor!(C, ws)
     dense_lapack_solve_factored!(Y, C, X, ws)
 end
 
+"""Overwrite `Q` with its reduced QR basis using reusable LAPACK workspaces."""
 function dense_lapack_qr!(Q::AbstractMatrix, ws::QRWs)
     LAPACK.geqrf!(ws, Q; resize=false)
     LAPACK.orgqr!(ws, Q)
