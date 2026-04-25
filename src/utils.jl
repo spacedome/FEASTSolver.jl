@@ -76,6 +76,34 @@ function beyn_svd_step!(Q₀::AbstractMatrix, Q₁::AbstractMatrix, A::AbstractM
     Λ .= F.values
 end
 
+function beyn_svd_step!(
+    Q₀::AbstractMatrix,
+    Q₁::AbstractMatrix,
+    A::AbstractMatrix,
+    B::AbstractMatrix,
+    X::AbstractMatrix{ComplexF64},
+    Λ::Array,
+    svd_ws::SVDsddWs,
+    eigen_ws::EigenWs,
+    Xq::AbstractMatrix,
+)
+    U, S, Vt = dense_lapack_svd!(Q₀, svd_ws, 'S')
+    mul!(A, adjoint(U), Q₁)
+    mul!(B, A, adjoint(Vt))
+    copyto!(A, B)
+    inv_scale_columns!(A, S)
+    dense_lapack_eigen!(Λ, Xq, A, eigen_ws)
+    mul!(X, U, Xq)
+    Λ
+end
+
+function add_weighted_columns!(Y::AbstractMatrix, X::AbstractMatrix, α)
+    @inbounds for j in axes(Y, 2), i in axes(Y, 1)
+        Y[i, j] += α * X[i, j]
+    end
+    Y
+end
+
 function beyn_qr_step!(Q₀::AbstractMatrix, Q₁::AbstractMatrix, X::AbstractMatrix, Λ::Array)
     qt, rt = qr!(Q₀)
     qt = Matrix(qt)
@@ -135,6 +163,18 @@ function maximum_masked(values::AbstractVector, mask::AbstractVector{Bool})
     max_value, found
 end
 
+function maximum_below_masked(values::AbstractVector, mask::AbstractVector{Bool}, threshold)
+    max_value = typemin(float(real(eltype(values))))
+    found = false
+    @inbounds for i in eachindex(values, mask)
+        if mask[i] && values[i] < threshold
+            max_value = found ? max(max_value, values[i]) : values[i]
+            found = true
+        end
+    end
+    max_value, found
+end
+
 function normalize_columns!(X::AbstractMatrix)
     @inbounds for j in axes(X, 2)
         α = inv(column_norm(X, j))
@@ -150,6 +190,36 @@ function update_R!(X::AbstractMatrix, R::AbstractMatrix, Λ::Array, T::Function)
     for j in axes(X, 2)
         R[:, j] .= T(Λ[j]) * X[:, j]
     end
+end
+
+function update_nonlinear_residuals!(
+    res::AbstractVector,
+    X::AbstractMatrix,
+    R::AbstractMatrix,
+    Λ::AbstractVector,
+    T::Function,
+    Tλ::AbstractMatrix,
+    x::AbstractVector,
+    y::AbstractVector,
+)
+    @inbounds for j in axes(X, 2)
+        xnorm = zero(real(eltype(X)))
+        for i in axes(X, 1)
+            xnorm += abs2(X[i, j])
+        end
+        inv_xnorm = inv(sqrt(xnorm))
+        for i in axes(X, 1)
+            x[i] = X[i, j] * inv_xnorm
+            X[i, j] = x[i]
+        end
+        copyto!(Tλ, T(Λ[j]))
+        mul!(y, Tλ, x)
+        for i in axes(R, 1)
+            R[i, j] = y[i]
+        end
+        res[j] = norm(y) / norm(Tλ)
+    end
+    res
 end
 
 function update_R!(X::AbstractMatrix, R::AbstractMatrix, Λ::Array, A::AbstractMatrix)

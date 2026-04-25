@@ -161,7 +161,7 @@ function dense_lapack_generalized_eigen!(
     Λ, Xl, Xr
 end
 
-dense_lapack_svd!(A::AbstractMatrix, ws::SVDsddWs) = LAPACK.gesdd!(ws, 'A', A; resize=false)
+dense_lapack_svd!(A::AbstractMatrix, ws::SVDsddWs, job::Char='A') = LAPACK.gesdd!(ws, job, A; resize=false)
 
 function scale_columns!(A::AbstractMatrix, scales::AbstractVector, weight=one(eltype(A)))
     @inbounds for j in axes(A, 2)

@@ -9,9 +9,13 @@ default:
 smoke:
     {{julia}} --project=. --startup-file=no -e 'using FEASTSolver; println("FEASTSolver loaded")'
 
-# Run the package test harness.
-test:
-    {{julia}} --project=. --startup-file=no -e 'using Pkg; Pkg.test()'
+# Run the package test harness. Optionally pass a regex matching testset names.
+test filter='':
+    {{julia}} --project=. --startup-file=no -e 'using Pkg; filter = ARGS[1]; Pkg.test(test_args=isempty(filter) ? String[] : [filter])' {{quote(filter)}}
+
+# Run the package test harness including test items tagged as slow.
+test-slow filter='':
+    FEAST_TEST_SLOW=1 {{julia}} --project=. --startup-file=no -e 'using Pkg; filter = ARGS[1]; Pkg.test(test_args=isempty(filter) ? String[] : [filter])' {{quote(filter)}}
 
 # Run a simple dense FEAST contour-parallel scaling benchmark.
 bench-parallel:
@@ -42,7 +46,9 @@ notes:
       'Use nix develop for Julia work.' \
       'The shell sets JULIA_PROJECT=@. and uses ./.julia as the first depot.' \
       'Run just smoke, just test, and just docs for the normal local loop.' \
-      'test/runtests.jl is the only automated test entrypoint right now.' \
+      'Run just test REGEX to run only matching TestItems through Pkg.test(test_args=...).' \
+      'Run just test-slow to include TestItems tagged :slow.' \
+      'test/runtests.jl is the automated TestItemRunner entrypoint.' \
       'just test uses Pkg.test(); test-only dependencies live in Project.toml extras/targets.' \
       'Historical research scripts live under experiments/legacy_tests/ until curated.' \
       'Julia 1.10-1.12 compat should eventually be checked in CI, not by expanding this dev shell.' \

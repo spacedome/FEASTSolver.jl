@@ -41,6 +41,7 @@
 
 - [ ] There is now a BLAS interface that will allow us to do iterative eigenvalue problems without re-allocating. Being able to fully pre-allocate is a large performance concern here.
   - <https://github.com/DynareJulia/FastLapackInterface.jl>
+  - Nonlinear FEAST allocation note: `nlfeast!` now reuses LAPACK workspaces, but the function-valued nonlinear operator API still allocates because users pass `T(z)` and dense shifted/factored matrices must be materialized. Consider an optional expert hook `T!(M, z)` later, with `T(z)` remaining the canonical mathematical interface and `T!` only used when supplied. This is especially relevant for user-defined dense nonlinear problems; `NonlinearEigenproblems.jl` generally exposes allocating full-matrix `compute_Mder(nep, λ)` plus matrix-vector-style `compute_Mlincomb`/`compute_MM`, not a universal `compute_Mder!(M, nep, λ)` convention we can rely on.
 
 - [ ] Revisit parallelism
   - We have BLAS level parallelism, but once we solve the above we need to investigate how we can parallelize at the contour level. Each node of the quadrature is essentially a separate problem. The difficulty is in managing memory across iterations; we must save LU factorizations for example in the variant where this is feasible to save.

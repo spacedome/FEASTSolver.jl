@@ -17,23 +17,41 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
 
     N, m₀ = size(X)
     Λ, res = zeros(ComplexF64, m₀), Array{Float64}(undef, m₀)
+    resolvent = zeros(ComplexF64, m₀)
+    inside = falses(m₀)
     θ = LinRange(π / nodes, 2 * π - π / nodes, nodes)
-    Q₀, Q₁, R = similar(X, ComplexF64), similar(X, ComplexF64), similar(X, ComplexF64)
-    A, B = zeros(ComplexF64, m₀, m₀), zeros(ComplexF64, m₀, m₀)
+    contour_nodes = ComplexF64[(r * exp(θ[i] * im) + c) for i in 1:nodes]
+    contour_weights = ComplexF64[(r * exp(θ[i] * im) / nodes) for i in 1:nodes]
+    Q₀, Q₁, R, Tinv = similar(X, ComplexF64), similar(X, ComplexF64), similar(X, ComplexF64), similar(X, ComplexF64)
+    A, B, Xq = zeros(ComplexF64, m₀, m₀), zeros(ComplexF64, m₀, m₀), zeros(ComplexF64, m₀, m₀)
+    T_prototype = T(contour_nodes[1])
+    residual_matrix = T_prototype isa StridedMatrix ? similar(T_prototype) : nothing
+    residual_x, residual_y = zeros(ComplexF64, N), zeros(ComplexF64, N)
 
-    qt, rt = qr!(X)
-    X .= Matrix(qt)
-
-    l = ReentrantLock()
+    qr_ws = X isa StridedMatrix ? QRWs(X) : nothing
+    if qr_ws === nothing
+        qt, rt = qr!(X)
+        X .= Matrix(qt)
+    else
+        dense_lapack_qr!(X, qr_ws)
+    end
+    svd_ws = Q₀ isa StridedMatrix ? SVDsddWs(Q₀, job='S') : nothing
+    eigen_ws = EigenWs(A, rvecs=true)
+    lapack_lu_ws = nothing
+    Tz = nothing
+    if !store && factorizer === lu && left_divider === ldiv! && X isa StridedMatrix
+        if T_prototype isa StridedMatrix && eltype(T_prototype) <: DenseLapackScalar
+            Tz = similar(T_prototype)
+            lapack_lu_ws = dense_lapack_lu_workspace(Tz)
+        end
+    end
 
     if store
-        facts = Array{Factorization}(undef, nodes)
-        Threads.@threads for i = 1:nodes
-            z = (r * exp(θ[i] * im) + c)
-            tempfact = factorizer(T(z))
-            lock(l) do
-                facts[i] = tempfact
-            end
+        facts1 = factorizer(T(contour_nodes[1]))
+        facts = Array{typeof(facts1)}(undef, nodes)
+        facts[1] = facts1
+        for i = 2:nodes
+            facts[i] = factorizer(T(contour_nodes[i]))
             if debug print("*") end
         end
         if debug println() end
@@ -48,46 +66,56 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
 
         Q₀ .= 0
         Q₁ .= 0
-        # l = ReentrantLock()
 
         start_ns = time_ns()
-        Threads.@threads for i = 1:nodes
-            z = (r * exp(θ[i] * im) + c)
-            Tinv = similar(X, ComplexF64)
+        for i = 1:nodes
+            z = contour_nodes[i]
             if nit == 0
                 if store
                     left_divider(Tinv, facts[i], X)
-                    Tinv .*= (r * exp(θ[i] * im) / nodes)
+                elseif lapack_lu_ws !== nothing
+                    copyto!(Tz, T(z))
+                    dense_lapack_linsolve!(Tinv, Tz, X, lapack_lu_ws)
                 else
-                    Tinv .= (T(z) \ X) .* (r * exp(θ[i] * im) / nodes)
+                    Tinv .= T(z) \ X
                 end
+                rmul!(Tinv, contour_weights[i])
             else
-                resolvent = (1 ./ (z .- Λ)) .* (r * exp(θ[i] * im) / nodes)
+                fill_resolvent!(resolvent, z, Λ)
                 if store
                     left_divider(Tinv, facts[i], R)
-                    Tinv .= X - Tinv
+                elseif lapack_lu_ws !== nothing
+                    copyto!(Tz, T(z))
+                    dense_lapack_linsolve!(Tinv, Tz, R, lapack_lu_ws)
                 else
-                    Tinv .= (X - T(z) \ R)
+                    Tinv .= T(z) \ R
                 end
-                rmul!(Tinv,  Diagonal(resolvent))
+                Tinv .= X .- Tinv
+                scale_columns!(Tinv, resolvent, contour_weights[i])
             end
-            lock(l) do
-                Q₀ .+= Tinv
-                Q₁ .+= Tinv .* z
-            end
-    		if debug print(".") end
+            Q₀ .+= Tinv
+            add_weighted_columns!(Q₁, Tinv, z)
+            if debug print(".") end
         end
         filter_ns = time_ns() - start_ns
-		if debug println() end
+        if debug println() end
 
         start_ns = time_ns()
-		beyn_svd_step!(Q₀, Q₁, A, B, X, Λ)
+        if svd_ws === nothing
+            beyn_svd_step!(Q₀, Q₁, A, B, X, Λ)
+        else
+            beyn_svd_step!(Q₀, Q₁, A, B, X, Λ, svd_ws, eigen_ws, Xq)
+        end
         rayleigh_ritz_ns = time_ns() - start_ns
 
         start_ns = time_ns()
-        update_R!(X, R, Λ, T)
-        res .= residuals(R, Λ, T)
-        inside = in_contour.(Λ, c, r)
+        if residual_matrix === nothing
+            update_R!(X, R, Λ, T)
+            residuals!(res, R, Λ, T)
+        else
+            update_nonlinear_residuals!(res, X, R, Λ, T, residual_matrix, residual_x, residual_y)
+        end
+        in_contour!(inside, Λ, c, r)
         max_res_inside, contour_nonempty = maximum_masked(res, inside)
         residual_ns = time_ns() - start_ns
 
@@ -95,9 +123,9 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
             iter_debug_print(nit, Λ, res, c, r, spurious)
         end
 
-        res_inside = res[inside]
         converged = contour_nonempty && max_res_inside < ϵ
-        spurious_converged = nit > 1 && sum(res_inside .< spurious) > 0 && maximum(res_inside[res_inside .< spurious]) < ϵ
+        max_spurious_res_inside, spurious_found = maximum_below_masked(res, inside, spurious)
+        spurious_converged = nit > 1 && spurious_found && max_spurious_res_inside < ϵ
         _record_dense_feast_iteration!(
             stats,
             :nonlinear,

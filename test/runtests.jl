@@ -1,40 +1,76 @@
-using FEASTSolver
-using Test
-using Distributed
-using LinearAlgebra
-using MatrixDepot
-using Random
-using SparseArrays
+using TestItemRunner
 
-sort_spectrum(λ) = sort(collect(λ), by=z -> (real(z), imag(z)))
+const TEST_FILTER = isempty(ARGS) ? nothing : Regex(ARGS[1])
+const RUN_SLOW_TESTS = get(ENV, "FEAST_TEST_SLOW", "0") == "1"
+const TEST_ROOT = normpath(@__DIR__)
 
-function initial_subspace(n, m, seed)
-    rand(MersenneTwister(seed), ComplexF64, n, m)
+function testitem_filter(ti)
+    startswith(normpath(ti.filename), TEST_ROOT) || return false
+    name_ok = TEST_FILTER === nothing || occursin(TEST_FILTER, ti.name)
+    slow_ok = RUN_SLOW_TESTS || TEST_FILTER !== nothing || !(:slow in ti.tags)
+    name_ok && slow_ok
 end
 
-function assert_eigenvalues_found(actual, expected; atol)
-    @test length(actual) == length(expected)
-    if !isempty(actual) && !isempty(expected)
-        @test maximum(abs.(sort_spectrum(actual) .- sort_spectrum(expected))) <= atol
+@testmodule FEASTTestSetup begin
+    using FEASTSolver
+    using Test
+    using Distributed
+    using LinearAlgebra
+    using Random
+    using SparseArrays
+
+    sort_spectrum(λ) = sort(collect(λ), by=z -> (real(z), imag(z)))
+
+    function initial_subspace(n, m, seed)
+        rand(MersenneTwister(seed), ComplexF64, n, m)
+    end
+
+    function assert_eigenvalues_found(actual, expected; atol)
+        @test length(actual) == length(expected)
+        if !isempty(actual) && !isempty(expected)
+            @test maximum(abs.(sort_spectrum(actual) .- sort_spectrum(expected))) <= atol
+        end
+    end
+
+    function assert_converged(residuals; atol)
+        @test !isempty(residuals)
+        @test maximum(residuals) <= atol
+    end
+
+    function butterfly_polynomial_matrices()
+        N = diagm(-1 => ones(7))
+        Mh0 = (4I + N + N') / 6
+        Mh1 = N - N'
+        Mh2 = -(2I - N - N')
+        Mh3 = Mh1
+        Mh4 = -Mh2
+        c = [0.6 1.3; 1.3 0.1; 0.1 1.2; 1.0 1.0; 1.2 1.0]
+        I8 = Matrix(I, 8, 8)
+        [
+            c[1, 1] * kron(I8, Mh0) + c[1, 2] * kron(Mh0, I8),
+            c[2, 1] * kron(I8, Mh1) + c[2, 2] * kron(Mh1, I8),
+            c[3, 1] * kron(I8, Mh2) + c[3, 2] * kron(Mh2, I8),
+            c[4, 1] * kron(I8, Mh3) + c[4, 2] * kron(Mh3, I8),
+            c[5, 1] * kron(I8, Mh4) + c[5, 2] * kron(Mh4, I8),
+        ]
+    end
+
+    external_workers() = filter(!=(myid()), workers())
+
+    function ensure_workers(count)
+        ids = external_workers()
+        if length(ids) >= count
+            return Int[]
+        end
+        addprocs(count - length(ids); exeflags="--project=$(Base.active_project())")
     end
 end
 
-function assert_converged(residuals; atol)
-    @test !isempty(residuals)
-    @test maximum(residuals) <= atol
-end
+@testitem "standard dense FEAST finds requested eigenvalues" setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using LinearAlgebra
+    using .FEASTTestSetup: initial_subspace, assert_eigenvalues_found, assert_converged
 
-external_workers() = filter(!=(myid()), workers())
-
-function ensure_workers(count)
-    ids = external_workers()
-    if length(ids) >= count
-        return Int[]
-    end
-    addprocs(count - length(ids); exeflags="--project=$(Base.active_project())")
-end
-
-@testset "standard dense FEAST finds requested eigenvalues" begin
     A = Matrix(Diagonal(1.0:12.0))
     expected = complex.(1.0:4.0)
     stats = DenseFeastStats()
@@ -58,7 +94,12 @@ end
     @test stats.iteration_log[end].eigenvalues_inside == length(expected)
 end
 
-@testset "distributed dense FEAST finds requested eigenvalues" begin
+@testitem "distributed dense FEAST finds requested eigenvalues" tags=[:distributed] setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using Distributed
+    using LinearAlgebra
+    using .FEASTTestSetup: initial_subspace, assert_eigenvalues_found, assert_converged, ensure_workers, external_workers
+
     added = ensure_workers(2)
     try
         A = Matrix(Diagonal(1.0:12.0))
@@ -130,7 +171,11 @@ end
     end
 end
 
-@testset "generalized FEAST variants find requested eigenvalues" begin
+@testitem "generalized FEAST variants find requested eigenvalues" setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using LinearAlgebra
+    using .FEASTTestSetup: initial_subspace, assert_eigenvalues_found, assert_converged
+
     A = Matrix(Diagonal(1.0:12.0))
     B = Matrix(Diagonal(2.0 .+ (1.0:12.0) ./ 10.0))
     exact = diag(A) ./ diag(B)
@@ -174,7 +219,12 @@ end
     @test dual_stats.iteration_log[end].variant == :dual_generalized
 end
 
-@testset "distributed generalized FEAST variants find requested eigenvalues" begin
+@testitem "distributed generalized FEAST variants find requested eigenvalues" tags=[:distributed] setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using Distributed
+    using LinearAlgebra
+    using .FEASTTestSetup: initial_subspace, assert_eigenvalues_found, assert_converged, ensure_workers, external_workers
+
     added = ensure_workers(2)
     try
         A = Matrix(Diagonal(1.0:12.0))
@@ -242,7 +292,11 @@ end
     end
 end
 
-@testset "generalized FEAST accepts identity operator" begin
+@testitem "generalized FEAST accepts identity operator" setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using LinearAlgebra
+    using .FEASTTestSetup: initial_subspace, assert_eigenvalues_found, assert_converged
+
     A = Matrix(Diagonal(1.0:8.0))
     expected = complex.(1.0:3.0)
 
@@ -276,7 +330,11 @@ end
     assert_converged(res; atol=1e-10)
 end
 
-@testset "contour variants find sparse Laplacian eigenvalues" begin
+@testitem "contour variants find sparse Laplacian eigenvalues" setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using SparseArrays
+    using .FEASTTestSetup: initial_subspace, assert_eigenvalues_found, assert_converged
+
     n = 32
     A = spdiagm(-1 => fill(-1.0, n - 1), 0 => fill(2.0, n), 1 => fill(-1.0, n - 1))
     expected = complex.([2 - 2cos(k * pi / (n + 1)) for k in 1:4])
@@ -301,7 +359,11 @@ end
     end
 end
 
-@testset "nonlinear FEAST handles a linear pencil" begin
+@testitem "nonlinear FEAST handles a linear pencil" setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using LinearAlgebra
+    using .FEASTTestSetup: initial_subspace, assert_eigenvalues_found, assert_converged
+
     n = 12
     A = Matrix(Diagonal(1.0:n))
     T(z) = z * Matrix{Float64}(I, n, n) - A
@@ -327,7 +389,109 @@ end
     @test stats.iteration_log[end].variant == :nonlinear
 end
 
-@testset "dual generalized FEAST handles a small non-normal problem" begin
+@testitem "nonlinear FEAST handles a quadratic matrix polynomial" setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using LinearAlgebra
+    using .FEASTTestSetup: initial_subspace, assert_eigenvalues_found, assert_converged
+
+    roots1 = ComplexF64[
+        0.6 + 0.05im,
+        0.75,
+        0.9 - 0.03im,
+        2.0,
+        2.3 + 0.1im,
+        2.6 - 0.1im,
+    ]
+    roots2 = ComplexF64[-1.0, -1.2 + 0.2im, -1.4 - 0.1im, 3.0, 3.2, 3.4]
+    D1 = Diagonal(roots1 .+ roots2)
+    D0 = Diagonal(roots1 .* roots2)
+    V = Matrix{ComplexF64}(I, length(roots1), length(roots1))
+    V[1, 2] = 0.4
+    V[2, 3] = -0.2im
+    Vinv = inv(V)
+    T(z) = V * (z^2 * I - z * D1 + D0) * Vinv
+    c, r = 0.75 + 0.0im, 0.25
+    expected = roots1[in_contour(roots1, c, r)]
+
+    for (seed, store) in ((777, true), (778, false))
+        λ, _, res = nlfeast!(
+            T,
+            initial_subspace(length(roots1), length(expected) + 1, seed),
+            16,
+            20;
+            c=c,
+            r=r,
+            ϵ=1e-10,
+            store=store,
+        )
+
+        inside = in_contour(λ, c, r)
+        assert_eigenvalues_found(λ[inside], expected; atol=1e-9)
+        assert_converged(res[inside]; atol=1e-9)
+    end
+end
+
+@testitem "nonlinear FEAST handles butterfly polynomial" setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using .FEASTTestSetup: initial_subspace, assert_eigenvalues_found, assert_converged, butterfly_polynomial_matrices
+
+    A = butterfly_polynomial_matrices()
+    T(z) = z^4 * A[5] + z^3 * A[4] + z^2 * A[3] + z * A[2] + A[1]
+    c, r = 1.0 + 1.0im, 0.5
+    reference, _, reference_res = companion(A)
+    expected = reference[in_contour(reference, c, r) .& (reference_res .< 1e-8)]
+
+    λ, _, res = nlfeast!(
+        T,
+        initial_subspace(size(A[1], 1), length(expected) + 4, 901),
+        64,
+        3;
+        c=c,
+        r=r,
+        ϵ=1e-8,
+        store=true,
+        spurious=5e-3,
+    )
+
+    inside = in_contour(λ, c, r)
+    assert_eigenvalues_found(λ[inside], expected; atol=1e-8)
+    assert_converged(res[inside]; atol=1e-8)
+end
+
+@testitem "nonlinear FEAST handles gun cavity problem" tags=[:slow, :nep] setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using NonlinearEigenproblems: nep_gallery, compute_Mder
+    using .FEASTTestSetup: initial_subspace, assert_converged
+
+    nep = nep_gallery("nlevp_native_gun")
+    T(z) = compute_Mder(nep, z)
+    c, r = 140000.0 + 0.0im, 30000.0
+
+    λ, _, res = nlfeast!(
+        T,
+        initial_subspace(size(nep, 1), 32, 9901),
+        8,
+        3;
+        c=c,
+        r=r,
+        ϵ=1e-8,
+        store=false,
+        spurious=1e-5,
+    )
+
+    inside = in_contour(λ, c, r)
+    residuals_inside = res[inside]
+    @test count(inside) >= 16
+    @test count(residuals_inside .< 1e-6) >= 16
+    assert_converged(residuals_inside; atol=1e-4)
+end
+
+@testitem "dual generalized FEAST handles a small non-normal problem" setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using LinearAlgebra
+    using MatrixDepot
+    using .FEASTTestSetup: initial_subspace, assert_eigenvalues_found, assert_converged
+
     n = 20
     A = matrixdepot("grcar", n)
     B = Matrix{Float64}(I, n, n)
@@ -351,7 +515,12 @@ end
     assert_converged(res; atol=1e-6)
 end
 
-@testset "MatrixDepot Poisson problem" begin
+@testitem "MatrixDepot Poisson problem" setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using LinearAlgebra
+    using MatrixDepot
+    using .FEASTTestSetup: initial_subspace, assert_eigenvalues_found, assert_converged
+
     A = Matrix(matrixdepot("poisson", 5))
     exact = eigvals(A)
     c, r = 1.3, 0.25
@@ -370,3 +539,5 @@ end
     assert_eigenvalues_found(λ, expected; atol=1e-9)
     assert_converged(res; atol=1e-9)
 end
+
+@run_package_tests filter=testitem_filter verbose=true
