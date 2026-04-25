@@ -197,8 +197,8 @@ function dual_gen_feast!(Xr::AbstractMatrix, Xl::AbstractMatrix, A::AbstractMatr
 
     for nit=0:iter
         S = svd!(Ql'*B*Qr)
-        Qr .= Qr*S.V*Diagonal(1.0/S.S)
-        Ql .= Ql*S.U*Diagonal(1.0/S.S)
+        Qr .= Qr*S.V*Diagonal(1.0 ./ S.S)
+        Ql .= Ql*S.U*Diagonal(1.0 ./ S.S)
         mul!(Rr, A, Qr) ## why does this one allocate?
         mul!(Aq, Ql', Rr) ### Aq = Q' * A * Q
         mul!(Rr, B, Qr)
@@ -255,4 +255,3 @@ function dual_gen_feast!(Xr::AbstractMatrix, Xl::AbstractMatrix, A::AbstractMatr
     if !contour_nonempty println("no eigenvalues found in contour!") end
     Λ[in_contour(Λ, contour)], Xr[:,in_contour(Λ, contour)], Xl[:,in_contour(Λ, contour)], resr[in_contour(Λ, contour)]
 end
-
