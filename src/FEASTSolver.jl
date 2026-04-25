@@ -2,12 +2,14 @@ __precompile__(true)
 
 module FEASTSolver
 
-using LinearAlgebra: ldiv!, lu!, tr, dot, LU, Factorization, mul!, qr!, rmul!, lmul!, ldiv!, eigen!, svd!, norm, Diagonal, I, diagm
+using LinearAlgebra: LAPACK, UniformScaling, ldiv!, lu!, tr, dot, LU, Factorization, mul!, qr!, rmul!, lmul!, ldiv!, eigen!, svd!, norm, Diagonal, I, diagm
 using IterativeSolvers: bicgstabl
 using SparseArrays: similar, AbstractSparseMatrix, sprandn, sprand
 using IterativeSolvers: gmres!, bicgstabl!, gmres, bicgstabl
 using FastGaussQuadrature: gausslegendre
+using FastLapackInterface: EigenWs, GeneralizedEigenWs, LUWs, QRWs, SVDsddWs
 using Distributed: @distributed
+using Random: rand, randn
 using SharedArrays: SharedArray
 
 import Base: length
@@ -21,6 +23,7 @@ export contour_estimate_eig
 
 include("contour.jl")
 include("lapack.jl")
+include("fastlapack.jl")
 include("utils.jl")
 include("beyn.jl")
 include("companion.jl")

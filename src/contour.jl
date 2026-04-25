@@ -1,24 +1,25 @@
 abstract type Contour end
 
-struct CircularContour <: Contour
-    c::Number    # center
-    r::Real      # radius
-    nodes::AbstractArray
-    weights::AbstractArray
+struct CircularContour{C<:Number,R<:Real,N<:AbstractArray,W<:AbstractArray} <: Contour
+    c::C    # center
+    r::R    # radius
+    nodes::N
+    weights::W
 end
 
-struct RectangularContour <: Contour
-    bottom_left::Complex    # first corner
-    top_right::Complex      # second corner
-    nodes::AbstractArray
-    weights::AbstractArray
-    RectangularContour(bl,tr, n, w) = (real(bl) < real(tr) && imag(bl) < imag(tr)) ? new(bl,tr, n, w) : error("Invalid corners")
+struct RectangularContour{B<:Number,T<:Number,N<:AbstractArray,W<:AbstractArray} <: Contour
+    bottom_left::B    # first corner
+    top_right::T      # second corner
+    nodes::N
+    weights::W
+    RectangularContour(bl::B, tr::T, n::N, w::W) where {B<:Number,T<:Number,N<:AbstractArray,W<:AbstractArray} =
+        (real(bl) < real(tr) && imag(bl) < imag(tr)) ? new{B,T,N,W}(bl, tr, n, w) : error("Invalid corners")
 end
 
 ### TODO - need in_contour method for CustomContour
-struct CustomContour <: Contour
-    nodes::AbstractArray
-    weights::AbstractArray
+struct CustomContour{N<:AbstractArray,W<:AbstractArray} <: Contour
+    nodes::N
+    weights::W
 end
 
 length(contour::Contour) = 1
@@ -94,9 +95,29 @@ function in_contour(λ, contour::CircularContour)
     abs.(λ .- contour.c) .<= contour.r
 end
 
+function in_contour!(inside::AbstractVector{Bool}, λ::AbstractVector, c::Number, r::Real)
+    @inbounds for i in eachindex(λ)
+        inside[i] = abs(λ[i] - c) <= r
+    end
+    inside
+end
+
+function in_contour!(inside::AbstractVector{Bool}, λ::AbstractVector, contour::CircularContour)
+    in_contour!(inside, λ, contour.c, contour.r)
+end
+
 # takes single complex number or an array
 function in_contour(λ, contour::RectangularContour)
     (real.(contour.bottom_left) .< real.(λ) .< real.(contour.top_right)) .& (imag.(contour.bottom_left) .< imag.(λ) .< imag.(contour.top_right))
+end
+
+function in_contour!(inside::AbstractVector{Bool}, λ::AbstractVector, contour::RectangularContour)
+    @inbounds for i in eachindex(λ)
+        inside[i] =
+            real(contour.bottom_left) < real(λ[i]) < real(contour.top_right) &&
+            imag(contour.bottom_left) < imag(λ[i]) < imag(contour.top_right)
+    end
+    inside
 end
 
 function rational_func(z, contour)

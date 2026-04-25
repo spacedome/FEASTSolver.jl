@@ -2,7 +2,7 @@
 
 julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "006a639367b72b87de65b44ad6cfe1813f13d632"
+project_hash = "8e2f2b8d0ada3d152548e53a62765e772a73acf3"
 
 [[deps.ArnoldiMethod]]
 deps = ["LinearAlgebra", "Random", "StaticArrays"]
@@ -45,7 +45,7 @@ uuid = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
 version = "0.9.5"
 
 [[deps.FEASTSolver]]
-deps = ["Distributed", "FastGaussQuadrature", "IterativeSolvers", "LinearAlgebra", "MatrixMarket", "NonlinearEigenproblems", "SharedArrays", "SparseArrays"]
+deps = ["Distributed", "FastGaussQuadrature", "FastLapackInterface", "IterativeSolvers", "LinearAlgebra", "MatrixMarket", "NonlinearEigenproblems", "Random", "SharedArrays", "SparseArrays"]
 path = "."
 uuid = "65ce2ba6-bba3-11e9-165b-677ad58e09bb"
 version = "0.1.0"
@@ -55,6 +55,12 @@ deps = ["LinearAlgebra", "SpecialFunctions", "StaticArrays"]
 git-tree-sha1 = "0044e9f5e49a57e88205e8f30ab73928b05fe5b6"
 uuid = "442a2c76-b920-505d-bb47-c5924d526838"
 version = "1.1.0"
+
+[[deps.FastLapackInterface]]
+deps = ["LinearAlgebra"]
+git-tree-sha1 = "438747a277cff4b11f93358d8376eeec8db0fed2"
+uuid = "29a986be-02c6-4525-aec4-84b980013641"
+version = "2.1.1"
 
 [[deps.InteractiveUtils]]
 deps = ["Markdown"]

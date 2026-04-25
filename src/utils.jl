@@ -101,18 +101,146 @@ function beyn_rr_step2!(Q₀::AbstractMatrix, Q₁::AbstractMatrix, A::AbstractM
 end
 
 
+function column_norm(A::AbstractMatrix, j::Integer)
+    s = zero(real(eltype(A)))
+    @inbounds for i in axes(A, 1)
+        s += abs2(A[i, j])
+    end
+    sqrt(s)
+end
+
+function fill_resolvent!(resolvent::AbstractVector, z, Λ::AbstractVector)
+    @inbounds for j in eachindex(Λ)
+        resolvent[j] = inv(z - Λ[j])
+    end
+    resolvent
+end
+
+function fill_adjoint_resolvent!(resolvent::AbstractVector, z, Λ::AbstractVector)
+    @inbounds for j in eachindex(Λ)
+        resolvent[j] = inv(conj(z - Λ[j]))
+    end
+    resolvent
+end
+
+function maximum_masked(values::AbstractVector, mask::AbstractVector{Bool})
+    max_value = typemin(float(real(eltype(values))))
+    found = false
+    @inbounds for i in eachindex(values, mask)
+        if mask[i]
+            max_value = found ? max(max_value, values[i]) : values[i]
+            found = true
+        end
+    end
+    max_value, found
+end
+
+function normalize_columns!(X::AbstractMatrix)
+    @inbounds for j in axes(X, 2)
+        α = inv(column_norm(X, j))
+        for i in axes(X, 1)
+            X[i, j] *= α
+        end
+    end
+    X
+end
+
 function update_R!(X::AbstractMatrix, R::AbstractMatrix, Λ::Array, T::Function)
-    for i=1:size(X, 2)
-        X[:,i] ./= norm(X[:,i])
-        R[:,i] .= T(Λ[i]) * X[:,i]
+    normalize_columns!(X)
+    for j in axes(X, 2)
+        R[:, j] .= T(Λ[j]) * X[:, j]
     end
 end
 
-function update_R!(X::AbstractMatrix, R::AbstractMatrix, Λ::Array, A::AbstractMatrix, B=I)
+function update_R!(X::AbstractMatrix, R::AbstractMatrix, Λ::Array, A::AbstractMatrix)
+    normalize_columns!(X)
+    mul!(R, A, X)
+    @inbounds for j in axes(X, 2)
+        λ = Λ[j]
+        for i in axes(X, 1)
+            R[i, j] -= λ * X[i, j]
+        end
+    end
+    R
+end
+
+function update_R!(X::AbstractMatrix, R::AbstractMatrix, Λ::Array, A::AbstractMatrix, B::UniformScaling)
+    normalize_columns!(X)
+    mul!(R, A, X)
+    @inbounds for j in axes(X, 2)
+        λ = Λ[j] * B.λ
+        for i in axes(X, 1)
+            R[i, j] -= λ * X[i, j]
+        end
+    end
+    R
+end
+
+function update_R!(
+    X::AbstractMatrix,
+    R::AbstractMatrix,
+    Λ::Array,
+    A::AbstractMatrix,
+    B::UniformScaling,
+    BX::AbstractMatrix,
+)
+    update_R!(X, R, Λ, A, B)
+end
+
+function update_R!(X::AbstractMatrix, R::AbstractMatrix, Λ::Array, A::AbstractMatrix, B::AbstractMatrix, BX::AbstractMatrix)
+    normalize_columns!(X)
+    mul!(R, A, X)
+    mul!(BX, B, X)
+    @inbounds for j in axes(X, 2)
+        λ = Λ[j]
+        for i in axes(X, 1)
+            R[i, j] -= λ * BX[i, j]
+        end
+    end
+    R
+end
+
+function update_R_allocating!(X::AbstractMatrix, R::AbstractMatrix, Λ::Array, A::AbstractMatrix, B)
     for i=1:size(X, 2)
         X[:,i] ./= norm(X[:,i])
         R[:,i] .= (A - Λ[i]*B) * X[:,i]
     end
+    R
+end
+
+function update_R_shifted!(
+    X::AbstractMatrix,
+    R::AbstractMatrix,
+    Λ::Array,
+    A::AbstractMatrix,
+    B,
+    C::AbstractMatrix,
+    x::AbstractVector,
+    y::AbstractVector,
+)
+    for j in axes(X, 2)
+        copyto!(x, view(X, :, j))
+        x ./= norm(x)
+        X[:, j] .= x
+        materialize_generalized_shift!(C, A, B, Λ[j])
+        mul!(y, C, x)
+        R[:, j] .= y
+    end
+    R
+end
+
+function update_R!(X::AbstractMatrix, R::AbstractMatrix, Λ::Array, A::AbstractMatrix, B::AbstractMatrix)
+    normalize_columns!(X)
+    mul!(R, A, X)
+    @inbounds for j in axes(X, 2)
+        xj = view(X, :, j)
+        bxj = B * xj
+        λ = Λ[j]
+        for i in axes(X, 1)
+            R[i, j] -= λ * bxj[i]
+        end
+    end
+    R
 end
 
 function update_R_moments!(X::AbstractMatrix, R::AbstractMatrix, Λ::Array, res::Array, T::Function, c, r)
@@ -142,10 +270,7 @@ function update_R_moments_all!(X::AbstractMatrix, R::AbstractMatrix, Λ::Array, 
 end
 
 function normalize!(X::AbstractVecOrMat)
-    for i=1:size(X, 2)
-        X[:,i] ./= norm(X[:,i])
-    end
-	X
+    normalize_columns!(X)
 end
 
 function residuals(R::AbstractMatrix, Λ::Array, T::Function)
@@ -164,8 +289,8 @@ function residuals!(res::Array, R::AbstractMatrix, Λ::Array, T::Function)
 end
 
 function residuals!(res::Array, R::AbstractMatrix, Λ::Array, A::AbstractMatrix)
-    for i=1:size(Λ, 1)
-        res[i] = norm(R[:,i])
+    for i in eachindex(Λ)
+        res[i] = column_norm(R, i)
     end
     res
 end

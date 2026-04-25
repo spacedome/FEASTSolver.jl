@@ -18,6 +18,25 @@
 
 - [ ] Evaluate which FEAST variants we want to support (probably most of them), we can look at `~/Code/feast_julia` for the FORTRAN reference implementation.
   - Iterative is important but not worth doing until we cover all the bases with dense variants.
+  - FORTRAN reference inventory from `~/Code/feast_julia`:
+    - Dense linear FEAST in `src/dense/dzfeast_dense.f90`: standard and generalized dense eigenproblems, with expert custom-contour variants. Families are real symmetric `SY`, complex Hermitian `HE`, real/complex general `GE`, and complex symmetric `SY`.
+    - Dense polynomial FEAST in `src/dense/dzfeast_pev_dense.f90`: polynomial eigenvalue problems `PEV` for the same symmetric/Hermitian/general families, again with expert custom-contour variants.
+    - Banded linear FEAST in `src/banded/dzfeast_banded.f90`: standard and generalized banded eigenproblems for real symmetric banded `SB`, complex Hermitian banded `HB`, real/complex general banded `GB`, and complex symmetric banded `SB`.
+    - Sparse direct FEAST in `src/sparse/dzfeast_sparse.f90`: standard and generalized CSR problems for real symmetric `SCSR`, complex Hermitian `HCSR`, real/complex general `GCSR`, and complex symmetric `SCSR`. These paths are built around direct sparse factorizations, historically MKL/PARDISO.
+    - Sparse iterative IFEAST in `src/sparse/dzifeast_sparse.f90`: same CSR problem families as sparse direct FEAST, but shifted systems are solved by iterative kernels such as BiCGSTAB/Arnoldi rather than direct factorization.
+    - Sparse polynomial FEAST in `src/sparse/dzfeast_pev_sparse.f90` and `src/sparse/dzifeast_pev_sparse.f90`: direct and iterative CSR polynomial eigenvalue variants, with several real/Hermitian wrappers reducing to complex general or complex symmetric kernels.
+    - Parallel sparse FEAST in `src/sparse/pdzfeast_sparse.f90`, `src/sparse/pdzifeast_sparse.f90`, `src/sparse/pdzfeast_pev_sparse.f90`, and `src/sparse/pdzifeast_pev_sparse.f90`: MPI-prefixed sparse direct, sparse iterative, and sparse polynomial variants.
+    - RCI kernels in `src/kernel/dzfeast.f90`: reverse-communication interfaces for real symmetric, complex Hermitian, real/complex general, complex symmetric, and polynomial kernels. These are the algorithmic core behind most wrappers.
+    - Contour utilities in `src/kernel/feast_tools.f90`: interval contours, general complex circular/elliptic contours, custom contour nodes/weights, and rational filter evaluation.
+    - Sparse search helpers in `src/sparse/dzfeast_sparse.f90`: stochastic interval search for real symmetric and complex Hermitian sparse standard/generalized problems.
+  - Proposed Julia support target:
+    - First-class: dense standard `feast!`, dense generalized `gen_feast!`, and dense non-Hermitian/generalized dual `dual_gen_feast!`, all with clean contour handling, stable tests, and low allocation per iteration.
+    - First-class nonlinear: keep `nlfeast!`/Beyn-style nonlinear variants in scope, but test and document them separately from linear dense FEAST.
+    - Near-term: make sparse matrices work through the same dense-facing API only where the shifted solve abstraction is clean; do not copy the FORTRAN CSR API shape into Julia unless performance forces it.
+    - Later: iterative FEAST/IFEAST, after dense and sparse-direct variants have shared workspace abstractions and meaningful convergence diagnostics.
+    - Later: contour-level parallelism using Julia mechanisms rather than MPI-first PFEAST compatibility.
+    - Defer by default: banded-specific APIs, unless a real benchmark shows band storage/factorization is worth the extra public surface.
+    - Defer/bind instead of rewrite: full upstream FEAST compatibility wrappers, MPI PFEAST, and the historical PARDISO-specific sparse interfaces belong with resurrected binary bindings, not the pure-Julia core.
 
 - [ ] There is now a BLAS interface that will allow us to do iterative eigenvalue problems without re-allocating. Being able to fully pre-allocate is a large performance concern here.
   - <https://github.com/DynareJulia/FastLapackInterface.jl>

@@ -12,4 +12,7 @@ Current automated coverage:
 - Generalized FEAST and dual generalized FEAST on a diagonal generalized problem with exact eigenvalues.
 - Circular and rectangular contour variants on a sparse Laplacian with exact eigenvalues.
 - Nonlinear FEAST on a linear pencil with exact eigenvalues.
-- Dual generalized FEAST on a small non-normal Grcar-style problem using dense eigenvalues as the reference and a looser residual tolerance.
+- Dual generalized FEAST on a small MatrixDepot Grcar problem using dense eigenvalues as the reference and a looser residual tolerance.
+- Standard FEAST on a small MatrixDepot Poisson problem using dense eigenvalues as the reference.
+
+MatrixDepot is kept as a test-only dependency in `Project.toml` under `[extras]` and `[targets]`. Use `just test`, which runs Julia's package test harness.
