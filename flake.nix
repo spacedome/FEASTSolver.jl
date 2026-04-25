@@ -34,6 +34,7 @@
             pkgs.git
             pkgs.gnumake
             pkgs.pkg-config
+            pkgs.just
             juliaLsp
           ] ++ runtimeLibs;
 
