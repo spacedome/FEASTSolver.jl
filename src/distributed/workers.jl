@@ -9,8 +9,7 @@ mutable struct DenseFeastDistributedWorkspace
     A
     X
     R
-    Qparts
-    part_index::Int
+    Qpart::Matrix{ComplexF64}
     node_indices::Vector{Int}
     nodes::Vector{ComplexF64}
     weights::Vector{ComplexF64}
@@ -28,8 +27,7 @@ mutable struct DenseGeneralizedFeastDistributedWorkspace
     B
     X
     R
-    Qparts
-    part_index::Int
+    Qpart::Matrix{ComplexF64}
     node_indices::Vector{Int}
     nodes::Vector{ComplexF64}
     weights::Vector{ComplexF64}
@@ -49,9 +47,8 @@ mutable struct DenseDualGeneralizedFeastDistributedWorkspace
     Xl
     Rr
     Rl
-    Qrparts
-    Qlparts
-    part_index::Int
+    Qrpart::Matrix{ComplexF64}
+    Qlpart::Matrix{ComplexF64}
     node_indices::Vector{Int}
     nodes::Vector{ComplexF64}
     weights::Vector{ComplexF64}
@@ -66,7 +63,7 @@ end
 
 function _prepare_dense_feast_workers!(worker_ids)
     for pid in worker_ids
-        remotecall_wait(Main.eval, pid, :(using LinearAlgebra; using SharedArrays; using FEASTSolver))
+        remotecall_wait(Main.eval, pid, :(using LinearAlgebra; using FEASTSolver))
     end
     nothing
 end
@@ -80,10 +77,8 @@ function _init_dense_feast_workers!(plan::DenseDistributedFeastPlan)
             pid,
             plan.key,
             plan.A,
-            plan.X_shared,
-            plan.R_shared,
-            plan.Qparts,
-            part_index,
+            size(plan.X_buffer, 1),
+            size(plan.X_buffer, 2),
             plan.assignments[part_index],
             nodes,
             weights,
@@ -107,10 +102,8 @@ function _init_dense_gen_feast_workers!(plan::DenseDistributedGeneralizedFeastPl
             plan.key,
             plan.A,
             plan.B,
-            plan.X_shared,
-            plan.R_shared,
-            plan.Qparts,
-            part_index,
+            size(plan.X_buffer, 1),
+            size(plan.X_buffer, 2),
             plan.assignments[part_index],
             nodes,
             weights,
@@ -134,13 +127,8 @@ function _init_dense_dual_gen_feast_workers!(plan::DenseDistributedDualGeneraliz
             plan.key,
             plan.A,
             plan.B,
-            plan.Xr_shared,
-            plan.Xl_shared,
-            plan.Rr_shared,
-            plan.Rl_shared,
-            plan.Qrparts,
-            plan.Qlparts,
-            part_index,
+            size(plan.Xr_buffer, 1),
+            size(plan.Xr_buffer, 2),
             plan.assignments[part_index],
             nodes,
             weights,
@@ -157,10 +145,8 @@ end
 function _init_dense_feast_worker!(
     key::Symbol,
     A,
-    X,
-    R,
-    Qparts,
-    part_index::Int,
+    N::Int,
+    m₀::Int,
     node_indices::Vector{Int},
     nodes::Vector{ComplexF64},
     weights::Vector{ComplexF64},
@@ -170,7 +156,9 @@ function _init_dense_feast_worker!(
     old_blas_threads = BLAS.get_num_threads()
     BLAS.set_num_threads(worker_blas_threads)
 
-    N, m₀ = size(X)
+    X = zeros(ComplexF64, N, m₀)
+    R = zeros(ComplexF64, N, m₀)
+    Qpart = zeros(ComplexF64, N, m₀)
     ZmA = zeros(ComplexF64, size(A))
     temp = zeros(ComplexF64, N, m₀)
     resolvent = zeros(ComplexF64, m₀)
@@ -191,8 +179,7 @@ function _init_dense_feast_worker!(
         A,
         X,
         R,
-        Qparts,
-        part_index,
+        Qpart,
         node_indices,
         nodes,
         weights,
@@ -211,10 +198,8 @@ function _init_dense_gen_feast_worker!(
     key::Symbol,
     A,
     B,
-    X,
-    R,
-    Qparts,
-    part_index::Int,
+    N::Int,
+    m₀::Int,
     node_indices::Vector{Int},
     nodes::Vector{ComplexF64},
     weights::Vector{ComplexF64},
@@ -224,7 +209,9 @@ function _init_dense_gen_feast_worker!(
     old_blas_threads = BLAS.get_num_threads()
     BLAS.set_num_threads(worker_blas_threads)
 
-    N, m₀ = size(X)
+    X = zeros(ComplexF64, N, m₀)
+    R = zeros(ComplexF64, N, m₀)
+    Qpart = zeros(ComplexF64, N, m₀)
     ZmA = zeros(ComplexF64, size(A))
     temp = zeros(ComplexF64, N, m₀)
     resolvent = zeros(ComplexF64, m₀)
@@ -246,8 +233,7 @@ function _init_dense_gen_feast_worker!(
         B,
         X,
         R,
-        Qparts,
-        part_index,
+        Qpart,
         node_indices,
         nodes,
         weights,
@@ -266,13 +252,8 @@ function _init_dense_dual_gen_feast_worker!(
     key::Symbol,
     A,
     B,
-    Xr,
-    Xl,
-    Rr,
-    Rl,
-    Qrparts,
-    Qlparts,
-    part_index::Int,
+    N::Int,
+    m₀::Int,
     node_indices::Vector{Int},
     nodes::Vector{ComplexF64},
     weights::Vector{ComplexF64},
@@ -282,7 +263,12 @@ function _init_dense_dual_gen_feast_worker!(
     old_blas_threads = BLAS.get_num_threads()
     BLAS.set_num_threads(worker_blas_threads)
 
-    N, m₀ = size(Xr)
+    Xr = zeros(ComplexF64, N, m₀)
+    Xl = zeros(ComplexF64, N, m₀)
+    Rr = zeros(ComplexF64, N, m₀)
+    Rl = zeros(ComplexF64, N, m₀)
+    Qrpart = zeros(ComplexF64, N, m₀)
+    Qlpart = zeros(ComplexF64, N, m₀)
     ZmA = zeros(ComplexF64, size(A))
     temp = zeros(ComplexF64, N, m₀)
     resolvent = zeros(ComplexF64, m₀)
@@ -306,9 +292,8 @@ function _init_dense_dual_gen_feast_worker!(
         Xl,
         Rr,
         Rl,
-        Qrparts,
-        Qlparts,
-        part_index,
+        Qrpart,
+        Qlpart,
         node_indices,
         nodes,
         weights,
@@ -323,9 +308,11 @@ function _init_dense_dual_gen_feast_worker!(
     nothing
 end
 
-function _dense_feast_worker_step!(key::Symbol, Λ::Vector{ComplexF64})
+function _dense_feast_worker_step!(key::Symbol, X::AbstractMatrix{ComplexF64}, R::AbstractMatrix{ComplexF64}, Λ::Vector{ComplexF64})
     ws = _DISTRIBUTED_DENSE_FEAST_WORKSPACES[key]
-    Qpart = view(ws.Qparts, :, :, ws.part_index)
+    copyto!(ws.X, X)
+    copyto!(ws.R, R)
+    Qpart = ws.Qpart
     fill!(Qpart, 0)
 
     for (local_index, node_index) in pairs(ws.node_indices)
@@ -349,12 +336,14 @@ function _dense_feast_worker_step!(key::Symbol, Λ::Vector{ComplexF64})
             end
         end
     end
-    nothing
+    Qpart
 end
 
-function _dense_gen_feast_worker_step!(key::Symbol, Λ::Vector{ComplexF64})
+function _dense_gen_feast_worker_step!(key::Symbol, X::AbstractMatrix{ComplexF64}, R::AbstractMatrix{ComplexF64}, Λ::Vector{ComplexF64})
     ws = _DISTRIBUTED_DENSE_FEAST_WORKSPACES[key]
-    Qpart = view(ws.Qparts, :, :, ws.part_index)
+    copyto!(ws.X, X)
+    copyto!(ws.R, R)
+    Qpart = ws.Qpart
     fill!(Qpart, 0)
 
     for (local_index, node_index) in pairs(ws.node_indices)
@@ -378,13 +367,24 @@ function _dense_gen_feast_worker_step!(key::Symbol, Λ::Vector{ComplexF64})
             end
         end
     end
-    nothing
+    Qpart
 end
 
-function _dense_dual_gen_feast_worker_step!(key::Symbol, Λ::Vector{ComplexF64})
+function _dense_dual_gen_feast_worker_step!(
+    key::Symbol,
+    Xr::AbstractMatrix{ComplexF64},
+    Xl::AbstractMatrix{ComplexF64},
+    Rr::AbstractMatrix{ComplexF64},
+    Rl::AbstractMatrix{ComplexF64},
+    Λ::Vector{ComplexF64},
+)
     ws = _DISTRIBUTED_DENSE_FEAST_WORKSPACES[key]
-    Qrpart = view(ws.Qrparts, :, :, ws.part_index)
-    Qlpart = view(ws.Qlparts, :, :, ws.part_index)
+    copyto!(ws.Xr, Xr)
+    copyto!(ws.Xl, Xl)
+    copyto!(ws.Rr, Rr)
+    copyto!(ws.Rl, Rl)
+    Qrpart = ws.Qrpart
+    Qlpart = ws.Qlpart
     fill!(Qrpart, 0)
     fill!(Qlpart, 0)
 
@@ -432,13 +432,17 @@ function _dense_dual_gen_feast_worker_step!(key::Symbol, Λ::Vector{ComplexF64})
             end
         end
     end
-    nothing
+    (; Qrpart, Qlpart)
 end
 
 function _sum_dense_feast_qparts!(Q::AbstractMatrix, Qparts)
-    fill!(Q, 0)
-    @inbounds for k in axes(Qparts, 3), j in axes(Qparts, 2), i in axes(Qparts, 1)
-        Q[i, j] += Qparts[i, j, k]
+    if isempty(Qparts)
+        fill!(Q, 0)
+        return Q
+    end
+    copyto!(Q, first(Qparts))
+    for Qpart in Iterators.drop(Qparts, 1)
+        axpy!(one(eltype(Q)), Qpart, Q)
     end
     Q
 end

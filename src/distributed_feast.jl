@@ -9,8 +9,8 @@ buffers, fixed worker-to-node assignments, and optional worker-local LU factors.
 mutable struct DenseDistributedFeastPlan <: AbstractDenseDistributedFeastPlan
     key::Symbol
     A
-    X_shared
-    R_shared
+    X_buffer
+    R_buffer
     Qparts
     contour::Contour
     worker_ids::Vector{Int}
@@ -40,8 +40,8 @@ mutable struct DenseDistributedGeneralizedFeastPlan <: AbstractDenseDistributedF
     key::Symbol
     A
     B
-    X_shared
-    R_shared
+    X_buffer
+    R_buffer
     Qparts
     contour::Contour
     worker_ids::Vector{Int}
@@ -74,10 +74,10 @@ mutable struct DenseDistributedDualGeneralizedFeastPlan <: AbstractDenseDistribu
     key::Symbol
     A
     B
-    Xr_shared
-    Xl_shared
-    Rr_shared
-    Rl_shared
+    Xr_buffer
+    Xl_buffer
+    Rr_buffer
+    Rl_buffer
     Qrparts
     Qlparts
     contour::Contour
@@ -146,19 +146,16 @@ function DenseDistributedFeastPlan(
 
     nodes = size(contour.nodes, 1)
     worker_ids, assignments = _dense_feast_worker_assignments(worker_ids, nodes)
-    all_pids = unique([myid(); worker_ids])
-
     start_ns = time_ns()
     _prepare_dense_feast_workers!(worker_ids)
     _add_elapsed!(stats, :setup_prepare_ns, start_ns)
 
     start_ns = time_ns()
     N = size(A, 1)
-    A_shared = SharedArray{ComplexF64}(size(A); pids=all_pids)
-    X_shared = SharedArray{ComplexF64}((N, m₀); pids=all_pids)
-    R_shared = SharedArray{ComplexF64}((N, m₀); pids=all_pids)
-    Qparts = SharedArray{ComplexF64}((N, m₀, length(worker_ids)); pids=all_pids)
-    copyto!(A_shared, A)
+    A_local = _local_complex_matrix(A, (N, N))
+    X_buffer = zeros(ComplexF64, N, m₀)
+    R_buffer = zeros(ComplexF64, N, m₀)
+    Qparts = [zeros(ComplexF64, N, m₀) for _ in worker_ids]
 
     Λ = zeros(ComplexF64, m₀)
     res = zeros(m₀)
@@ -171,13 +168,13 @@ function DenseDistributedFeastPlan(
     eigen_ws = EigenWs(Aq, rvecs=true)
     key = gensym(:dense_feast)
     futures = Vector{Any}(undef, length(worker_ids))
-    _add_elapsed!(stats, :setup_shared_ns, start_ns)
+    _add_elapsed!(stats, :setup_master_ns, start_ns)
 
     plan = DenseDistributedFeastPlan(
         key,
-        A_shared,
-        X_shared,
-        R_shared,
+        A_local,
+        X_buffer,
+        R_buffer,
         Qparts,
         contour,
         worker_ids,
@@ -253,19 +250,17 @@ function DenseDistributedGeneralizedFeastPlan(
 
     nodes = size(contour.nodes, 1)
     worker_ids, assignments = _dense_feast_worker_assignments(worker_ids, nodes)
-    all_pids = unique([myid(); worker_ids])
-
     start_ns = time_ns()
     _prepare_dense_feast_workers!(worker_ids)
     _add_elapsed!(stats, :setup_prepare_ns, start_ns)
 
     start_ns = time_ns()
     N = size(A, 1)
-    A_shared = _shared_complex_matrix(A, (N, N), all_pids)
-    B_shared = _shared_complex_matrix(B, (N, N), all_pids)
-    X_shared = SharedArray{ComplexF64}((N, m₀); pids=all_pids)
-    R_shared = SharedArray{ComplexF64}((N, m₀); pids=all_pids)
-    Qparts = SharedArray{ComplexF64}((N, m₀, length(worker_ids)); pids=all_pids)
+    A_shared = _local_complex_matrix(A, (N, N))
+    B_shared = _local_complex_matrix(B, (N, N))
+    X_buffer = zeros(ComplexF64, N, m₀)
+    R_buffer = zeros(ComplexF64, N, m₀)
+    Qparts = [zeros(ComplexF64, N, m₀) for _ in worker_ids]
 
     Λ = zeros(ComplexF64, m₀)
     res = zeros(m₀)
@@ -279,14 +274,14 @@ function DenseDistributedGeneralizedFeastPlan(
     eigen_ws = GeneralizedEigenWs(Aq, lvecs=true, rvecs=true)
     key = gensym(:dense_gen_feast)
     futures = Vector{Any}(undef, length(worker_ids))
-    _add_elapsed!(stats, :setup_shared_ns, start_ns)
+    _add_elapsed!(stats, :setup_master_ns, start_ns)
 
     plan = DenseDistributedGeneralizedFeastPlan(
         key,
         A_shared,
         B_shared,
-        X_shared,
-        R_shared,
+        X_buffer,
+        R_buffer,
         Qparts,
         contour,
         worker_ids,
@@ -363,22 +358,20 @@ function DenseDistributedDualGeneralizedFeastPlan(
 
     nodes = size(contour.nodes, 1)
     worker_ids, assignments = _dense_feast_worker_assignments(worker_ids, nodes)
-    all_pids = unique([myid(); worker_ids])
-
     start_ns = time_ns()
     _prepare_dense_feast_workers!(worker_ids)
     _add_elapsed!(stats, :setup_prepare_ns, start_ns)
 
     start_ns = time_ns()
     N = size(A, 1)
-    A_shared = _shared_complex_matrix(A, (N, N), all_pids)
-    B_shared = _shared_complex_matrix(B, (N, N), all_pids)
-    Xr_shared = SharedArray{ComplexF64}((N, m₀); pids=all_pids)
-    Xl_shared = SharedArray{ComplexF64}((N, m₀); pids=all_pids)
-    Rr_shared = SharedArray{ComplexF64}((N, m₀); pids=all_pids)
-    Rl_shared = SharedArray{ComplexF64}((N, m₀); pids=all_pids)
-    Qrparts = SharedArray{ComplexF64}((N, m₀, length(worker_ids)); pids=all_pids)
-    Qlparts = SharedArray{ComplexF64}((N, m₀, length(worker_ids)); pids=all_pids)
+    A_shared = _local_complex_matrix(A, (N, N))
+    B_shared = _local_complex_matrix(B, (N, N))
+    Xr_buffer = zeros(ComplexF64, N, m₀)
+    Xl_buffer = zeros(ComplexF64, N, m₀)
+    Rr_buffer = zeros(ComplexF64, N, m₀)
+    Rl_buffer = zeros(ComplexF64, N, m₀)
+    Qrparts = [zeros(ComplexF64, N, m₀) for _ in worker_ids]
+    Qlparts = [zeros(ComplexF64, N, m₀) for _ in worker_ids]
 
     Λ = zeros(ComplexF64, m₀)
     resr = zeros(m₀)
@@ -398,16 +391,16 @@ function DenseDistributedDualGeneralizedFeastPlan(
     residual_y = zeros(ComplexF64, N)
     key = gensym(:dense_dual_gen_feast)
     futures = Vector{Any}(undef, length(worker_ids))
-    _add_elapsed!(stats, :setup_shared_ns, start_ns)
+    _add_elapsed!(stats, :setup_master_ns, start_ns)
 
     plan = DenseDistributedDualGeneralizedFeastPlan(
         key,
         A_shared,
         B_shared,
-        Xr_shared,
-        Xl_shared,
-        Rr_shared,
-        Rl_shared,
+        Xr_buffer,
+        Xl_buffer,
+        Rr_buffer,
+        Rl_buffer,
         Qrparts,
         Qlparts,
         contour,
@@ -515,7 +508,7 @@ function distributed_feast!(
 )
     plan.closed && error("DenseDistributedFeastPlan is closed")
     stats = stats === nothing ? plan.stats : stats
-    N, m₀ = size(plan.X_shared)
+    N, m₀ = size(plan.X_buffer)
     size(X) == (N, m₀) || error("Incorrect dimensions of X, must match planned A and subspace dimension")
 
     A = plan.A
@@ -535,7 +528,7 @@ function distributed_feast!(
         qr_ns = UInt64(0)
         rayleigh_ritz_ns = UInt64(0)
         residual_ns = UInt64(0)
-        shared_copy_ns = UInt64(0)
+        input_transfer_ns = UInt64(0)
         worker_step_ns = UInt64(0)
         reduce_ns = UInt64(0)
 
@@ -574,17 +567,11 @@ function distributed_feast!(
         end
         if !converged && nit < iter
             start_ns = time_ns()
-            copyto!(plan.X_shared, X)
-            copyto!(plan.R_shared, R)
-            shared_copy_ns = time_ns() - start_ns
-            _add_ns!(stats, :shared_copy_ns, shared_copy_ns)
-
-            start_ns = time_ns()
             for (i, pid) in enumerate(plan.worker_ids)
-                plan.futures[i] = remotecall(_dense_feast_worker_step!, pid, plan.key, Λ)
+                plan.futures[i] = remotecall(_dense_feast_worker_step!, pid, plan.key, X, R, Λ)
             end
-            for future in plan.futures
-                fetch(future)
+            for (i, future) in enumerate(plan.futures)
+                copyto!(plan.Qparts[i], fetch(future))
             end
             worker_step_ns = time_ns() - start_ns
             _add_ns!(stats, :worker_step_ns, worker_step_ns)
@@ -606,7 +593,7 @@ function distributed_feast!(
             qr_ns,
             rayleigh_ritz_ns,
             residual_ns,
-            shared_copy_ns,
+            input_transfer_ns,
             worker_step_ns,
             reduce_ns,
             debug,
@@ -697,7 +684,7 @@ function distributed_gen_feast!(
 )
     plan.closed && error("DenseDistributedGeneralizedFeastPlan is closed")
     stats = stats === nothing ? plan.stats : stats
-    N, m₀ = size(plan.X_shared)
+    N, m₀ = size(plan.X_buffer)
     size(X) == (N, m₀) || error("Incorrect dimensions of X, must match planned A and subspace dimension")
 
     A = plan.A
@@ -719,7 +706,7 @@ function distributed_gen_feast!(
         qr_ns = UInt64(0)
         rayleigh_ritz_ns = UInt64(0)
         residual_ns = UInt64(0)
-        shared_copy_ns = UInt64(0)
+        input_transfer_ns = UInt64(0)
         worker_step_ns = UInt64(0)
         reduce_ns = UInt64(0)
 
@@ -758,17 +745,11 @@ function distributed_gen_feast!(
         end
         if !converged && nit < iter
             start_ns = time_ns()
-            copyto!(plan.X_shared, X)
-            copyto!(plan.R_shared, R)
-            shared_copy_ns = time_ns() - start_ns
-            _add_ns!(stats, :shared_copy_ns, shared_copy_ns)
-
-            start_ns = time_ns()
             for (i, pid) in enumerate(plan.worker_ids)
-                plan.futures[i] = remotecall(_dense_gen_feast_worker_step!, pid, plan.key, Λ)
+                plan.futures[i] = remotecall(_dense_gen_feast_worker_step!, pid, plan.key, X, R, Λ)
             end
-            for future in plan.futures
-                fetch(future)
+            for (i, future) in enumerate(plan.futures)
+                copyto!(plan.Qparts[i], fetch(future))
             end
             worker_step_ns = time_ns() - start_ns
             _add_ns!(stats, :worker_step_ns, worker_step_ns)
@@ -790,7 +771,7 @@ function distributed_gen_feast!(
             qr_ns,
             rayleigh_ritz_ns,
             residual_ns,
-            shared_copy_ns,
+            input_transfer_ns,
             worker_step_ns,
             reduce_ns,
             debug,
@@ -885,7 +866,7 @@ function distributed_dual_gen_feast!(
 )
     plan.closed && error("DenseDistributedDualGeneralizedFeastPlan is closed")
     stats = stats === nothing ? plan.stats : stats
-    N, m₀ = size(plan.Xr_shared)
+    N, m₀ = size(plan.Xr_buffer)
     size(Xr) == (N, m₀) || error("Incorrect dimensions of Xr, must match planned A and subspace dimension")
     size(Xl) == (N, m₀) || error("Incorrect dimensions of Xl, must match planned A and subspace dimension")
 
@@ -912,7 +893,7 @@ function distributed_dual_gen_feast!(
         qr_ns = UInt64(0)
         rayleigh_ritz_ns = UInt64(0)
         residual_ns = UInt64(0)
-        shared_copy_ns = UInt64(0)
+        input_transfer_ns = UInt64(0)
         worker_step_ns = UInt64(0)
         reduce_ns = UInt64(0)
 
@@ -961,19 +942,13 @@ function distributed_dual_gen_feast!(
         end
         if !converged && nit < iter
             start_ns = time_ns()
-            copyto!(plan.Xr_shared, Xr)
-            copyto!(plan.Xl_shared, Xl)
-            copyto!(plan.Rr_shared, Rr)
-            copyto!(plan.Rl_shared, Rl)
-            shared_copy_ns = time_ns() - start_ns
-            _add_ns!(stats, :shared_copy_ns, shared_copy_ns)
-
-            start_ns = time_ns()
             for (i, pid) in enumerate(plan.worker_ids)
-                plan.futures[i] = remotecall(_dense_dual_gen_feast_worker_step!, pid, plan.key, Λ)
+                plan.futures[i] = remotecall(_dense_dual_gen_feast_worker_step!, pid, plan.key, Xr, Xl, Rr, Rl, Λ)
             end
-            for future in plan.futures
-                fetch(future)
+            for (i, future) in enumerate(plan.futures)
+                worker_qparts = fetch(future)
+                copyto!(plan.Qrparts[i], worker_qparts.Qrpart)
+                copyto!(plan.Qlparts[i], worker_qparts.Qlpart)
             end
             worker_step_ns = time_ns() - start_ns
             _add_ns!(stats, :worker_step_ns, worker_step_ns)
@@ -996,7 +971,7 @@ function distributed_dual_gen_feast!(
             qr_ns,
             rayleigh_ritz_ns,
             residual_ns,
-            shared_copy_ns,
+            input_transfer_ns,
             worker_step_ns,
             reduce_ns,
             debug,
@@ -1024,21 +999,18 @@ function _normalize_feast_worker_ids(worker_ids)
     ids
 end
 
-function _shared_complex_matrix(A::AbstractMatrix, dims, all_pids)
+function _local_complex_matrix(A::AbstractMatrix, dims)
     size(A) == dims || error("matrix dimensions must match A")
-    shared = SharedArray{ComplexF64}(dims; pids=all_pids)
-    copyto!(shared, A)
-    shared
+    Matrix{ComplexF64}(A)
 end
 
-function _shared_complex_matrix(B::UniformScaling, dims, all_pids)
-    shared = SharedArray{ComplexF64}(dims; pids=all_pids)
-    fill!(shared, 0)
+function _local_complex_matrix(B::UniformScaling, dims)
+    matrix = zeros(ComplexF64, dims)
     n = min(dims...)
     @inbounds for i in 1:n
-        shared[i, i] = B.λ
+        matrix[i, i] = B.λ
     end
-    shared
+    matrix
 end
 
 function _dense_feast_worker_assignments(worker_ids::Vector{Int}, node_count::Int)

@@ -14,7 +14,7 @@ just experiment-nleigs
 
 Useful environment variables:
 
-- `FEAST_EXPERIMENT_PROBLEMS=butterfly`, `gun`, `loaded_string`, or `hadeler`
+- `FEAST_EXPERIMENT_PROBLEMS=butterfly`, `gun`, `loaded_string`, `hadeler`, `pep0`, or `pep0_sym`
 - `FEAST_EXPERIMENT_METHODS=feast,nleigs`
 - `FEAST_EXPERIMENT_PROCS=0,2,4`
 - `FEAST_EXPERIMENT_FORMAT=pretty` or `csv`
@@ -30,16 +30,27 @@ Useful environment variables:
 - `FEAST_EXPERIMENT_FEAST_NODES=16`
 - `FEAST_EXPERIMENT_FEAST_ITER=3`
 - `FEAST_EXPERIMENT_FEAST_STORE=true`
+- `FEAST_EXPERIMENT_FEAST_MATERIALIZE_NODES=false`
 - `FEAST_EXPERIMENT_NLEIGS_MAXIT=100`
 - `FEAST_EXPERIMENT_NLEIGS_MINIT=20`
 - `FEAST_EXPERIMENT_NLEIGS_MAXDGR=100`
 - `FEAST_EXPERIMENT_NLEIGS_BLKSIZE=20`
 - `FEAST_EXPERIMENT_NLEIGS_STATIC=false`
 - `FEAST_EXPERIMENT_NLEIGS_LEJA=1`
-- `FEAST_EXPERIMENT_NLEIGS_REUSEFACT=1`
+- `FEAST_EXPERIMENT_NLEIGS_REUSEFACT=0`
 
 `FEAST_EXPERIMENT_PROCS=0` means serial `nlfeast!`; positive values use
 `distributed_nlfeast!` with that many local Julia workers.
+
+The default NLEIGS factorization reuse is disabled so no-store FEAST and NLEIGS
+are compared under the same large-problem memory assumption. If FEAST is run
+with `store=true`, set `FEAST_EXPERIMENT_NLEIGS_REUSEFACT=1` for a comparable
+stored-factorization comparison.
+
+The distributed FEAST experiment also defaults to not materializing all contour
+matrices on the master. Workers build `T(z)` locally, which is the fairer mode
+for large no-store experiments. Set `FEAST_EXPERIMENT_FEAST_MATERIALIZE_NODES=true`
+if a local callable cannot be serialized to workers.
 
 `FEAST_EXPERIMENT_FEAST_CONFIGS` overrides the single `FEAST_EXPERIMENT_M`,
 `FEAST_EXPERIMENT_FEAST_NODES`, `FEAST_EXPERIMENT_FEAST_ITER`, and

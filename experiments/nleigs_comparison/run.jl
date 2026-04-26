@@ -6,6 +6,8 @@ using NonlinearEigenproblems
 using Printf
 using Random
 
+import NonlinearEigenproblems: create_linsolver, lin_solve
+
 const ENV_DEFAULTS = Dict(
     "FEAST_EXPERIMENT_PROBLEMS" => "butterfly",
     "FEAST_EXPERIMENT_METHODS" => "feast,nleigs",
@@ -22,6 +24,7 @@ const ENV_DEFAULTS = Dict(
     "FEAST_EXPERIMENT_FEAST_NODES" => "",
     "FEAST_EXPERIMENT_FEAST_ITER" => "",
     "FEAST_EXPERIMENT_FEAST_STORE" => "",
+    "FEAST_EXPERIMENT_FEAST_MATERIALIZE_NODES" => "false",
     "FEAST_EXPERIMENT_M" => "",
     "FEAST_EXPERIMENT_WARMUP" => "true",
     "FEAST_EXPERIMENT_NLEIGS_MAXIT" => "100",
@@ -32,7 +35,7 @@ const ENV_DEFAULTS = Dict(
     "FEAST_EXPERIMENT_NLEIGS_BLKSIZE" => "20",
     "FEAST_EXPERIMENT_NLEIGS_STATIC" => "false",
     "FEAST_EXPERIMENT_NLEIGS_LEJA" => "1",
-    "FEAST_EXPERIMENT_NLEIGS_REUSEFACT" => "1",
+    "FEAST_EXPERIMENT_NLEIGS_REUSEFACT" => "0",
 )
 
 env(name) = get(ENV, name, ENV_DEFAULTS[name])
@@ -43,6 +46,30 @@ output_csv() = lowercase(env("FEAST_EXPERIMENT_FORMAT")) == "csv"
 problem_n(default) = isempty(env("FEAST_EXPERIMENT_PROBLEM_N")) ? default : parse(Int, env("FEAST_EXPERIMENT_PROBLEM_N"))
 blas_threads() = parse(Int, env("FEAST_EXPERIMENT_BLAS_THREADS"))
 worker_blas_threads() = parse(Int, env("FEAST_EXPERIMENT_WORKER_BLAS_THREADS"))
+feast_materialize_nodes() = parse_bool("FEAST_EXPERIMENT_FEAST_MATERIALIZE_NODES")
+
+mutable struct CountingLinSolverCreator{C} <: LinSolverCreator
+    inner::C
+    factorizations::Int
+    solves::Int
+end
+
+CountingLinSolverCreator(inner) = CountingLinSolverCreator(inner, 0, 0)
+
+struct CountingLinSolver{S,C} <: LinSolver
+    inner::S
+    counter::CountingLinSolverCreator{C}
+end
+
+function create_linsolver(counter::CountingLinSolverCreator, nep, λ)
+    counter.factorizations += 1
+    CountingLinSolver(create_linsolver(counter.inner, nep, λ), counter)
+end
+
+function lin_solve(solver::CountingLinSolver, rhs::AbstractVecOrMat; tol=0)
+    solver.counter.solves += 1
+    lin_solve(solver.inner, rhs; tol)
+end
 
 external_workers() = filter(!=(myid()), workers())
 
@@ -53,7 +80,7 @@ function ensure_workers(count, blas_threads)
         addprocs(count - length(current); exeflags="--project=$(Base.active_project())")
     end
     for pid in external_workers()
-        remotecall_wait(Main.eval, pid, :(using FEASTSolver; using LinearAlgebra; LinearAlgebra.BLAS.set_num_threads($blas_threads)))
+        remotecall_wait(Main.eval, pid, :(using FEASTSolver; using LinearAlgebra; using NonlinearEigenproblems; LinearAlgebra.BLAS.set_num_threads($blas_threads)))
     end
     external_workers()[1:count]
 end
@@ -127,6 +154,44 @@ function spmf_action_residual_tools(nep)
         total = zero(real(typeof(λ)))
         for i in eachindex(nep.A)
             total += abs(nep.fi[i](λ)) * matrix_norms[i]
+        end
+        total
+    end
+
+    function residual(λ, v)
+        norm(compute_Mlincomb(nep, λ, v)) / denominator(λ)
+    end
+
+    function residual_update!(res, X, R, Λ)
+        @inbounds for j in axes(X, 2)
+            xnorm = zero(real(eltype(X)))
+            for i in axes(X, 1)
+                xnorm += abs2(X[i, j])
+            end
+            inv_xnorm = inv(sqrt(xnorm))
+            x = view(X, :, j)
+            for i in axes(X, 1)
+                x[i] *= inv_xnorm
+            end
+            y = compute_Mlincomb(nep, Λ[j], x)
+            copyto!(view(R, :, j), y)
+            res[j] = norm(y) / denominator(Λ[j])
+        end
+        res
+    end
+
+    residual, residual_update!
+end
+
+function pep_action_residual_tools(nep)
+    matrix_norms = norm.(nep.A)
+
+    function denominator(λ)
+        total = zero(real(typeof(λ)))
+        power = one(λ)
+        for i in eachindex(nep.A)
+            total += abs(power) * matrix_norms[i]
+            power *= λ
         end
         total
     end
@@ -253,8 +318,56 @@ function problem_config(name)
             residual,
             residual_update,
         )
+    elseif name == "pep0"
+        n = problem_n(500)
+        nep = nep_gallery("pep0", n)
+        T = z -> compute_Mder(nep, z)
+        residual, residual_update = pep_action_residual_tools(nep)
+        return (;
+            name,
+            T,
+            nep,
+            n,
+            c=0.0 + 0.0im,
+            r=0.2,
+            feast_label="default",
+            m=44,
+            feast_nodes=16,
+            feast_iter=4,
+            feast_store=false,
+            feast_tol=1e-8,
+            spurious=1e-5,
+            nleigs_tol=1e-8,
+            nleigs_singularities=[Inf],
+            residual,
+            residual_update,
+        )
+    elseif name == "pep0_sym"
+        n = problem_n(500)
+        nep = nep_gallery("pep0_sym", n)
+        T = z -> compute_Mder(nep, z)
+        residual, residual_update = pep_action_residual_tools(nep)
+        return (;
+            name,
+            T,
+            nep,
+            n,
+            c=0.0 + 0.0im,
+            r=0.2,
+            feast_label="default",
+            m=50,
+            feast_nodes=16,
+            feast_iter=4,
+            feast_store=false,
+            feast_tol=1e-8,
+            spurious=1e-5,
+            nleigs_tol=1e-8,
+            nleigs_singularities=[Inf],
+            residual,
+            residual_update,
+        )
     else
-        error("unknown experiment problem '$name'; expected butterfly, gun, loaded_string, or hadeler")
+        error("unknown experiment problem '$name'; expected butterfly, gun, loaded_string, hadeler, pep0, or pep0_sym")
     end
 end
 
@@ -389,6 +502,8 @@ function run_feast(problem, processes, seed)
             rii_steps=max(stats.iterations - 1, 0),
             beyn_only=stats.iterations <= 1,
             stop=feast_stop_label(stats, problem.feast_iter, converged_inside, count(inside)),
+            linear_solves=problem.feast_nodes * stats.iterations,
+            factorizations=problem.feast_store ? problem.feast_nodes : problem.feast_nodes * stats.iterations,
             solve_s=stats.solve_total_ns / 1e9,
             filter_s=stats.filter_ns / 1e9,
             residual_s=stats.residual_ns / 1e9,
@@ -409,6 +524,7 @@ function run_feast(problem, processes, seed)
                 r=problem.r,
                 ϵ=problem.feast_tol,
                 store=problem.feast_store,
+                materialize_nodes=feast_materialize_nodes(),
                 spurious=problem.spurious,
                 worker_ids=worker_ids,
                 worker_blas_threads=worker_threads,
@@ -424,14 +540,27 @@ function run_feast(problem, processes, seed)
             nodes=problem.feast_nodes,
             iter_limit=problem.feast_iter,
             store=problem.feast_store,
+            materialize_nodes=feast_materialize_nodes(),
             worker_blas_threads=worker_threads,
             iterations=stats.iterations,
             rii_steps=max(stats.iterations - 1, 0),
             beyn_only=stats.iterations <= 1,
             stop=feast_stop_label(stats, problem.feast_iter, converged_inside, count(inside)),
-            setup_s=(stats.setup_prepare_ns + stats.setup_shared_ns + stats.setup_worker_ns) / 1e9,
+            linear_solves=problem.feast_nodes * stats.iterations,
+            factorizations=problem.feast_store ? problem.feast_nodes : problem.feast_nodes * stats.iterations,
+            setup_s=(stats.setup_prepare_ns + stats.setup_master_ns + stats.setup_worker_ns) / 1e9,
+            setup_prepare_s=stats.setup_prepare_ns / 1e9,
+            setup_master_s=stats.setup_master_ns / 1e9,
+            setup_worker_s=stats.setup_worker_ns / 1e9,
             solve_s=stats.solve_total_ns / 1e9,
             worker_s=stats.worker_step_ns / 1e9,
+            worker_solve_s=stats.worker_solve_ns / 1e9,
+            worker_materialize_s=stats.worker_materialize_ns / 1e9,
+            worker_linsolve_s=stats.worker_linsolve_ns / 1e9,
+            worker_accum_s=stats.worker_accum_ns / 1e9,
+            input_transfer_s=stats.input_transfer_ns / 1e9,
+            reduce_s=stats.reduce_ns / 1e9,
+            ritz_s=stats.rayleigh_ritz_ns / 1e9,
             residual_s=stats.residual_ns / 1e9,
             trace=feast_trace(stats),
         )
@@ -499,6 +628,7 @@ function run_nleigs(problem, seed)
     reusefact = parse(Int, env("FEAST_EXPERIMENT_NLEIGS_REUSEFACT"))
     v = initial_subspace(problem.n, 1, seed)[:, 1]
     errmeasure = (λ, x) -> problem.residual(λ, x)
+    linsolver = CountingLinSolverCreator(DefaultLinSolverCreator())
 
     local λ
     local V
@@ -518,6 +648,7 @@ function run_nleigs(problem, seed)
             static=static,
             leja=leja,
             reusefact=reusefact,
+            linsolvercreator=linsolver,
             return_details=false,
         )
     end
@@ -532,6 +663,8 @@ function run_nleigs(problem, seed)
         reusefact,
         polygon_points,
         singularities=join(problem.nleigs_singularities, ":"),
+        linear_solves=linsolver.solves,
+        factorizations=linsolver.factorizations,
     )
     summarize_result(problem, "nleigs", 0, elapsed, λ, V, residuals; extra=extra)
     nothing

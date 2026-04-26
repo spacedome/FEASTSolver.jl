@@ -106,14 +106,14 @@ function print_distributed_stats(variant, processes, stats)
         ",variant=", variant,
         ",processes=", processes,
         ",setup_prepare_s=", seconds(stats.setup_prepare_ns),
-        ",setup_shared_s=", seconds(stats.setup_shared_ns),
+        ",setup_master_s=", seconds(stats.setup_master_ns),
         ",setup_worker_s=", seconds(stats.setup_worker_ns),
         ",solve_total_s=", seconds(stats.solve_total_ns),
         ",iterations=", stats.iterations,
         ",qr_s=", seconds(stats.qr_ns),
         ",rayleigh_ritz_s=", seconds(stats.rayleigh_ritz_ns),
         ",residual_s=", seconds(stats.residual_ns),
-        ",shared_copy_s=", seconds(stats.shared_copy_ns),
+        ",input_transfer_s=", seconds(stats.input_transfer_ns),
         ",worker_step_s=", seconds(stats.worker_step_ns),
         ",reduce_s=", seconds(stats.reduce_ns),
     )
@@ -174,11 +174,11 @@ end
 
 function solve_with_plan!(variant, plan, X0, iter, stats)
     setup_prepare_ns = stats.setup_prepare_ns
-    setup_shared_ns = stats.setup_shared_ns
+    setup_master_ns = stats.setup_master_ns
     setup_worker_ns = stats.setup_worker_ns
     FEASTSolver.reset!(stats)
     stats.setup_prepare_ns = setup_prepare_ns
-    stats.setup_shared_ns = setup_shared_ns
+    stats.setup_master_ns = setup_master_ns
     stats.setup_worker_ns = setup_worker_ns
     if variant == "standard"
         distributed_feast!(copy(X0), plan; iter=iter, ϵ=-1.0, stats=stats)

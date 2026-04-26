@@ -2,7 +2,7 @@ __precompile__(true)
 
 module FEASTSolver
 
-using LinearAlgebra: BLAS, LAPACK, UniformScaling, ldiv!, lu!, tr, dot, LU, Factorization, mul!, qr!, rmul!, lmul!, ldiv!, eigen!, svd!, norm, Diagonal, I, diagm
+using LinearAlgebra: BLAS, LAPACK, UniformScaling, ldiv!, lu!, tr, dot, LU, Factorization, axpy!, mul!, qr!, rmul!, lmul!, ldiv!, eigen!, svd!, norm, Diagonal, I, diagm
 using IterativeSolvers: bicgstabl
 using SparseArrays: similar, AbstractSparseMatrix, sprandn, sprand
 using IterativeSolvers: gmres!, bicgstabl!, gmres, bicgstabl
@@ -10,7 +10,6 @@ using FastGaussQuadrature: gausslegendre
 using FastLapackInterface: EigenWs, GeneralizedEigenWs, LUWs, QRWs, SVDsddWs
 using Distributed: @distributed, myid, remotecall, remotecall_wait, workers
 using Random: rand, randn
-using SharedArrays: SharedArray
 
 import Base: close, length
 

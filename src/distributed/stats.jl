@@ -9,41 +9,49 @@ struct DenseDistributedFeastIterationStats
     qr_ns::UInt64
     rayleigh_ritz_ns::UInt64
     residual_ns::UInt64
-    shared_copy_ns::UInt64
+    input_transfer_ns::UInt64
     worker_step_ns::UInt64
     reduce_ns::UInt64
 end
 
 mutable struct DenseDistributedFeastStats
     setup_prepare_ns::UInt64
-    setup_shared_ns::UInt64
+    setup_master_ns::UInt64
     setup_worker_ns::UInt64
     solve_total_ns::UInt64
     iterations::Int
     qr_ns::UInt64
     rayleigh_ritz_ns::UInt64
     residual_ns::UInt64
-    shared_copy_ns::UInt64
+    input_transfer_ns::UInt64
     worker_step_ns::UInt64
+    worker_solve_ns::UInt64
+    worker_materialize_ns::UInt64
+    worker_linsolve_ns::UInt64
+    worker_accum_ns::UInt64
     reduce_ns::UInt64
     iteration_log::Vector{DenseDistributedFeastIterationStats}
 end
 
 function DenseDistributedFeastStats()
-    DenseDistributedFeastStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, DenseDistributedFeastIterationStats[])
+    DenseDistributedFeastStats(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, DenseDistributedFeastIterationStats[])
 end
 
 function reset!(stats::DenseDistributedFeastStats)
     stats.setup_prepare_ns = 0
-    stats.setup_shared_ns = 0
+    stats.setup_master_ns = 0
     stats.setup_worker_ns = 0
     stats.solve_total_ns = 0
     stats.iterations = 0
     stats.qr_ns = 0
     stats.rayleigh_ritz_ns = 0
     stats.residual_ns = 0
-    stats.shared_copy_ns = 0
+    stats.input_transfer_ns = 0
     stats.worker_step_ns = 0
+    stats.worker_solve_ns = 0
+    stats.worker_materialize_ns = 0
+    stats.worker_linsolve_ns = 0
+    stats.worker_accum_ns = 0
     stats.reduce_ns = 0
     empty!(stats.iteration_log)
     stats
@@ -72,15 +80,19 @@ function Base.show(io::IO, stats::DenseDistributedFeastStats)
         io,
         "DenseDistributedFeastStats(",
         "setup_prepare=", _seconds(stats.setup_prepare_ns), "s, ",
-        "setup_shared=", _seconds(stats.setup_shared_ns), "s, ",
+        "setup_master=", _seconds(stats.setup_master_ns), "s, ",
         "setup_worker=", _seconds(stats.setup_worker_ns), "s, ",
         "solve_total=", _seconds(stats.solve_total_ns), "s, ",
         "iterations=", stats.iterations, ", ",
         "qr=", _seconds(stats.qr_ns), "s, ",
         "rayleigh_ritz=", _seconds(stats.rayleigh_ritz_ns), "s, ",
         "residual=", _seconds(stats.residual_ns), "s, ",
-        "shared_copy=", _seconds(stats.shared_copy_ns), "s, ",
+        "input_transfer=", _seconds(stats.input_transfer_ns), "s, ",
         "worker_step=", _seconds(stats.worker_step_ns), "s, ",
+        "worker_solve=", _seconds(stats.worker_solve_ns), "s, ",
+        "worker_materialize=", _seconds(stats.worker_materialize_ns), "s, ",
+        "worker_linsolve=", _seconds(stats.worker_linsolve_ns), "s, ",
+        "worker_accum=", _seconds(stats.worker_accum_ns), "s, ",
         "reduce=", _seconds(stats.reduce_ns), "s, ",
         "logged_iterations=", length(stats.iteration_log), ")",
     )
@@ -97,7 +109,7 @@ function _record_distributed_feast_iteration!(
     qr_ns,
     rayleigh_ritz_ns,
     residual_ns,
-    shared_copy_ns,
+    input_transfer_ns,
     worker_step_ns,
     reduce_ns,
     debug,
@@ -116,7 +128,7 @@ function _record_distributed_feast_iteration!(
     qr_ns,
     rayleigh_ritz_ns,
     residual_ns,
-    shared_copy_ns,
+    input_transfer_ns,
     worker_step_ns,
     reduce_ns,
     debug,
@@ -132,7 +144,7 @@ function _record_distributed_feast_iteration!(
             qr_ns,
             rayleigh_ritz_ns,
             residual_ns,
-            shared_copy_ns,
+            input_transfer_ns,
             worker_step_ns,
             reduce_ns,
         ),
@@ -150,7 +162,7 @@ function _iter_timing_debug_print(stats::DenseDistributedFeastIterationStats)
         "qr=", _seconds(stats.qr_ns), "s\t",
         "ritz=", _seconds(stats.rayleigh_ritz_ns), "s\t",
         "res=", _seconds(stats.residual_ns), "s\t",
-        "copy=", _seconds(stats.shared_copy_ns), "s\t",
+        "transfer=", _seconds(stats.input_transfer_ns), "s\t",
         "worker=", _seconds(stats.worker_step_ns), "s\t",
         "reduce=", _seconds(stats.reduce_ns), "s",
     )

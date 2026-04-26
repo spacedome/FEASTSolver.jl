@@ -2,7 +2,7 @@
 
 julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "8e2f2b8d0ada3d152548e53a62765e772a73acf3"
+project_hash = "3ae0e637792863cf1bd0a2bbddfbded4702429a2"
 
 [[deps.ArnoldiMethod]]
 deps = ["LinearAlgebra", "Random", "StaticArrays"]
@@ -45,7 +45,7 @@ uuid = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
 version = "0.9.5"
 
 [[deps.FEASTSolver]]
-deps = ["Distributed", "FastGaussQuadrature", "FastLapackInterface", "IterativeSolvers", "LinearAlgebra", "MatrixMarket", "NonlinearEigenproblems", "Random", "SharedArrays", "SparseArrays"]
+deps = ["Distributed", "FastGaussQuadrature", "FastLapackInterface", "IterativeSolvers", "LinearAlgebra", "MatrixMarket", "NonlinearEigenproblems", "Random", "SparseArrays"]
 path = "."
 uuid = "65ce2ba6-bba3-11e9-165b-677ad58e09bb"
 version = "0.1.0"
@@ -141,10 +141,6 @@ git-tree-sha1 = "da6fde5ea219bbe414f9d6f878ea9ab5d3476e64"
 uuid = "4d4711f2-db25-561a-b6b3-d35e7d4047d3"
 version = "0.5.2"
 
-[[deps.Mmap]]
-uuid = "a63ad114-7e13-5084-954f-fe012c677804"
-version = "1.11.0"
-
 [[deps.NonlinearEigenproblems]]
 deps = ["ArnoldiMethod", "Distributed", "InteractiveUtils", "IterativeSolvers", "LinearAlgebra", "LinearMaps", "Printf", "Random", "Reexport", "SparseArrays", "SpecialFunctions", "Statistics", "SuiteSparse"]
 git-tree-sha1 = "c24526f425f34d7cfd0afb3702c230dd9a3fb56b"
@@ -206,11 +202,6 @@ version = "0.7.0"
 
 [[deps.Serialization]]
 uuid = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
-version = "1.11.0"
-
-[[deps.SharedArrays]]
-deps = ["Distributed", "Mmap", "Random", "Serialization"]
-uuid = "1a1011a3-84de-559e-8e89-a11a2f7dc383"
 version = "1.11.0"
 
 [[deps.Sockets]]
