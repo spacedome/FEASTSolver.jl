@@ -2,6 +2,8 @@ __precompile__(true)
 
 module FEASTSolver
 
+import LinearAlgebra
+
 using LinearAlgebra: BLAS, LAPACK, UniformScaling, ldiv!, lu!, tr, dot, LU, Factorization, axpy!, mul!, qr!, rmul!, lmul!, ldiv!, eigen!, svd!, norm, Diagonal, I, diagm
 using IterativeSolvers: bicgstabl
 using SparseArrays: similar, AbstractSparseMatrix, sprandn, sprand, sparse, spdiagm, SparseVector, SparseMatrixCSC, nnz
@@ -46,6 +48,7 @@ include("sparse_feast.jl")
 include("beyn.jl")
 include("companion.jl")
 include("feast.jl")
+include("moment_rii.jl")
 include("distributed/stats.jl")
 include("distributed_feast.jl")
 include("distributed/workers.jl")

@@ -18,6 +18,10 @@ comparing nonlinear FEAST against NEP-PACK's NLEIGS implementation on problems
 from `article.tex`. It is not an automated benchmark because the comparison
 depends on algorithm-specific parameters and target-region choices.
 
+The `moment_rii/` directory tracks the higher-moment NLFEAST question from
+`article.tex`: how to apply RII to SS/Beyn-Hankel moment expansions without
+letting the active subspace grow by a factor of the moment count each iteration.
+
 Research orientation:
 
 - `src/nlfeast.jl` contains the canonical nonlinear FEAST-Beyn hybrid prototype.

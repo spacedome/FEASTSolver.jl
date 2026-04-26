@@ -37,6 +37,10 @@ bench-sparse:
 experiment-nleigs:
     {{julia}} --project=. --startup-file=no experiments/nleigs_comparison/run.jl
 
+# Run the higher-moment invariant-pair RII research prototype.
+experiment-moment-rii:
+    {{julia}} --project=. --startup-file=no experiments/moment_rii/run.jl
+
 # Run a cheap NLEIGS comparison smoke check without the large dense problem.
 experiment-nleigs-smoke:
     FEAST_EXPERIMENT_PROBLEMS=butterfly FEAST_EXPERIMENT_METHODS=feast,nleigs FEAST_EXPERIMENT_PROCS=0 FEAST_EXPERIMENT_WARMUP=false {{julia}} --project=. --startup-file=no experiments/nleigs_comparison/run.jl
@@ -77,6 +81,7 @@ notes:
       'Run just bench-dense for BenchmarkTools-backed dense FEAST benchmarks.' \
       'Run just bench-sparse for sparse FEAST/UMFPACK profiling.' \
       'Run just experiment-nleigs for the research comparison against NEP-PACK NLEIGS.' \
+      'Run just experiment-moment-rii for the higher-moment invariant-pair RII prototype.' \
       'Run just experiment-nleigs-smoke for a cheap experiment script sanity check.' \
       'Historical research scripts live under experiments/legacy_tests/ until curated.' \
       'Julia 1.10-1.12 compat should eventually be checked in CI, not by expanding this dev shell.' \

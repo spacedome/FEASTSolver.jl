@@ -28,6 +28,41 @@
     @test stats.iteration_log[end].variant == :nonlinear
 end
 
+@testitem "experimental moment RII: projected SS Hankel recovers deficient quadratic" setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using LinearAlgebra
+    using MatrixMarket
+    using .FEASTTestSetup: initial_subspace, assert_converged
+
+    A0 = Matrix{ComplexF64}(Matrix(mmread(joinpath(@__DIR__, "..", "..", "data", "quadraticM0.mtx"))))
+    A1 = Matrix{ComplexF64}(Matrix(mmread(joinpath(@__DIR__, "..", "..", "data", "quadraticM1.mtx"))))
+    coeffs = [A0 - 0.02 * A1, 0.1 * A1, A1]
+    c, r = 0.0 + 0.0im, 0.25
+    reference, _, reference_res = companion(coeffs)
+    expected = reference[in_contour(reference, c, r) .& (reference_res .< 1e-7)]
+
+    result = FEASTSolver.nlfeast_moment_rii!(
+        coeffs,
+        initial_subspace(size(A0, 1), 3, 961),
+        16,
+        5;
+        c=c,
+        r=r,
+        moments=2,
+        ranktol=1e-9,
+        residual_tol=1e-8,
+        left_probe=initial_subspace(size(A0, 1), 3, 962),
+    )
+
+    inside = in_contour(result.values, c, r)
+    actual = result.values[inside]
+    @test length(actual) == length(expected)
+    @test maximum(λ -> minimum(abs.(λ .- expected)), actual) <= 1e-8
+    @test maximum(λ -> minimum(abs.(λ .- actual)), expected) <= 1e-8
+    assert_converged(result.residuals[inside]; atol=1e-8)
+    @test result.history[end].rank == length(expected)
+end
+
 @testitem "nonlinear FEAST: sparse linear polynomial uses sparse path" setup=[FEASTTestSetup] begin
     using FEASTSolver
     using LinearAlgebra
@@ -162,4 +197,38 @@ end
     inside = in_contour(λ, c, r)
     assert_eigenvalues_found(λ[inside], expected; atol=1e-8)
     assert_converged(res[inside]; atol=1e-8)
+end
+
+@testitem "experimental moment RII: deficient quadratic needs lifted pair state" setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using LinearAlgebra
+    using MatrixMarket
+    using .FEASTTestSetup: initial_subspace, assert_converged
+
+    A0 = Matrix{ComplexF64}(Matrix(mmread(joinpath(@__DIR__, "..", "..", "data", "quadraticM0.mtx"))))
+    A1 = Matrix{ComplexF64}(Matrix(mmread(joinpath(@__DIR__, "..", "..", "data", "quadraticM1.mtx"))))
+    coeffs = [A0 - 0.02 * A1, 0.1 * A1, A1]
+    c, r = 0.0 + 0.0im, 0.25
+    reference, _, reference_res = companion(coeffs)
+    expected = reference[in_contour(reference, c, r) .& (reference_res .< 1e-7)]
+
+    result = FEASTSolver.nlfeast_moment_rii!(
+        coeffs,
+        initial_subspace(size(A0, 1), 3, 951),
+        8,
+        8;
+        c=c,
+        r=r,
+        moments=2,
+        ranktol=1e-9,
+        residual_tol=1e-8,
+    )
+
+    inside = in_contour(result.values, c, r)
+    actual = result.values[inside]
+    @test length(actual) == length(expected)
+    @test maximum(λ -> minimum(abs.(λ .- expected)), actual) <= 1e-8
+    @test maximum(λ -> minimum(abs.(λ .- actual)), expected) <= 1e-8
+    assert_converged(result.residuals[inside]; atol=1e-8)
+    @test result.history[end].rank == length(expected)
 end
