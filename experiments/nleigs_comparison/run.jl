@@ -3,13 +3,14 @@ using FEASTSolver
 using LinearAlgebra
 using MatrixMarket
 using NonlinearEigenproblems
+using NonlinearEigenproblems.RKHelper: LowRankMatrixAndFunction
 using Printf
 using Random
 
 import NonlinearEigenproblems: create_linsolver, lin_solve
 
 const ENV_DEFAULTS = Dict(
-    "FEAST_EXPERIMENT_PROBLEMS" => "butterfly,pep0,schrodinger_movebc",
+    "FEAST_EXPERIMENT_PROBLEMS" => "butterfly,pep0,gun",
     "FEAST_EXPERIMENT_METHODS" => "feast,nleigs",
     "FEAST_EXPERIMENT_PROCS" => "0,4,8",
     "FEAST_EXPERIMENT_FORMAT" => "pretty",
@@ -171,8 +172,7 @@ end
 
 function feast_operator_action_residual_tools(T; normalize_by_matrix=true)
     M = operator_prototype(T)
-    x = zeros(ComplexF64, size(T, 1))
-    y = similar(x)
+    y = zeros(ComplexF64, size(T, 1))
 
     function residual(λ, v)
         mul!(y, T, λ, v)
@@ -242,6 +242,64 @@ function gun_residual_tools(nep)
     end
 
     residual, residual_update!
+end
+
+function gun_residual_tools(T::FEASTSolver.GunGalleryOperator)
+    sigma2 = 108.8774
+    nK = 1.474544889815002e5
+    nM = 2.726114618171165e-2
+    nW1 = 2.328612251920476e0
+    nW2 = 3.793375498194695e0
+    y = zeros(ComplexF64, size(T, 1))
+    workspace = similar(y)
+
+    denominator(λ) = nK + abs(λ) * nM + sqrt(abs(λ)) * nW1 + sqrt(abs(λ - sigma2^2)) * nW2
+
+    function residual(λ, v)
+        mul!(y, T, λ, v, workspace)
+        norm(y) / denominator(λ)
+    end
+
+    function residual_update!(res, X, R, Λ)
+        @inbounds for j in axes(X, 2)
+            xnorm = zero(real(eltype(X)))
+            for i in axes(X, 1)
+                xnorm += abs2(X[i, j])
+            end
+            inv_xnorm = inv(sqrt(xnorm))
+            for i in axes(X, 1)
+                X[i, j] *= inv_xnorm
+            end
+            mul!(view(R, :, j), T, Λ[j], view(X, :, j), workspace)
+            res[j] = norm(view(R, :, j)) / denominator(Λ[j])
+        end
+        res
+    end
+
+    residual, residual_update!
+end
+
+function gun_nleigs_nep(T::FEASTSolver.GunGalleryOperator)
+    sigma2 = 108.8774
+    sqrt1 = z -> 1im * sqrt(z)
+    sqrt2 = z -> 1im * sqrt(z - sigma2^2 * one(z))
+    SumNEP(
+        PEP([T.K, -T.M]),
+        LowRankFactorizedNEP([
+            LowRankMatrixAndFunction(T.W1, sqrt1),
+            LowRankMatrixAndFunction(T.W2, sqrt2),
+        ]),
+    )
+end
+
+function gun_nleigs_pole_candidates(n::Integer=1000)
+    sigma2 = 108.8774
+    -10 .^ range(-8, stop=8, length=n) .+ sigma2^2
+end
+
+function summarize_singularities(values)
+    length(values) <= 8 && return join(values, ":")
+    "count=$(length(values));min=$(minimum(values));max=$(maximum(values))"
 end
 
 function spmf_action_residual_tools(nep)
@@ -347,8 +405,8 @@ function problem_config(name)
         )
     elseif name == "gun"
         T = feast_gallery("nlevp_native_gun")
-        nep = nep_gallery("nlevp_native_gun")
-        residual, residual_update = gun_residual_tools(nep)
+        nep = gun_nleigs_nep(T)
+        residual, residual_update = gun_residual_tools(T)
         return (;
             name,
             T,
@@ -357,9 +415,9 @@ function problem_config(name)
             c=140000.0 + 0.0im,
             r=30000.0,
             feast_label="sparse-default",
-            m=32,
+            m=36,
             feast_nodes=8,
-            feast_iter=3,
+            feast_iter=4,
             feast_store=false,
             feast_tol=1e-8,
             spurious=1e-5,
@@ -367,7 +425,7 @@ function problem_config(name)
             nleigs_maxit=150,
             nleigs_blksize=32,
             nleigs_polygon_points=32,
-            nleigs_singularities=[0.0, 108.8774^2],
+            nleigs_singularities=gun_nleigs_pole_candidates(),
             residual,
             residual_update,
             T_update=matrix_materializer(T),
@@ -961,7 +1019,7 @@ function run_nleigs(problem, seed)
         target_radius=radius,
         polygon_points,
         polygon_phase,
-        singularities=join(problem.nleigs_singularities, ":"),
+        singularities=summarize_singularities(problem.nleigs_singularities),
         linear_solves=linsolver.solves,
         factorizations=linsolver.factorizations,
     )

@@ -118,9 +118,65 @@ Findings:
 - For publication runs, repeat the default large comparison with multiple timed
   samples on a larger machine.
 - Sparse NLFEAST now has a direct sparse shifted-solve path.
-  `schrodinger_movebc` is part of the default comparison set; `gun` remains an
-  explicit exploratory selector until its region, subspace size, contour node
-  count, and NLEIGS settings are tuned with the same care used for `pep0`.
+  `gun` is part of the default comparison set; `schrodinger_movebc` remains an
+  explicit scalable sparse selector.
+
+## 2026-04-26: `gun` Sparse NLEVP Region
+
+Problem:
+
+- Fixed-size NLEVP gun cavity problem, `n=9956`.
+- FEAST side uses the native in-place `GunGalleryOperator`.
+- NLEIGS side uses the low-rank-factorized representation from NEP-PACK's own
+  gun tests. The raw `nep_gallery("nlevp_native_gun")` representation can fail
+  in NLEIGS because its divided-difference setup evaluates matrix square roots
+  through a fragile Schur path.
+- Fair-memory policy: FEAST `store=false`; NLEIGS `reusefact=0`.
+
+Current default:
+
+- FEAST contour: center `140000 + 0im`, radius `30000`.
+- FEAST subspace: `m=36`.
+- FEAST nodes: `8`.
+- FEAST iterations: `4`.
+- NLEIGS target: same center/radius, 32 polygon points.
+- NLEIGS pole candidates: `-10 .^ range(-8, 8, length=1000) .+ 108.8774^2`,
+  matching the style used by NEP-PACK's gun tests.
+
+Representative local results:
+
+- Old FEAST default `m=32`, nodes `8`, iter `3`, serial:
+  17 converged interior eigenpairs plus 1 spurious/edge interior Ritz value,
+  three RII steps, about `23.1s`.
+- Old FEAST default `m=32`, nodes `8`, iter `3`, 8 workers:
+  same eigenpair classification, about `6.7s`.
+- Tuned FEAST default `m=36`, nodes `8`, iter `4`, serial:
+  same eigenpair classification, two RII steps, about `25.9s`.
+- Tuned FEAST default `m=36`, nodes `8`, iter `4`, 4 workers:
+  same eigenpair classification, about `7.0s`.
+- Tuned FEAST default `m=36`, nodes `8`, iter `4`, 8 workers:
+  same eigenpair classification, about `5.6s`.
+- NLEIGS no-reuse, low-rank-factorized gun representation:
+  17 converged interior eigenpairs, about `30.4s`, 54 factorizations.
+
+These are single-sample local runs after warmup, not publication timing
+statistics.
+
+Tuning notes:
+
+- The contour region was inherited from the legacy paper experiments and is a
+  good sparse stress case.
+- FEAST consistently finds 18 interior Ritz values; 17 satisfy the strict
+  residual threshold and one remains around `6e-4` to `8e-4`, so we classify it
+  as spurious/edge behavior rather than forcing the benchmark to chase it.
+- Increasing to `m=36` or `m=40` reduces FEAST to two RII steps but does not
+  remove the spurious/edge value. `m=36` is the best local distributed default.
+- Increasing to 16 contour nodes gives very small residuals on the 17 good
+  eigenpairs but still leaves the same spurious/edge value and doubles the
+  number of sparse factorizations, so it is not the default.
+- The native gun residual action avoids NEP-PACK residual allocation and roughly
+  halves the residual phase, but the run remains correctly dominated by sparse
+  LU factorization.
 
 ## 2026-04-25: `schrodinger_movebc` Sparse Region
 

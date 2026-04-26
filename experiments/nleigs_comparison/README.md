@@ -23,15 +23,14 @@ just experiment-nleigs-smoke
 
 By default this runs the curated comparison set: `butterfly` as a small sanity
 problem, `pep0` as the large dense polynomial problem, and
-`schrodinger_movebc` as the current sparse large problem. Set
+`gun` as the sparse NLEVP benchmark problem. Set
 `FEAST_EXPERIMENT_PROBLEMS=butterfly` or another comma-separated list for a
-targeted local run. `gun` remains available as a sparse exploratory comparison,
-but is intentionally not part of the default set until its region and solver
-parameters are tuned.
+targeted local run. `schrodinger_movebc` remains available as a scalable sparse
+exploratory comparison.
 
 Useful environment variables:
 
-- `FEAST_EXPERIMENT_PROBLEMS=butterfly`, `pep0`, `schrodinger_movebc`, or exploratory `gun`, `loaded_string`, `hadeler`, `pep0_sym`
+- `FEAST_EXPERIMENT_PROBLEMS=butterfly`, `pep0`, `gun`, or exploratory `schrodinger_movebc`, `loaded_string`, `hadeler`, `pep0_sym`
 - `FEAST_EXPERIMENT_METHODS=feast,nleigs`
 - `FEAST_EXPERIMENT_PROCS=0,4,8`
 - `FEAST_EXPERIMENT_FORMAT=pretty` or `csv`
@@ -144,13 +143,16 @@ region to recover it. `FEAST_EXPERIMENT_NLEIGS_POLYGON_PHASE=feast_nodes` rotate
 the polygon by half a panel so its vertices have the same angular placement as
 FEAST's midpoint trapezoid nodes.
 
-The sparse `gun` problem is available as an explicit selector with
-`FEAST_EXPERIMENT_PROBLEMS=gun`. It uses sparse NLFEAST through the in-place
-FEAST gallery operator and sparse direct shifted solves. It is not yet part of
-the default comparison set because the target region, node count, subspace size,
-and NLEIGS settings still need the same level of tuning as `pep0`.
+The default sparse comparison is `gun`, the fixed-size NLEVP cavity benchmark
+with `n=9956`. FEAST uses the native in-place gallery operator, sparse direct
+shifted solves, contour center `140000`, radius `30000`, `m=36`, `nodes=8`,
+`iter=4`, and `store=false`. NLEIGS uses a low-rank-factorized representation
+of the same NEP, a 32-point target polygon, and the logarithmic pole-candidate
+grid used by NEP-PACK's own gun tests. The raw NEP-PACK `nlevp_native_gun`
+object is not used directly for NLEIGS because its matrix-square-root
+interpolation path can fail in this target region.
 
-The default sparse comparison is `schrodinger_movebc` with `n=50000`, contour
+`schrodinger_movebc` is an additional sparse comparison with `n=50000`, contour
 center `-35`, radius `4.2`, `m=8`, `nodes=24`, `iter=6`, `store=false`, and an
 absolute action-residual tolerance of `1e-5`. Unlike `gun`, the FEAST side is
 implemented as a native gallery operator rather than a wrapper around NEP-PACK.

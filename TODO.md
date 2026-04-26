@@ -44,7 +44,7 @@
 - [ ] There is now a BLAS interface that will allow us to do iterative eigenvalue problems without re-allocating. Being able to fully pre-allocate is a large performance concern here.
   - <https://github.com/DynareJulia/FastLapackInterface.jl>
   - Nonlinear FEAST allocation note: `nlfeast!` now accepts FEAST-native nonlinear operator objects. The preferred contract is `operator_prototype(op)`, `materialize!(M, op, z)` for explicit shifted matrices, and `mul!(Y, op, z, V)` for action-style application. The old `T(z)` closure path remains available through `matrix_operator(T, prototype)` or direct callable compatibility, but it is not the performance-oriented interface.
-  - Residual action note: `nlfeast!` and `distributed_nlfeast!` now accept an expert `residual_update=(res, X, R, Λ) -> ...` hook for NEPs where residuals should use matrix-vector actions instead of materializing `T(λ)`. This is useful for the NEP-PACK gun problem. NEP-PACK does have `compute_Mlincomb!`, but in the current API it does not take caller-owned output storage and the native gun type falls back through a sum implementation, so it is not a general nonallocating `T!(λ, V)` replacement.
+  - Residual action note: `nlfeast!` and `distributed_nlfeast!` now accept an expert `residual_update=(res, X, R, Λ) -> ...` hook for NEPs where residuals should use matrix-vector actions instead of materializing `T(λ)`. This is useful for the gun problem. NEP-PACK does have `compute_Mlincomb!`, but in the current API it does not take caller-owned output storage; the NLEIGS experiment now uses our native gun gallery action for residual checks instead.
 
 - [ ] Revisit parallelism
   - We have BLAS level parallelism, but once we solve the above we need to investigate how we can parallelize at the contour level. Each node of the quadrature is essentially a separate problem. The difficulty is in managing memory across iterations; we must save LU factorizations for example in the variant where this is feasible to save.
@@ -99,8 +99,8 @@
     available NEP gallery problem. Current direction: one small dense sanity
     problem (`butterfly`), one large dense polynomial problem (`pep0`, default
     size 3000, center 0, radius 0.095, m roughly 2x the observed interior count),
-    and one large sparse problem (`schrodinger_movebc`, default size 50000,
-    center -35, radius 4.2, m=8, nodes=24) now that sparse NLFEAST has a first
+    and one sparse NLEVP benchmark problem (`gun`, fixed size 9956, center
+    140000, radius 30000, m=36, nodes=8) now that sparse NLFEAST has a first
     direct-solver path.
   - Current `pep0` NLEIGS observation: even with BLAS threading and larger block
     sizes, NLEIGS is sensitive to the target radius. At radius 0.1, FEAST
@@ -117,10 +117,11 @@
   - Future contour-abstraction work should let NLFEAST accept explicit custom
     contours, so we can test FEAST on exactly the same polygonal target sets
     where NLEIGS struggles.
-  - Sparse NLFEAST now has a first sparse-direct path. The native
-    `schrodinger_movebc` gallery problem is part of the default NLEIGS
-    comparison set; `gun` remains an explicit exploratory selector until its
-    region/subspace/node settings are tuned.
+  - Sparse NLFEAST now has a first sparse-direct path. `gun` is part of the
+    default NLEIGS comparison set using a native FEAST gallery operator and a
+    low-rank-factorized NLEIGS representation. The scalable native
+    `schrodinger_movebc` gallery problem remains available as an explicit
+    exploratory selector.
 
 - [ ] Resurrect Julia bindings for the upstream FEAST library
   - Revisit the old Julia BinaryBuilder bindings work.
