@@ -112,12 +112,13 @@ function DenseDistributedFeastPlan(
     nodes::Integer=8,
     c=complex(0.0, 0.0),
     r=1.0,
+    contour=nothing,
     store=false,
     worker_ids=_default_feast_worker_ids(),
     worker_blas_threads::Integer=1,
     stats::Union{Nothing, DenseDistributedFeastStats}=nothing,
 )
-    contour = circular_contour_trapezoidal(c, r, nodes)
+    contour = contour === nothing ? circular_contour_trapezoidal(c, r, nodes) : contour
     DenseDistributedFeastPlan(
         A,
         m₀,
@@ -214,12 +215,13 @@ function DenseDistributedGeneralizedFeastPlan(
     nodes::Integer=8,
     c=complex(0.0, 0.0),
     r=1.0,
+    contour=nothing,
     store=false,
     worker_ids=_default_feast_worker_ids(),
     worker_blas_threads::Integer=1,
     stats::Union{Nothing, DenseDistributedFeastStats}=nothing,
 )
-    contour = circular_contour_trapezoidal(c, r, nodes)
+    contour = contour === nothing ? circular_contour_trapezoidal(c, r, nodes) : contour
     DenseDistributedGeneralizedFeastPlan(
         A,
         B,
@@ -322,12 +324,13 @@ function DenseDistributedDualGeneralizedFeastPlan(
     nodes::Integer=8,
     c=complex(0.0, 0.0),
     r=1.0,
+    contour=nothing,
     store=false,
     worker_ids=_default_feast_worker_ids(),
     worker_blas_threads::Integer=1,
     stats::Union{Nothing, DenseDistributedFeastStats}=nothing,
 )
-    contour = circular_contour_trapezoidal(c, r, nodes)
+    contour = contour === nothing ? circular_contour_trapezoidal(c, r, nodes) : contour
     DenseDistributedDualGeneralizedFeastPlan(
         A,
         B,
@@ -448,6 +451,7 @@ function distributed_feast!(
     iter::Integer=10,
     c=complex(0.0, 0.0),
     r=1.0,
+    contour=nothing,
     ϵ=1e-12,
     debug=false,
     store=false,
@@ -455,7 +459,7 @@ function distributed_feast!(
     worker_blas_threads::Integer=1,
     stats::Union{Nothing, DenseDistributedFeastStats}=nothing,
 )
-    contour = circular_contour_trapezoidal(c, r, nodes)
+    contour = contour === nothing ? circular_contour_trapezoidal(c, r, nodes) : contour
     distributed_feast!(
         X,
         A,
@@ -621,6 +625,7 @@ function distributed_gen_feast!(
     iter::Integer=10,
     c=complex(0.0, 0.0),
     r=1.0,
+    contour=nothing,
     ϵ=1e-12,
     debug=false,
     store=false,
@@ -628,7 +633,7 @@ function distributed_gen_feast!(
     worker_blas_threads::Integer=1,
     stats::Union{Nothing, DenseDistributedFeastStats}=nothing,
 )
-    contour = circular_contour_trapezoidal(c, r, nodes)
+    contour = contour === nothing ? circular_contour_trapezoidal(c, r, nodes) : contour
     distributed_gen_feast!(
         X,
         A,
@@ -800,6 +805,7 @@ function distributed_dual_gen_feast!(
     iter::Integer=10,
     c=complex(0.0, 0.0),
     r=1.0,
+    contour=nothing,
     ϵ=1e-12,
     debug=false,
     store=false,
@@ -807,7 +813,7 @@ function distributed_dual_gen_feast!(
     worker_blas_threads::Integer=1,
     stats::Union{Nothing, DenseDistributedFeastStats}=nothing,
 )
-    contour = circular_contour_trapezoidal(c, r, nodes)
+    contour = contour === nothing ? circular_contour_trapezoidal(c, r, nodes) : contour
     distributed_dual_gen_feast!(
         Xr,
         Xl,

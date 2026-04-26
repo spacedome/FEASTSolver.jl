@@ -1,5 +1,13 @@
 abstract type Contour end
 
+struct MissingContourPredicate end
+
+function _missing_contour_predicate_error()
+    error("CustomContour requires an inside predicate for eigenvalue classification; construct it as CustomContour(nodes, weights; inside=z -> ...)")
+end
+
+(::MissingContourPredicate)(λ) = _missing_contour_predicate_error()
+
 struct CircularContour{C<:Number,R<:Real,N<:AbstractArray,W<:AbstractArray} <: Contour
     c::C    # center
     r::R    # radius
@@ -16,13 +24,27 @@ struct RectangularContour{B<:Number,T<:Number,N<:AbstractArray,W<:AbstractArray}
         (real(bl) < real(tr) && imag(bl) < imag(tr)) ? new{B,T,N,W}(bl, tr, n, w) : error("Invalid corners")
 end
 
-### TODO - need in_contour method for CustomContour
-struct CustomContour{N<:AbstractArray,W<:AbstractArray} <: Contour
+struct CustomContour{N<:AbstractArray,W<:AbstractArray,I} <: Contour
     nodes::N
     weights::W
+    inside::I
 end
 
 length(contour::Contour) = length(contour.nodes)
+contour_nodes(contour::Contour) = contour.nodes
+contour_weights(contour::Contour) = contour.weights
+
+function _check_contour_nodes_weights(nodes, weights)
+    length(nodes) == length(weights) || error("contour nodes and weights must have the same length")
+    !isempty(nodes) || error("contour must have at least one node")
+    nothing
+end
+
+function CustomContour(nodes::N, weights::W; inside=nothing) where {N<:AbstractArray,W<:AbstractArray}
+    _check_contour_nodes_weights(nodes, weights)
+    predicate = inside === nothing ? MissingContourPredicate() : inside
+    CustomContour{N,W,typeof(predicate)}(nodes, weights, predicate)
+end
 
 function circular_contour_trapezoidal(c, r, N=16)
     θ = LinRange(π/N, 2*π-π/N, N)
@@ -116,6 +138,21 @@ function in_contour!(inside::AbstractVector{Bool}, λ::AbstractVector, contour::
         inside[i] =
             real(contour.bottom_left) < real(λ[i]) < real(contour.top_right) &&
             imag(contour.bottom_left) < imag(λ[i]) < imag(contour.top_right)
+    end
+    inside
+end
+
+function in_contour(λ::Number, contour::CustomContour)
+    Bool(contour.inside(λ))
+end
+
+function in_contour(λ::AbstractArray, contour::CustomContour)
+    map(z -> Bool(contour.inside(z)), λ)
+end
+
+function in_contour!(inside::AbstractVector{Bool}, λ::AbstractVector, contour::CustomContour)
+    @inbounds for i in eachindex(λ)
+        inside[i] = Bool(contour.inside(λ[i]))
     end
     inside
 end

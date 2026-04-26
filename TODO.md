@@ -33,7 +33,9 @@
     - First-class: dense standard `feast!`, dense generalized `gen_feast!`, and dense non-Hermitian/generalized dual `dual_gen_feast!`, all with clean contour handling, stable tests, and low allocation per iteration.
     - First-class nonlinear: keep `nlfeast!`/Beyn-style nonlinear variants in scope, but test and document them separately from linear dense FEAST.
     - API boundary: export the first-class dense serial family, the canonical nonlinear prototype, and the explicit distributed FEAST plan/stat types. Keep unfinished IFEAST, iterative nonlinear, and moment/SS experiments available as qualified `FEASTSolver.*` names rather than treating them as the default user interface.
-    - Near-term: make sparse matrices work through the same dense-facing API only where the shifted solve abstraction is clean; do not copy the FORTRAN CSR API shape into Julia unless performance forces it.
+    - Near-term: make sparse matrices work through the same dense-facing API only where the shifted solve abstraction is clean; do not copy the FORTRAN CSR API shape into Julia unless performance forces it. First pass exists for standard `feast!(X, A::AbstractSparseMatrix)` with `SparseDirectSolver()` and an experimental `SparseBiCGSTABSolver()`.
+    - Sparse direct profiling note: Julia's UMFPACK wrapper stores reusable solve workspace on `UmfpackLU` and supports `lu!(F, A; reuse_symbolic=true)`, but numeric factorization still allocates a new UMFPACK numeric object. Sparse standard FEAST now avoids sparse shift-structure allocation and reuses symbolic analysis in `store=false`; remaining direct-solver allocation is dominated by numeric factorization unless `store=true` caches factors.
+    - Later: generalized and dual sparse linear FEAST should reuse the sparse solver policy once standard sparse FEAST has enough tests and allocation/performance measurements.
     - Later: iterative FEAST/IFEAST, after dense and sparse-direct variants have shared workspace abstractions and meaningful convergence diagnostics.
     - Later: contour-level parallelism using Julia mechanisms rather than MPI-first PFEAST compatibility.
     - Defer by default: banded-specific APIs, unless a real benchmark shows band storage/factorization is worth the extra public surface.
@@ -41,7 +43,7 @@
 
 - [ ] There is now a BLAS interface that will allow us to do iterative eigenvalue problems without re-allocating. Being able to fully pre-allocate is a large performance concern here.
   - <https://github.com/DynareJulia/FastLapackInterface.jl>
-  - Nonlinear FEAST allocation note: `nlfeast!` now reuses LAPACK workspaces, but the function-valued nonlinear operator API still allocates because users pass `T(z)` and dense shifted/factored matrices must be materialized. Consider an optional expert hook `T!(M, z)` later, with `T(z)` remaining the canonical mathematical interface and `T!` only used when supplied. This is especially relevant for user-defined dense nonlinear problems; `NonlinearEigenproblems.jl` generally exposes allocating full-matrix `compute_Mder(nep, λ)` plus matrix-vector-style `compute_Mlincomb`/`compute_MM`, not a universal `compute_Mder!(M, nep, λ)` convention we can rely on.
+  - Nonlinear FEAST allocation note: `nlfeast!` now accepts FEAST-native nonlinear operator objects. The preferred contract is `operator_prototype(op)`, `materialize!(M, op, z)` for explicit shifted matrices, and `mul!(Y, op, z, V)` for action-style application. The old `T(z)` closure path remains available through `matrix_operator(T, prototype)` or direct callable compatibility, but it is not the performance-oriented interface.
   - Residual action note: `nlfeast!` and `distributed_nlfeast!` now accept an expert `residual_update=(res, X, R, Λ) -> ...` hook for NEPs where residuals should use matrix-vector actions instead of materializing `T(λ)`. This is useful for the NEP-PACK gun problem. NEP-PACK does have `compute_Mlincomb!`, but in the current API it does not take caller-owned output storage and the native gun type falls back through a sum implementation, so it is not a general nonallocating `T!(λ, V)` replacement.
 
 - [ ] Revisit parallelism
@@ -73,6 +75,8 @@
 
 - [ ] Contour abstraction
   - The default should always be circular contour with trapezoidal rule quadrature.
+  - First pass: dense serial FEAST, canonical `nlfeast!`, and distributed dense FEAST entrypoints accept explicit `Contour` objects, while the old `c`/`r`/`nodes` convenience path remains circular trapezoidal.
+  - `CustomContour(nodes, weights; inside=z -> ...)` now supports custom quadrature rules with explicit eigenvalue classification. This is intentionally required because arbitrary quadrature nodes and weights do not define a region by themselves.
   - The question is how to do other shapes: we could copy big FEAST, or we could think about conformal mappings on the circle. A review paper may cover this, possibly the nonlinear eigenvalue review paper in SIAM.
   - Either way we want a clean abstraction for custom contours that gets completely out of the way for people who just want it to work.
   - May have to revisit stochastic estimation for auto contour finding. Big FEAST may have subspace resizing.
@@ -84,6 +88,38 @@
 
 - [ ] Benchmarking
   - There is a lot to benchmark.
+  - Benchmark tooling: `benchmark/` already uses `BenchmarkTools.jl` for local
+    dense serial/distributed FEAST timing. Keep using it for repeatable
+    micro/meso benchmarks where `@benchmarkable`, sample counts, medians, and
+    allocation estimates are useful. Keep publication-style algorithm
+    comparisons, such as NLEIGS vs NLFEAST, under `experiments/` with explicit
+    markdown logs because those runs need tuned regions, warmup policy, solver
+    metadata, and interpretation beyond a single timing distribution.
+  - The NLEIGS comparison should stay curated rather than collecting every
+    available NEP gallery problem. Current direction: one small dense sanity
+    problem (`butterfly`), one large dense polynomial problem (`pep0`, default
+    size 3000, center 0, radius 0.095, m roughly 2x the observed interior count),
+    and one future large sparse problem once sparse NLFEAST is deliberately
+    implemented.
+  - Current `pep0` NLEIGS observation: even with BLAS threading and larger block
+    sizes, NLEIGS is sensitive to the target radius. At radius 0.1, FEAST
+    recovers a wider 32-eigenpair region while NLEIGS recovers only a subset; at
+    radius 0.095, both methods recover 27 interior eigenpairs under the
+    no-store/no-reuse memory policy. We tried target radii 0.08/0.09/0.095/0.1/0.12,
+    `blksize=32`, `blksize=96`, `maxit=150`, `maxdgr=300`, `leja=1/2`, and
+    `reusefact=0/1/2`. Aligned 32-point NLEIGS at radius 0.1 improves to 18
+    eigenpairs but still misses FEAST's wider 32-eigenpair region; aligned
+    32-point NLEIGS at radius 0.095 with no reuse recovers only 7 eigenpairs, so
+    the robust NLEIGS default remains the unaligned 96-point polygon. Treat this
+    radius/node sensitivity as a comparison result to explain, not as an
+    automatic benchmark failure.
+  - Future contour-abstraction work should let NLFEAST accept explicit custom
+    contours, so we can test FEAST on exactly the same polygonal target sets
+    where NLEIGS struggles.
+  - Sparse NLFEAST is not yet a first-class supported benchmark path. The
+    sparse `gun` NLEVP problem is intentionally disabled in the NLEIGS
+    comparison experiment until sparse factorization/workspace behavior is
+    designed and benchmarked deliberately.
 
 - [ ] Resurrect Julia bindings for the upstream FEAST library
   - Revisit the old Julia BinaryBuilder bindings work.
@@ -138,11 +174,11 @@ This ordering is based on the current code layout:
   - Dense generalized cases for `gen_feast!` and `dual_gen_feast!`.
   - Non-Hermitian cases with known or reference eigenvalues.
   - Nonlinear eigenvalue cases from `NonlinearEigenproblems.jl`.
-  - MatrixDepot / MatrixMarket sparse cases once the basic deterministic tests are organized.
+  - MatrixDepot / MatrixMarket sparse cases once standard sparse `feast!` direct-solver behavior is measured beyond the current deterministic smoke tests.
   - Prefer MatrixDepot cases with useful metadata for the real medium-sized test set.
 
 - [ ] Clean up contour behavior before broadening the algorithm surface
-  - `CustomContour` exists but lacks `in_contour`.
+  - `CustomContour` has `in_contour` support when constructed with an explicit predicate.
   - Rectangular contour constructors have known real-coordinate type bugs.
   - The default user path should remain circular contour plus trapezoidal quadrature.
   - Custom contours should be possible without making the simple case harder.

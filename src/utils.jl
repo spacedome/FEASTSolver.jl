@@ -185,7 +185,7 @@ function normalize_columns!(X::AbstractMatrix)
     X
 end
 
-function update_R!(X::AbstractMatrix, R::AbstractMatrix, Λ::Array, T::Function)
+function update_R!(X::AbstractMatrix, R::AbstractMatrix, Λ::Array, T)
     normalize_columns!(X)
     for j in axes(X, 2)
         R[:, j] .= T(Λ[j]) * X[:, j]
@@ -197,7 +197,7 @@ function update_nonlinear_residuals!(
     X::AbstractMatrix,
     R::AbstractMatrix,
     Λ::AbstractVector,
-    T::Function,
+    T,
     Tλ::AbstractMatrix,
     x::AbstractVector,
     y::AbstractVector,
@@ -227,7 +227,7 @@ function update_nonlinear_residuals!(
     X::AbstractMatrix,
     R::AbstractMatrix,
     Λ::AbstractVector,
-    T::Function,
+    T,
     x::AbstractVector,
     y::AbstractVector,
 )

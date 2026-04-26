@@ -32,11 +32,13 @@ mutable struct DenseFeastStats
     rayleigh_ritz_ns::UInt64
     residual_ns::UInt64
     filter_ns::UInt64
+    stored_factor_count::Int
+    stored_factor_bytes::Int
     iteration_log::Vector{DenseFeastIterationStats}
 end
 
 function DenseFeastStats()
-    DenseFeastStats(0, 0, 0, 0, 0, 0, DenseFeastIterationStats[])
+    DenseFeastStats(0, 0, 0, 0, 0, 0, 0, 0, DenseFeastIterationStats[])
 end
 
 function reset!(stats::DenseFeastStats)
@@ -46,6 +48,8 @@ function reset!(stats::DenseFeastStats)
     stats.rayleigh_ritz_ns = 0
     stats.residual_ns = 0
     stats.filter_ns = 0
+    stats.stored_factor_count = 0
+    stats.stored_factor_bytes = 0
     empty!(stats.iteration_log)
     stats
 end
@@ -62,8 +66,18 @@ function Base.show(io::IO, stats::DenseFeastStats)
         "rayleigh_ritz=", _dense_stats_seconds(stats.rayleigh_ritz_ns), "s, ",
         "residual=", _dense_stats_seconds(stats.residual_ns), "s, ",
         "filter=", _dense_stats_seconds(stats.filter_ns), "s, ",
+        "stored_factor_count=", stats.stored_factor_count, ", ",
+        "stored_factor_bytes=", stats.stored_factor_bytes, ", ",
         "logged_iterations=", length(stats.iteration_log), ")",
     )
+end
+
+_record_stored_factor_memory!(::Nothing, factors) = nothing
+
+function _record_stored_factor_memory!(stats::DenseFeastStats, factors)
+    stats.stored_factor_count = length(factors)
+    stats.stored_factor_bytes = sum(Base.summarysize, factors)
+    nothing
 end
 
 function _record_dense_feast_iteration!(

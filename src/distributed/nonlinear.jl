@@ -24,6 +24,7 @@ mutable struct DenseDistributedNonlinearFeastPlan <: AbstractDenseDistributedFea
     store::Bool
     materialize_nodes::Bool
     matrix_update
+    matrix_prototype
     worker_blas_threads::Int
     factorizer
     left_divider
@@ -62,6 +63,7 @@ mutable struct DenseNonlinearFeastDistributedWorkspace
     factorizer
     left_divider
     matrix_update
+    matrix_prototype
     Tz
     lu_ws
     stored_factors
@@ -75,9 +77,10 @@ function DenseDistributedNonlinearFeastPlan(
     nodes::Integer=8,
     c=complex(0.0, 0.0),
     r=1.0,
+    contour=nothing,
     kwargs...,
 )
-    contour = circular_contour_trapezoidal(c, r, nodes)
+    contour = contour === nothing ? circular_contour_trapezoidal(c, r, nodes) : contour
     DenseDistributedNonlinearFeastPlan(T, n, m₀, contour; kwargs...)
 end
 
@@ -89,6 +92,7 @@ function DenseDistributedNonlinearFeastPlan(
     store=true,
     materialize_nodes=true,
     matrix_update=nothing,
+    matrix_prototype=nothing,
     worker_ids=_default_feast_worker_ids(),
     worker_blas_threads::Integer=1,
     factorizer=lu,
@@ -97,6 +101,7 @@ function DenseDistributedNonlinearFeastPlan(
 )
     n > 0 || error("problem dimension must be positive")
     m₀ > 0 || error("subspace dimension must be positive")
+    matrix_update, matrix_prototype = _nlfeast_operator_storage(T, matrix_update, matrix_prototype)
 
     worker_ids = _normalize_feast_worker_ids(worker_ids)
     isempty(worker_ids) && error("DenseDistributedNonlinearFeastPlan requires worker processes; call addprocs(...) or start Julia with -p")
@@ -149,6 +154,7 @@ function DenseDistributedNonlinearFeastPlan(
         Bool(store),
         Bool(materialize_nodes),
         matrix_update,
+        matrix_prototype,
         Int(worker_blas_threads),
         factorizer,
         left_divider,
@@ -191,9 +197,10 @@ function distributed_nlfeast!(
     iter::Integer;
     c=complex(0.0, 0.0),
     r=1.0,
+    contour=nothing,
     kwargs...,
 )
-    contour = circular_contour_trapezoidal(c, r, nodes)
+    contour = contour === nothing ? circular_contour_trapezoidal(c, r, nodes) : contour
     distributed_nlfeast!(T, X, contour, iter; kwargs...)
 end
 
@@ -205,6 +212,7 @@ function distributed_nlfeast!(
     store=true,
     materialize_nodes=true,
     matrix_update=nothing,
+    matrix_prototype=nothing,
     worker_ids=_default_feast_worker_ids(),
     worker_blas_threads::Integer=1,
     factorizer=lu,
@@ -220,6 +228,7 @@ function distributed_nlfeast!(
         store=store,
         materialize_nodes=materialize_nodes,
         matrix_update=matrix_update,
+        matrix_prototype=matrix_prototype,
         worker_ids=worker_ids,
         worker_blas_threads=worker_blas_threads,
         factorizer=factorizer,
@@ -231,6 +240,45 @@ function distributed_nlfeast!(
     finally
         close(plan)
     end
+end
+
+function distributed_nlfeast!(
+    matrix_update,
+    matrix_prototype::AbstractMatrix,
+    X::AbstractMatrix{ComplexF64},
+    nodes::Integer,
+    iter::Integer;
+    c=complex(0.0, 0.0),
+    r=1.0,
+    contour=nothing,
+    kwargs...,
+)
+    contour = contour === nothing ? circular_contour_trapezoidal(c, r, nodes) : contour
+    distributed_nlfeast!(matrix_update, matrix_prototype, X, contour, iter; kwargs...)
+end
+
+function distributed_nlfeast!(
+    matrix_update,
+    matrix_prototype::AbstractMatrix,
+    X::AbstractMatrix{ComplexF64},
+    contour::Contour,
+    iter::Integer;
+    kwargs...,
+)
+    materializing_T = z -> begin
+        Tz = similar(matrix_prototype)
+        matrix_update(Tz, z)
+        Tz
+    end
+    distributed_nlfeast!(
+        materializing_T,
+        X,
+        contour,
+        iter;
+        matrix_update=matrix_update,
+        matrix_prototype=matrix_prototype,
+        kwargs...,
+    )
 end
 
 function distributed_nlfeast!(
@@ -367,12 +415,12 @@ function distributed_nlfeast!(
 end
 
 function _init_dense_nlfeast_workers!(plan::DenseDistributedNonlinearFeastPlan)
-    nodes = ComplexF64.(plan.contour.nodes)
-    weights = ComplexF64.(plan.contour.weights)
+    nodes = ComplexF64.(contour_nodes(plan.contour))
+    weights = ComplexF64.(contour_weights(plan.contour))
     # Materializing nodes on the master is the most robust path for arbitrary
     # closures. Large no-store runs can disable it so workers build T(z) locally.
     node_matrices = plan.materialize_nodes ? [plan.T(nodes[i]) for i in eachindex(nodes)] : nothing
-    worker_T = node_matrices === nothing ? plan.T : nothing
+    worker_T = node_matrices === nothing && plan.matrix_update === nothing ? plan.T : nothing
     for (part_index, pid) in enumerate(plan.worker_ids)
         assigned_matrices = node_matrices === nothing ? nothing : node_matrices[plan.assignments[part_index]]
         plan.futures[part_index] = remotecall(
@@ -391,6 +439,7 @@ function _init_dense_nlfeast_workers!(plan::DenseDistributedNonlinearFeastPlan)
             plan.factorizer,
             plan.left_divider,
             plan.matrix_update,
+            plan.matrix_prototype,
         )
     end
     for future in plan.futures
@@ -413,6 +462,7 @@ function _init_dense_nlfeast_worker!(
     factorizer,
     left_divider,
     matrix_update,
+    matrix_prototype,
 )
     old_blas_threads = BLAS.get_num_threads()
     BLAS.set_num_threads(worker_blas_threads)
@@ -428,18 +478,34 @@ function _init_dense_nlfeast_worker!(
     lu_ws = nothing
     stored_factors = nothing
     if store
-        stored_factors = if node_matrices === nothing
+        stored_factors = if matrix_update !== nothing
+            matrix_prototype === nothing && error("matrix_prototype is required when matrix_update is provided")
+            map(node_indices) do i
+                Tbuf = similar(matrix_prototype)
+                matrix_update(Tbuf, nodes[i])
+                factorizer(Tbuf)
+            end
+        elseif node_matrices === nothing
             [factorizer(T(nodes[i])) for i in node_indices]
         else
             [factorizer(node_matrices[i]) for i in eachindex(node_indices)]
         end
     else
-        if node_matrices === nothing && (matrix_update !== nothing || (factorizer === lu && left_divider === ldiv!))
-            Tz = zeros(ComplexF64, N, N)
-            lu_ws = dense_lapack_lu_workspace(Tz)
+        if matrix_update !== nothing
+            matrix_prototype === nothing && error("matrix_prototype is required when matrix_update is provided")
+            Tz = similar(matrix_prototype)
+            if Tz isa StridedMatrix &&
+                    eltype(Tz) <: DenseLapackScalar &&
+                    factorizer === lu &&
+                    left_divider === ldiv!
+                lu_ws = dense_lapack_lu_workspace(Tz)
+            end
         else
             T_prototype = node_matrices === nothing ? T(nodes[node_indices[1]]) : node_matrices[1]
-            if T_prototype isa StridedMatrix && eltype(T_prototype) <: DenseLapackScalar
+            if T_prototype isa StridedMatrix &&
+                    eltype(T_prototype) <: DenseLapackScalar &&
+                    factorizer === lu &&
+                    left_divider === ldiv!
                 Tz = similar(T_prototype)
                 lu_ws = dense_lapack_lu_workspace(Tz)
             end
@@ -461,6 +527,7 @@ function _init_dense_nlfeast_worker!(
         factorizer,
         left_divider,
         matrix_update,
+        matrix_prototype,
         Tz,
         lu_ws,
         stored_factors,
@@ -532,15 +599,23 @@ function _dense_nlfeast_solve!(Y, ws::DenseNonlinearFeastDistributedWorkspace, l
         start_ns = time_ns()
         ws.left_divider(Y, ws.stored_factors[local_index], rhs)
         linsolve_ns = time_ns() - start_ns
+    elseif ws.matrix_update !== nothing
+        start_ns = time_ns()
+        z = ws.nodes[ws.node_indices[local_index]]
+        ws.matrix_update(ws.Tz, z)
+        materialize_ns = time_ns() - start_ns
+        start_ns = time_ns()
+        if ws.lu_ws === nothing
+            Y .= ws.Tz \ rhs
+        else
+            dense_lapack_linsolve!(Y, ws.Tz, rhs, ws.lu_ws)
+        end
+        linsolve_ns = time_ns() - start_ns
     elseif ws.lu_ws !== nothing
         if ws.node_matrices === nothing
             start_ns = time_ns()
             z = ws.nodes[ws.node_indices[local_index]]
-            if ws.matrix_update === nothing
-                copyto!(ws.Tz, ws.T(z))
-            else
-                ws.matrix_update(ws.Tz, z)
-            end
+            copyto!(ws.Tz, ws.T(z))
             materialize_ns = time_ns() - start_ns
         else
             copyto!(ws.Tz, ws.node_matrices[local_index])

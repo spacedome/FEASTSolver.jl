@@ -9,17 +9,21 @@ using Random
 import NonlinearEigenproblems: create_linsolver, lin_solve
 
 const ENV_DEFAULTS = Dict(
-    "FEAST_EXPERIMENT_PROBLEMS" => "butterfly",
+    "FEAST_EXPERIMENT_PROBLEMS" => "butterfly,pep0",
     "FEAST_EXPERIMENT_METHODS" => "feast,nleigs",
-    "FEAST_EXPERIMENT_PROCS" => "0,2",
+    "FEAST_EXPERIMENT_PROCS" => "0,4,8",
     "FEAST_EXPERIMENT_FORMAT" => "pretty",
+    "FEAST_EXPERIMENT_COLOR" => "auto",
+    "FEAST_EXPERIMENT_REPEATS" => "1",
     "FEAST_EXPERIMENT_FEAST_CONFIGS" => "",
     "FEAST_EXPERIMENT_SEED" => "9901",
-    "FEAST_EXPERIMENT_PROBLEM_N" => "",
+    "FEAST_EXPERIMENT_PROBLEM_N" => "3000",
     "FEAST_EXPERIMENT_HADELER_ALPHA" => "100",
     "FEAST_EXPERIMENT_CONTOUR_CENTER" => "",
     "FEAST_EXPERIMENT_CONTOUR_RADIUS" => "",
-    "FEAST_EXPERIMENT_BLAS_THREADS" => "1",
+    "FEAST_EXPERIMENT_NLEIGS_CONTOUR_CENTER" => "",
+    "FEAST_EXPERIMENT_NLEIGS_CONTOUR_RADIUS" => "",
+    "FEAST_EXPERIMENT_BLAS_THREADS" => string(Sys.CPU_THREADS),
     "FEAST_EXPERIMENT_WORKER_BLAS_THREADS" => "1",
     "FEAST_EXPERIMENT_FEAST_NODES" => "",
     "FEAST_EXPERIMENT_FEAST_ITER" => "",
@@ -27,16 +31,17 @@ const ENV_DEFAULTS = Dict(
     "FEAST_EXPERIMENT_FEAST_MATERIALIZE_NODES" => "false",
     "FEAST_EXPERIMENT_M" => "",
     "FEAST_EXPERIMENT_WARMUP" => "true",
-    "FEAST_EXPERIMENT_DISTRIBUTED_WARMUP" => "true",
-    "FEAST_EXPERIMENT_NLEIGS_MAXIT" => "100",
+    "FEAST_EXPERIMENT_VALIDATE_T_UPDATE" => "true",
+    "FEAST_EXPERIMENT_NLEIGS_MAXIT" => "",
     "FEAST_EXPERIMENT_NLEIGS_MINIT" => "20",
     "FEAST_EXPERIMENT_NLEIGS_MAXDGR" => "100",
     "FEAST_EXPERIMENT_NLEIGS_TOL" => "1e-8",
-    "FEAST_EXPERIMENT_NLEIGS_POLYGON_POINTS" => "96",
-    "FEAST_EXPERIMENT_NLEIGS_BLKSIZE" => "20",
+    "FEAST_EXPERIMENT_NLEIGS_POLYGON_POINTS" => "",
+    "FEAST_EXPERIMENT_NLEIGS_POLYGON_PHASE" => "",
+    "FEAST_EXPERIMENT_NLEIGS_BLKSIZE" => "",
     "FEAST_EXPERIMENT_NLEIGS_STATIC" => "false",
     "FEAST_EXPERIMENT_NLEIGS_LEJA" => "1",
-    "FEAST_EXPERIMENT_NLEIGS_REUSEFACT" => "0",
+    "FEAST_EXPERIMENT_NLEIGS_REUSEFACT" => "auto",
 )
 
 env(name) = get(ENV, name, ENV_DEFAULTS[name])
@@ -48,9 +53,61 @@ problem_n(default) = isempty(env("FEAST_EXPERIMENT_PROBLEM_N")) ? default : pars
 blas_threads() = parse(Int, env("FEAST_EXPERIMENT_BLAS_THREADS"))
 worker_blas_threads() = parse(Int, env("FEAST_EXPERIMENT_WORKER_BLAS_THREADS"))
 feast_materialize_nodes() = parse_bool("FEAST_EXPERIMENT_FEAST_MATERIALIZE_NODES")
-distributed_warmup() = parse_bool("FEAST_EXPERIMENT_WARMUP") && parse_bool("FEAST_EXPERIMENT_DISTRIBUTED_WARMUP")
+pep0_default_subspace(n) = max(24, 2 * ceil(Int, 0.01 * n))
 
-const DISTRIBUTED_FEAST_WARMED = Set{Tuple{String,Int,Int,Int,Bool,Bool}}()
+function problem_int(problem, env_name, field, fallback)
+    value = env(env_name)
+    isempty(value) || return parse(Int, value)
+    field in propertynames(problem) && return getproperty(problem, field)
+    fallback
+end
+
+nleigs_center(problem) = isempty(env("FEAST_EXPERIMENT_NLEIGS_CONTOUR_CENTER")) ? problem.c : parse(ComplexF64, env("FEAST_EXPERIMENT_NLEIGS_CONTOUR_CENTER"))
+nleigs_radius(problem) = isempty(env("FEAST_EXPERIMENT_NLEIGS_CONTOUR_RADIUS")) ? problem.r : parse(Float64, env("FEAST_EXPERIMENT_NLEIGS_CONTOUR_RADIUS"))
+
+function nleigs_polygon_phase(problem, polygon_points)
+    value = env("FEAST_EXPERIMENT_NLEIGS_POLYGON_PHASE")
+    isempty(value) && (:nleigs_polygon_phase in propertynames(problem)) && return getproperty(problem, :nleigs_polygon_phase) == :feast_nodes ? π / polygon_points : 0.0
+    isempty(value) && return 0.0
+    value == "vertices" && return 0.0
+    value == "feast_nodes" && return π / polygon_points
+    error("FEAST_EXPERIMENT_NLEIGS_POLYGON_PHASE must be vertices or feast_nodes")
+end
+
+function color_enabled()
+    output_csv() && return false
+    color = lowercase(env("FEAST_EXPERIMENT_COLOR"))
+    color == "always" && return true
+    color == "never" && return false
+    color == "auto" || error("FEAST_EXPERIMENT_COLOR must be auto, always, or never")
+    !haskey(ENV, "NO_COLOR") && !isempty(get(ENV, "TERM", "")) && get(ENV, "TERM", "") != "dumb"
+end
+
+paint(s, code) = color_enabled() ? "\e[$(code)m$(s)\e[0m" : string(s)
+bold(s) = paint(s, "1")
+dim(s) = paint(s, "2")
+green(s) = paint(s, "32")
+yellow(s) = paint(s, "33")
+red(s) = paint(s, "31")
+cyan(s) = paint(s, "36")
+magenta(s) = paint(s, "35")
+bright_orange(s) = paint(s, "1;38;5;208")
+
+function experiment_repeats()
+    n = parse(Int, env("FEAST_EXPERIMENT_REPEATS"))
+    n > 0 || error("FEAST_EXPERIMENT_REPEATS must be positive")
+    n
+end
+
+function nleigs_reusefact(problem)
+    value = lowercase(strip(env("FEAST_EXPERIMENT_NLEIGS_REUSEFACT")))
+    if value == "auto"
+        return (problem.feast_store ? 1 : 0), "auto"
+    end
+    parsed = parse(Int, value)
+    parsed in (0, 1, 2) || error("FEAST_EXPERIMENT_NLEIGS_REUSEFACT must be auto, 0, 1, or 2")
+    parsed, "explicit"
+end
 
 mutable struct CountingLinSolverCreator{C} <: LinSolverCreator
     inner::C
@@ -89,9 +146,9 @@ function ensure_workers(count, blas_threads)
     external_workers()[1:count]
 end
 
-function circle_polygon(c, r, n)
+function circle_polygon(c, r, n; phase=0.0)
     θ = range(0, 2π; length=n + 1)[1:end-1]
-    ComplexF64[c + r * cis(t) for t in θ]
+    ComplexF64[c + r * cis(t + phase) for t in θ]
 end
 
 function initial_subspace(n, m, seed)
@@ -101,23 +158,6 @@ end
 function load_butterfly_matrices()
     root = dirname(dirname(@__DIR__))
     [ComplexF64.(Matrix(mmread(joinpath(root, "data", "butterflyM$(i).mtx")))) for i in 0:4]
-end
-
-function polynomial_operator(A)
-    z -> z^4 * A[5] + z^3 * A[4] + z^2 * A[3] + z * A[2] + A[1]
-end
-
-function polynomial_operator_update(A)
-    function update!(Tz, z)
-        copyto!(Tz, A[1])
-        power = z
-        @inbounds for i in 2:length(A)
-            Ai = A[i]
-            @. Tz = Tz + power * Ai
-            power *= z
-        end
-        Tz
-    end
 end
 
 function relative_residual(T, λ, x)
@@ -241,7 +281,7 @@ end
 function problem_config(name)
     if name == "butterfly"
         A = load_butterfly_matrices()
-        T = polynomial_operator(A)
+        T = feast_gallery("polynomial", A)
         nep = PEP(A)
         n = size(A[1], 1)
         return (;
@@ -262,37 +302,15 @@ function problem_config(name)
             nleigs_singularities=[Inf],
             residual=(λ, x) -> relative_residual(T, λ, x),
             residual_update=nothing,
-            T_update=polynomial_operator_update(A),
+            T_update=matrix_materializer(T),
+            T_prototype=operator_prototype(T),
         )
     elseif name == "gun"
-        nep = nep_gallery("nlevp_native_gun")
-        T = z -> compute_Mder(nep, z)
-        n = size(nep, 1)
-        residual, residual_update = gun_residual_tools(nep)
-        return (;
-            name,
-            T,
-            nep,
-            n,
-            c=140000.0 + 0.0im,
-            r=30000.0,
-            feast_label="default",
-            m=32,
-            feast_nodes=32,
-            feast_iter=3,
-            feast_store=false,
-            feast_tol=1e-8,
-            spurious=1e-5,
-            nleigs_tol=1e-8,
-            nleigs_singularities=[Inf],
-            residual,
-            residual_update,
-            T_update=nothing,
-        )
+        error("gun is disabled in this experiment until sparse NLFEAST support is implemented and benchmarked deliberately")
     elseif name == "loaded_string"
         n = problem_n(500)
+        T = feast_gallery("nlevp_native_loaded_string", n, 1, 1)
         nep = nep_gallery("nlevp_native_loaded_string", n, 1, 1)
-        T = z -> compute_Mder(nep, z)
         return (;
             name,
             T,
@@ -311,13 +329,14 @@ function problem_config(name)
             nleigs_singularities=[1.0],
             residual=(λ, x) -> relative_residual(T, λ, x),
             residual_update=nothing,
-            T_update=nothing,
+            T_update=matrix_materializer(T),
+            T_prototype=operator_prototype(T),
         )
     elseif name == "hadeler"
         n = problem_n(500)
         alpha = parse(Int, env("FEAST_EXPERIMENT_HADELER_ALPHA"))
+        T = feast_gallery("nlevp_native_hadeler", alpha, n)
         nep = nep_gallery("nlevp_native_hadeler", alpha, n)
-        T = z -> compute_Mder(nep, z)
         residual, residual_update = spmf_action_residual_tools(nep)
         return (;
             name,
@@ -337,60 +356,96 @@ function problem_config(name)
             nleigs_singularities=[Inf],
             residual,
             residual_update,
-            T_update=nothing,
+            T_update=matrix_materializer(T),
+            T_prototype=operator_prototype(T),
         )
     elseif name == "pep0"
         n = problem_n(500)
         nep = nep_gallery("pep0", n)
-        T = z -> compute_Mder(nep, z)
+        T = feast_gallery("polynomial", nep.A)
         residual, residual_update = pep_action_residual_tools(nep)
+        m = pep0_default_subspace(n)
+        # Region/config search notes, kept here to avoid redoing the same sweep:
+        # * radius 0.2 at n=1200 had roughly 50 interior eigenvalues; m=44/60
+        #   was too small, and 16 nodes left spurious/edge values.
+        # * radius 0.1 at n=1200 gave a clean 11-eigenvalue region with
+        #   m=24, nodes=32, and two RII steps.
+        # * radius 0.1 at n=3000 with m=60, nodes=32, store=false converged
+        #   cleanly with 32 interior eigenpairs on 8 workers, but NLEIGS only
+        #   recovered a small subset.
+        # * radius 0.095 at n=3000 gives a better apples-to-apples comparison:
+        #   FEAST and NLEIGS both recover 27 interior eigenpairs under the
+        #   no-store/no-reuse memory policy. This radius sensitivity is part of
+        #   the benchmark finding and should be reported.
+        # NLEIGS tuning tried here included target radii 0.08/0.09/0.095/0.1/0.12,
+        # 32/96 polygon points, aligned/unaligned polygon phases, blksize 32/96,
+        # maxit 150, maxdgr 300, leja 1/2, and reusefact 0/1/2. At radius 0.1,
+        # aligned 32-point NLEIGS improved from the earlier small subset to 18
+        # eigenpairs, but still did not recover FEAST's 32-eigenpair region.
+        # At radius 0.095, aligned 32-point NLEIGS with reusefact=0 recovered
+        # only 7 eigenpairs in the full benchmark, so the default stays at the
+        # robust unaligned 96-point polygon.
         return (;
             name,
             T,
             nep,
             n,
             c=0.0 + 0.0im,
-            r=0.2,
+            r=0.095,
             feast_label="default",
-            m=44,
-            feast_nodes=16,
+            m,
+            feast_nodes=32,
             feast_iter=4,
             feast_store=false,
             feast_tol=1e-8,
             spurious=1e-5,
             nleigs_tol=1e-8,
+            nleigs_maxit=150,
+            nleigs_blksize=32,
+            nleigs_polygon_points=96,
             nleigs_singularities=[Inf],
             residual,
             residual_update,
-            T_update=polynomial_operator_update(nep.A),
+            T_update=matrix_materializer(T),
+            T_prototype=operator_prototype(T),
         )
     elseif name == "pep0_sym"
         n = problem_n(500)
-        nep = nep_gallery("pep0_sym", n)
-        T = z -> compute_Mder(nep, z)
+        gallery_nep = nep_gallery("pep0_sym", n)
+        matrices = Matrix.(gallery_nep.A)
+        # NEP-PACK's NLEIGS RK conversion type-asserts the result of vcat(Av...)
+        # against eltype(Av). vcat of Symmetric wrappers is a plain Matrix, so use
+        # the dense coefficients explicitly on both sides of this comparison.
+        nep = PEP(matrices)
+        T = feast_gallery("polynomial", matrices)
         residual, residual_update = pep_action_residual_tools(nep)
+        m = pep0_default_subspace(n)
         return (;
             name,
             T,
             nep,
             n,
             c=0.0 + 0.0im,
-            r=0.2,
+            r=0.095,
             feast_label="default",
-            m=50,
-            feast_nodes=16,
+            m,
+            feast_nodes=32,
             feast_iter=4,
             feast_store=false,
             feast_tol=1e-8,
             spurious=1e-5,
             nleigs_tol=1e-8,
+            nleigs_maxit=150,
+            nleigs_blksize=32,
+            nleigs_polygon_points=96,
             nleigs_singularities=[Inf],
             residual,
             residual_update,
-            T_update=polynomial_operator_update(nep.A),
+            T_update=matrix_materializer(T),
+            T_prototype=operator_prototype(T),
         )
     else
-        error("unknown experiment problem '$name'; expected butterfly, gun, loaded_string, hadeler, pep0, or pep0_sym")
+        error("unknown experiment problem '$name'; expected butterfly, loaded_string, hadeler, pep0, or pep0_sym")
     end
 end
 
@@ -399,10 +454,46 @@ function pretty_seconds(x)
     @sprintf("%.3fs", x)
 end
 
+function pretty_gib(bytes)
+    @sprintf("%.2f GiB", bytes / 1024^3)
+end
+
 function pretty_residual(x)
     isnan(x) && return "NaN"
     @sprintf("%.3e", x)
 end
+
+function median_value(xs)
+    sorted = sort(xs)
+    n = length(sorted)
+    n == 0 && return NaN
+    isodd(n) ? sorted[(n + 1) ÷ 2] : (sorted[n ÷ 2] + sorted[n ÷ 2 + 1]) / 2
+end
+
+function timing_summary(times)
+    (;
+        samples=length(times),
+        elapsed_min_s=minimum(times),
+        elapsed_median_s=median_value(times),
+        elapsed_max_s=maximum(times),
+        elapsed_samples=join((@sprintf("%.6g", t) for t in times), ":"),
+    )
+end
+
+function progress(message)
+    output_csv() && return nothing
+    println("    ", dim(message))
+    flush(stdout)
+    nothing
+end
+
+function is_seconds_key(k)
+    name = String(k)
+    endswith(name, "_s") && name != "elapsed_samples"
+end
+
+cpu_model() = isempty(Sys.cpu_info()) ? "unknown" : Sys.cpu_info()[1].model
+csv_value(x) = replace(string(x), "," => ";")
 
 function csv_extra(extra)
     isempty(pairs(extra)) && return ""
@@ -411,7 +502,26 @@ end
 
 function print_trace(trace)
     isempty(trace) && return
-    println("    trace: ", trace)
+    println("    ", dim("trace:"), " ", dim(trace))
+end
+
+function residual_status(problem, max_converged_inside, converged_count)
+    converged_count == 0 && return yellow("none")
+    text = pretty_residual(max_converged_inside)
+    max_converged_inside < problem.nleigs_tol && return green(text)
+    yellow(text)
+end
+
+function convergence_status(problem, converged_count, spurious_count)
+    if converged_count > 0 && spurious_count == 0
+        green("converged")
+    elseif converged_count > 0
+        yellow("converged + spurious")
+    elseif spurious_count > 0
+        red("spurious")
+    else
+        yellow("partial")
+    end
 end
 
 function summarize_result(problem, method, processes, elapsed, λ, X, residuals; extra=(;))
@@ -421,6 +531,8 @@ function summarize_result(problem, method, processes, elapsed, λ, X, residuals;
     spurious = inside_res .>= problem.spurious
     max_inside = isempty(inside_res) ? NaN : maximum(inside_res)
     min_inside = isempty(inside_res) ? NaN : minimum(inside_res)
+    converged_inside_res = inside_res[converged]
+    max_converged_inside = isempty(converged_inside_res) ? NaN : maximum(converged_inside_res)
     if output_csv()
         println(
             "result",
@@ -441,19 +553,37 @@ function summarize_result(problem, method, processes, elapsed, λ, X, residuals;
     end
 
     process_label = processes == 0 ? "serial" : "$(processes) workers"
-    println("  ", method, " [", problem.feast_label, ", ", process_label, "]")
-    println("    elapsed: ", pretty_seconds(elapsed))
+    inside_count = count(inside)
+    converged_count = count(converged)
+    spurious_count = count(spurious)
+    status = convergence_status(problem, converged_count, spurious_count)
+    println("  ", bold(cyan(method)), " [", problem.feast_label, ", ", process_label, "] ", status)
+    timed_samples = haskey(extra, :timed_samples) ? extra.timed_samples : 1
+    elapsed_label = timed_samples == 1 ? "elapsed:" : "elapsed median ($(timed_samples) timed samples):"
+    println("    ", bold(elapsed_label), " ", bright_orange(pretty_seconds(elapsed)))
+    if haskey(extra, :elapsed_min_s) && haskey(extra, :elapsed_max_s)
+        println(
+            "    ", dim("timing samples:"), " min=", magenta(pretty_seconds(extra.elapsed_min_s)),
+            ", median=", magenta(pretty_seconds(extra.elapsed_median_s)),
+            ", max=", magenta(pretty_seconds(extra.elapsed_max_s)),
+            ", raw=", dim(extra.elapsed_samples),
+        )
+    end
     println(
-        "    eigenpairs: returned=", length(λ),
-        ", inside=", count(inside),
-        ", converged_inside=", count(converged),
-        ", spurious_inside=", count(spurious),
+        "    ", bold("eigenpairs:"), " returned=", length(λ),
+        ", inside=", inside_count,
+        ", converged_inside=", converged_count,
+        ", spurious_inside=", spurious_count,
     )
-    println("    residuals inside: min=", pretty_residual(min_inside), ", max=", pretty_residual(max_inside))
+    println(
+        "    ", bold("residuals converged inside:"), " max=",
+        residual_status(problem, max_converged_inside, converged_count),
+        "    ", dim("(all inside: min=$(pretty_residual(min_inside)), max=$(pretty_residual(max_inside)))"),
+    )
     for (k, v) in pairs(extra)
-        k === :trace && continue
-        if k in (:solve_s, :setup_s, :filter_s, :worker_s, :residual_s)
-            println("    ", k, ": ", pretty_seconds(v))
+        k in (:trace, :timed_samples, :elapsed_min_s, :elapsed_median_s, :elapsed_max_s, :elapsed_samples) && continue
+        if v isa Real && is_seconds_key(k)
+            println("    ", k, ": ", magenta(pretty_seconds(v)))
         else
             println("    ", k, ": ", v)
         end
@@ -488,34 +618,106 @@ function common_residuals(problem, λ, X)
     [problem.residual(λ[i], view(X, :, i)) for i in eachindex(λ)]
 end
 
+function validate_operator_hooks(problem)
+    parse_bool("FEAST_EXPERIMENT_VALIDATE_T_UPDATE") || return nothing
+    problem.T_update === nothing && return nothing
+
+    z = problem.c + problem.r * cis(0.37)
+    reference = problem.T(z)
+    buffer = similar(reference)
+    problem.T_update(buffer, z)
+    relerr = norm(buffer - reference) / max(norm(reference), eps(Float64))
+    relerr <= 1e-10 || error("T_update validation failed for $(problem.name): relative error $relerr")
+    if !output_csv()
+        println("  T_update validation relative error: ", pretty_residual(relerr))
+    end
+    nothing
+end
+
 function run_feast(problem, processes, seed)
-    X = initial_subspace(problem.n, problem.m, seed)
-    stats = processes == 0 ? DenseFeastStats() : DenseDistributedFeastStats()
     worker_threads = worker_blas_threads()
     worker_ids = ensure_workers(processes, worker_threads)
-    if processes == 0
+
+    function solve_once()
+        X = initial_subspace(problem.n, problem.m, seed)
+        stats = processes == 0 ? DenseFeastStats() : DenseDistributedFeastStats()
         local λ
         local V
         local res
-        elapsed = @elapsed begin
-            λ, V, res = nlfeast!(
-                problem.T,
-                X,
-                problem.feast_nodes,
-                problem.feast_iter;
-                c=problem.c,
-                r=problem.r,
-                ϵ=problem.feast_tol,
-                store=problem.feast_store,
-                spurious=problem.spurious,
-                residual_update=problem.residual_update,
-                stats=stats,
-            )
+        elapsed = if processes == 0
+            @elapsed begin
+                λ, V, res = nlfeast!(
+                    problem.T,
+                    X,
+                    problem.feast_nodes,
+                    problem.feast_iter;
+                    c=problem.c,
+                    r=problem.r,
+                    ϵ=problem.feast_tol,
+                    store=problem.feast_store,
+                    spurious=problem.spurious,
+                    residual_update=problem.residual_update,
+                    stats=stats,
+                )
+            end
+        else
+            @elapsed begin
+                λ, V, res = distributed_nlfeast!(
+                    problem.T,
+                    X,
+                    problem.feast_nodes,
+                    problem.feast_iter;
+                    c=problem.c,
+                    r=problem.r,
+                    ϵ=problem.feast_tol,
+                    store=problem.feast_store,
+                    materialize_nodes=feast_materialize_nodes(),
+                    spurious=problem.spurious,
+                    worker_ids=worker_ids,
+                    worker_blas_threads=worker_threads,
+                    residual_update=problem.residual_update,
+                    stats=stats,
+                )
+            end
         end
         common_res = common_residuals(problem, λ, V)
-        inside = in_contour(λ, problem.c, problem.r)
-        converged_inside = count(common_res[inside] .< problem.nleigs_tol)
+        (; elapsed, λ, V, res, common_res, stats)
+    end
+
+    if parse_bool("FEAST_EXPERIMENT_WARMUP")
+        try
+            progress("warmup: $(problem.name) $(problem.feast_label) $(processes == 0 ? "serial nlfeast" : "$(processes)-worker distributed_nlfeast")")
+            solve_once()
+        catch err
+            @warn "FEAST benchmark warmup failed; continuing without it" problem=problem.name config=problem.feast_label processes exception=(err, catch_backtrace())
+        end
+    end
+
+    times = Float64[]
+    last = nothing
+    repeats = experiment_repeats()
+    for sample_index in 1:repeats
+        progress("timed sample $(sample_index)/$(repeats): $(problem.name) $(problem.feast_label) $(processes == 0 ? "serial nlfeast" : "$(processes)-worker distributed_nlfeast")")
+        sample = solve_once()
+        push!(times, sample.elapsed)
+        last = sample
+    end
+
+    λ = last.λ
+    V = last.V
+    common_res = last.common_res
+    stats = last.stats
+    elapsed = median_value(times)
+    timing = timing_summary(times)
+    inside = in_contour(λ, problem.c, problem.r)
+    converged_inside = count(common_res[inside] .< problem.nleigs_tol)
+    if processes == 0
         extra = (;
+            timed_samples=timing.samples,
+            elapsed_min_s=timing.elapsed_min_s,
+            elapsed_median_s=timing.elapsed_median_s,
+            elapsed_max_s=timing.elapsed_max_s,
+            elapsed_samples=timing.elapsed_samples,
             m=problem.m,
             nodes=problem.feast_nodes,
             iter_limit=problem.feast_iter,
@@ -534,33 +736,12 @@ function run_feast(problem, processes, seed)
         )
         summarize_result(problem, "nlfeast", 0, elapsed, λ, V, common_res; extra=extra)
     else
-        warmup_distributed_feast!(problem, processes, worker_ids, worker_threads, seed)
-        local λ
-        local V
-        local res
-        elapsed = @elapsed begin
-            λ, V, res = distributed_nlfeast!(
-                problem.T,
-                X,
-                problem.feast_nodes,
-                problem.feast_iter;
-                c=problem.c,
-                r=problem.r,
-                ϵ=problem.feast_tol,
-                store=problem.feast_store,
-                materialize_nodes=feast_materialize_nodes(),
-                matrix_update=problem.T_update,
-                spurious=problem.spurious,
-                worker_ids=worker_ids,
-                worker_blas_threads=worker_threads,
-                residual_update=problem.residual_update,
-                stats=stats,
-            )
-        end
-        common_res = common_residuals(problem, λ, V)
-        inside = in_contour(λ, problem.c, problem.r)
-        converged_inside = count(common_res[inside] .< problem.nleigs_tol)
         extra = (;
+            timed_samples=timing.samples,
+            elapsed_min_s=timing.elapsed_min_s,
+            elapsed_median_s=timing.elapsed_median_s,
+            elapsed_max_s=timing.elapsed_max_s,
+            elapsed_samples=timing.elapsed_samples,
             m=problem.m,
             nodes=problem.feast_nodes,
             iter_limit=problem.feast_iter,
@@ -579,10 +760,10 @@ function run_feast(problem, processes, seed)
             setup_worker_s=stats.setup_worker_ns / 1e9,
             solve_s=stats.solve_total_ns / 1e9,
             worker_s=stats.worker_step_ns / 1e9,
-            worker_solve_s=stats.worker_solve_ns / 1e9,
-            worker_materialize_s=stats.worker_materialize_ns / 1e9,
-            worker_linsolve_s=stats.worker_linsolve_ns / 1e9,
-            worker_accum_s=stats.worker_accum_ns / 1e9,
+            worker_solve_sum_s=stats.worker_solve_ns / 1e9,
+            worker_materialize_sum_s=stats.worker_materialize_ns / 1e9,
+            worker_linsolve_sum_s=stats.worker_linsolve_ns / 1e9,
+            worker_accum_sum_s=stats.worker_accum_ns / 1e9,
             input_transfer_s=stats.input_transfer_ns / 1e9,
             reduce_s=stats.reduce_ns / 1e9,
             ritz_s=stats.rayleigh_ritz_ns / 1e9,
@@ -594,131 +775,81 @@ function run_feast(problem, processes, seed)
     nothing
 end
 
-function warmup_distributed_feast!(problem, processes, worker_ids, worker_threads, seed)
-    processes <= 0 && return nothing
-    distributed_warmup() || return nothing
-    key = (
-        problem.name,
-        problem.n,
-        processes,
-        worker_threads,
-        problem.feast_store,
-        feast_materialize_nodes(),
-    )
-    key in DISTRIBUTED_FEAST_WARMED && return nothing
-    push!(DISTRIBUTED_FEAST_WARMED, key)
-
-    warm_m = min(problem.m, max(4, problem.m ÷ 4))
-    warm_nodes = min(problem.feast_nodes, max(processes, 8))
-    X = initial_subspace(problem.n, warm_m, seed + 303 + processes)
-    try
-        distributed_nlfeast!(
-            problem.T,
-            X,
-            warm_nodes,
-            1;
-            c=problem.c,
-            r=problem.r,
-            ϵ=-1.0,
-            store=problem.feast_store,
-            materialize_nodes=feast_materialize_nodes(),
-            matrix_update=problem.T_update,
-            spurious=problem.spurious,
-            worker_ids=worker_ids,
-            worker_blas_threads=worker_threads,
-            residual_update=problem.residual_update,
-        )
-    catch err
-        @warn "distributed FEAST warmup failed; continuing without it" problem=problem.name processes=processes exception=(err, catch_backtrace())
-    end
-    nothing
-end
-
-function warmup_feast!(problem, seed)
-    warm_m = min(problem.m, max(4, problem.m ÷ 2))
-    warm_nodes = min(problem.feast_nodes, 8)
-    X = initial_subspace(problem.n, warm_m, seed + 101)
-    try
-        nlfeast!(
-            problem.T,
-            X,
-            warm_nodes,
-            0;
-            c=problem.c,
-            r=problem.r,
-            ϵ=-1.0,
-            store=false,
-            spurious=problem.spurious,
-        )
-    catch err
-        @warn "FEAST warmup failed; continuing without it" problem=problem.name exception=(err, catch_backtrace())
-    end
-    nothing
-end
-
-function warmup_nleigs!(problem, seed)
-    polygon_points = min(parse(Int, env("FEAST_EXPERIMENT_NLEIGS_POLYGON_POINTS")), 24)
-    Σ = circle_polygon(problem.c, problem.r, polygon_points)
-    v = initial_subspace(problem.n, 1, seed + 202)[:, 1]
-    try
-        nleigs(
-            problem.nep,
-            Σ;
-            maxit=5,
-            minit=1,
-            maxdgr=5,
-            tol=1e-4,
-            v=v,
-            errmeasure=(λ, x) -> problem.residual(λ, x),
-            Ξ=problem.nleigs_singularities,
-            blksize=min(parse(Int, env("FEAST_EXPERIMENT_NLEIGS_BLKSIZE")), 8),
-            return_details=false,
-        )
-    catch err
-        @warn "NLEIGS warmup failed; continuing without it" problem=problem.name exception=(err, catch_backtrace())
-    end
-    nothing
-end
-
 function run_nleigs(problem, seed)
-    polygon_points = parse(Int, env("FEAST_EXPERIMENT_NLEIGS_POLYGON_POINTS"))
-    Σ = circle_polygon(problem.c, problem.r, polygon_points)
-    maxit = parse(Int, env("FEAST_EXPERIMENT_NLEIGS_MAXIT"))
+    polygon_points = problem_int(problem, "FEAST_EXPERIMENT_NLEIGS_POLYGON_POINTS", :nleigs_polygon_points, 96)
+    polygon_phase = nleigs_polygon_phase(problem, polygon_points)
+    center = nleigs_center(problem)
+    radius = nleigs_radius(problem)
+    Σ = circle_polygon(center, radius, polygon_points; phase=polygon_phase)
+    maxit = problem_int(problem, "FEAST_EXPERIMENT_NLEIGS_MAXIT", :nleigs_maxit, 100)
     minit = parse(Int, env("FEAST_EXPERIMENT_NLEIGS_MINIT"))
     maxdgr = parse(Int, env("FEAST_EXPERIMENT_NLEIGS_MAXDGR"))
     tol = parse(Float64, env("FEAST_EXPERIMENT_NLEIGS_TOL"))
-    blksize = parse(Int, env("FEAST_EXPERIMENT_NLEIGS_BLKSIZE"))
+    blksize = problem_int(problem, "FEAST_EXPERIMENT_NLEIGS_BLKSIZE", :nleigs_blksize, 20)
     static = parse_bool("FEAST_EXPERIMENT_NLEIGS_STATIC")
     leja = parse(Int, env("FEAST_EXPERIMENT_NLEIGS_LEJA"))
-    reusefact = parse(Int, env("FEAST_EXPERIMENT_NLEIGS_REUSEFACT"))
-    v = initial_subspace(problem.n, 1, seed)[:, 1]
+    reusefact, reusefact_source = nleigs_reusefact(problem)
     errmeasure = (λ, x) -> problem.residual(λ, x)
-    linsolver = CountingLinSolverCreator(DefaultLinSolverCreator())
 
-    local λ
-    local V
-    local res
-    elapsed = @elapsed begin
-        λ, V, res, _ = nleigs(
-            problem.nep,
-            Σ;
-            maxit=maxit,
-            minit=minit,
-            maxdgr=maxdgr,
-            tol=tol,
-            v=v,
-            errmeasure=errmeasure,
-            Ξ=problem.nleigs_singularities,
-            blksize=blksize,
-            static=static,
-            leja=leja,
-            reusefact=reusefact,
-            linsolvercreator=linsolver,
-            return_details=false,
-        )
+    function solve_once()
+        v = initial_subspace(problem.n, 1, seed)[:, 1]
+        linsolver = CountingLinSolverCreator(DefaultLinSolverCreator())
+        local λ
+        local V
+        local res
+        elapsed = @elapsed begin
+            λ, V, res, _ = nleigs(
+                problem.nep,
+                Σ;
+                maxit=maxit,
+                minit=minit,
+                maxdgr=maxdgr,
+                tol=tol,
+                v=v,
+                errmeasure=errmeasure,
+                Ξ=problem.nleigs_singularities,
+                blksize=blksize,
+                static=static,
+                leja=leja,
+                reusefact=reusefact,
+                linsolvercreator=linsolver,
+                return_details=false,
+            )
+        end
+        residuals = common_residuals(problem, λ, V)
+        (; elapsed, λ, V, res, residuals, linsolver)
     end
-    residuals = common_residuals(problem, λ, V)
+
+    if parse_bool("FEAST_EXPERIMENT_WARMUP")
+        try
+            progress("warmup: $(problem.name) $(problem.feast_label) nleigs")
+            solve_once()
+        catch err
+            @warn "NLEIGS benchmark warmup failed; continuing without it" problem=problem.name exception=(err, catch_backtrace())
+        end
+    end
+
+    times = Float64[]
+    last = nothing
+    repeats = experiment_repeats()
+    for sample_index in 1:repeats
+        progress("timed sample $(sample_index)/$(repeats): $(problem.name) $(problem.feast_label) nleigs")
+        sample = solve_once()
+        push!(times, sample.elapsed)
+        last = sample
+    end
+    λ = last.λ
+    V = last.V
+    residuals = last.residuals
+    linsolver = last.linsolver
+    elapsed = median_value(times)
+    timing = timing_summary(times)
     extra = (;
+        timed_samples=timing.samples,
+        elapsed_min_s=timing.elapsed_min_s,
+        elapsed_median_s=timing.elapsed_median_s,
+        elapsed_max_s=timing.elapsed_max_s,
+        elapsed_samples=timing.elapsed_samples,
         maxit,
         minit,
         maxdgr,
@@ -726,7 +857,12 @@ function run_nleigs(problem, seed)
         static,
         leja,
         reusefact,
+        reusefact_source,
+        matched_feast_store=problem.feast_store,
+        target_center=center,
+        target_radius=radius,
         polygon_points,
+        polygon_phase,
         singularities=join(problem.nleigs_singularities, ":"),
         linear_solves=linsolver.solves,
         factorizations=linsolver.factorizations,
@@ -786,6 +922,9 @@ function main()
     methods = parse_csv("FEAST_EXPERIMENT_METHODS")
     processes = parse_int_csv("FEAST_EXPERIMENT_PROCS")
     seed = parse(Int, env("FEAST_EXPERIMENT_SEED"))
+    repeats = experiment_repeats()
+    total_memory = Sys.total_memory()
+    free_memory = Sys.free_memory()
 
     if output_csv()
         println(
@@ -793,18 +932,31 @@ function main()
             ",problems=", join(problems, ":"),
             ",methods=", join(methods, ":"),
             ",processes=", join(processes, ":"),
+            ",color=", env("FEAST_EXPERIMENT_COLOR"),
+            ",repeats=", repeats,
             ",blas_threads=", BLAS.get_num_threads(),
             ",worker_blas_threads=", worker_blas_threads(),
             ",seed=", seed,
+            ",julia_version=", VERSION,
+            ",cpu_threads=", Sys.CPU_THREADS,
+            ",cpu_model=", csv_value(cpu_model()),
+            ",total_memory_bytes=", total_memory,
+            ",free_memory_bytes=", free_memory,
+            ",warmup=", parse_bool("FEAST_EXPERIMENT_WARMUP"),
         )
     else
-        println("NLEIGS comparison experiment")
-        println("  problems: ", join(problems, ", "))
+        println(bold(cyan("NLEIGS comparison experiment")))
+        println("  problems: ", bold(join(problems, ", ")))
         println("  methods: ", join(methods, ", "))
         println("  FEAST processes: ", join(processes, ", "))
+        println("  repeats: ", repeats, " timed sample", repeats == 1 ? "" : "s", " per method/config/process")
         println("  BLAS threads: ", BLAS.get_num_threads())
         println("  worker BLAS threads: ", worker_blas_threads())
         println("  seed: ", seed)
+        println("  Julia: ", VERSION)
+        println("  CPU: ", cpu_model(), " (", Sys.CPU_THREADS, " threads)")
+        println("  memory: total=", pretty_gib(total_memory), ", free=", pretty_gib(free_memory))
+        println("  warmup: ", parse_bool("FEAST_EXPERIMENT_WARMUP"), parse_bool("FEAST_EXPERIMENT_WARMUP") ? " (one extra untimed full solve per method/config/process)" : "")
     end
 
     for name in problems
@@ -820,27 +972,26 @@ function main()
             )
         else
             println()
-            println("Problem: ", problem.name)
+            println(bold("Problem: "), bold(problem.name))
             println("  n: ", problem.n)
             println("  contour: center=", problem.c, ", radius=", problem.r)
         end
-        if parse_bool("FEAST_EXPERIMENT_WARMUP")
-            if "feast" in methods
-                warmup_feast!(problem, seed)
-            end
-            if "nleigs" in methods
-                warmup_nleigs!(problem, seed)
-            end
-        end
         if "feast" in methods
             for feast_problem in configs
+                validate_operator_hooks(feast_problem)
                 for count in processes
                     run_feast(feast_problem, count, seed)
                 end
             end
         end
         if "nleigs" in methods
-            run_nleigs(problem, seed)
+            if "feast" in methods
+                for feast_problem in configs
+                    run_nleigs(feast_problem, seed)
+                end
+            else
+                run_nleigs(problem, seed)
+            end
         end
     end
 end

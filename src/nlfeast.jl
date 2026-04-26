@@ -1,6 +1,7 @@
 
 """
-    nlfeast!(T, X, nodes, iter; kwargs...)
+    nlfeast!(op, X, nodes, iter; kwargs...)
+    nlfeast!(T!, T_prototype, X, nodes, iter; kwargs...)
 
 Canonical nonlinear FEAST-Beyn hybrid prototype. The method applies the
 NLFEAST residual inverse iteration idea directly to Beyn-style contour moments:
@@ -11,27 +12,73 @@ This is the main nonlinear research implementation. The moment-expanded
 variants below and in `nlfeast_experimental.jl` explore the broader family of
 contour algorithms needed for defective, clustered, or highly nonlinear spectra.
 
-`T(λ)` is the canonical matrix-valued nonlinear operator interface. For large
-operators where residuals should be computed by matrix-vector action rather
-than by materializing `T(λ)`, pass `residual_update=(res, X, R, Λ) -> ...`.
-That hook must normalize/update `X`, write residual vectors into `R`, and fill
-`res`.
+The preferred interface is an `AbstractFeastOperator`: `operator_prototype(op)`
+allocates caller-owned storage, `materialize!(M, op, λ)` writes `T(λ)` into it,
+and `mul!(Y, op, λ, V)` applies `T(λ)V`. The older `T(λ)` materializing
+interface remains available as a compatibility wrapper, and `T!(M, λ)` can be
+passed with an explicit prototype.
+
+For large operators where residuals should be computed by matrix-vector action
+rather than by materializing `T(λ)`, pass
+`residual_update=(res, X, R, Λ) -> ...`. That hook must normalize/update `X`,
+write residual vectors into `R`, and fill `res`.
 """
+function _nlfeast_operator_storage(T, matrix_update, matrix_prototype)
+    if T isa AbstractFeastOperator
+        matrix_update === nothing || error("pass either an AbstractFeastOperator or matrix_update, not both")
+        matrix_prototype === nothing || error("pass either an AbstractFeastOperator or matrix_prototype, not both")
+        return matrix_materializer(T), operator_prototype(T)
+    end
+    matrix_update === nothing && return nothing, matrix_prototype
+    matrix_prototype === nothing && error("matrix_prototype is required when matrix_update is provided")
+    matrix_update, matrix_prototype
+end
+
 function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Integer;
     c=complex(0.0, 0.0), r=1.0, debug=false, ϵ=10e-12, store=true, spurious=1e-5,
     factorizer=lu, left_divider=ldiv!, residual_update=nothing,
-    stats::Union{Nothing,DenseFeastStats}=nothing)
+    stats::Union{Nothing,DenseFeastStats}=nothing,
+    matrix_update=nothing,
+    matrix_prototype=nothing,
+    contour=nothing)
 
+    contour = contour === nothing ? circular_contour_trapezoidal(c, r, nodes) : contour
+    nlfeast!(
+        T,
+        X,
+        contour,
+        iter;
+        debug=debug,
+        ϵ=ϵ,
+        store=store,
+        spurious=spurious,
+        factorizer=factorizer,
+        left_divider=left_divider,
+        residual_update=residual_update,
+        stats=stats,
+        matrix_update=matrix_update,
+        matrix_prototype=matrix_prototype,
+    )
+end
+
+function nlfeast!(T, X::AbstractMatrix{ComplexF64}, contour::Contour, iter::Integer;
+    debug=false, ϵ=10e-12, store=true, spurious=1e-5,
+    factorizer=lu, left_divider=ldiv!, residual_update=nothing,
+    stats::Union{Nothing,DenseFeastStats}=nothing,
+    matrix_update=nothing,
+    matrix_prototype=nothing)
+
+    matrix_update, matrix_prototype = _nlfeast_operator_storage(T, matrix_update, matrix_prototype)
     N, m₀ = size(X)
     Λ, res = zeros(ComplexF64, m₀), Array{Float64}(undef, m₀)
     resolvent = zeros(ComplexF64, m₀)
     inside = falses(m₀)
-    θ = LinRange(π / nodes, 2 * π - π / nodes, nodes)
-    contour_nodes = ComplexF64[(r * exp(θ[i] * im) + c) for i in 1:nodes]
-    contour_weights = ComplexF64[(r * exp(θ[i] * im) / nodes) for i in 1:nodes]
+    z_nodes = ComplexF64.(contour_nodes(contour))
+    z_weights = ComplexF64.(contour_weights(contour))
+    nodes = length(z_nodes)
     Q₀, Q₁, R, Tinv = similar(X, ComplexF64), similar(X, ComplexF64), similar(X, ComplexF64), similar(X, ComplexF64)
     A, B, Xq = zeros(ComplexF64, m₀, m₀), zeros(ComplexF64, m₀, m₀), zeros(ComplexF64, m₀, m₀)
-    T_prototype = T(contour_nodes[1])
+    T_prototype = matrix_prototype === nothing ? T(z_nodes[1]) : matrix_prototype
     residual_matrix = T_prototype isa StridedMatrix ? similar(T_prototype) : nothing
     residual_x, residual_y = zeros(ComplexF64, N), zeros(ComplexF64, N)
 
@@ -52,13 +99,26 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
             lapack_lu_ws = dense_lapack_lu_workspace(Tz)
         end
     end
+    generic_Tz = !store && matrix_update !== nothing && lapack_lu_ws === nothing ? similar(T_prototype) : nothing
 
     if store
-        facts1 = factorizer(T(contour_nodes[1]))
+        facts1 = if matrix_update === nothing
+            factorizer(T(z_nodes[1]))
+        else
+            Tbuf = similar(T_prototype)
+            matrix_update(Tbuf, z_nodes[1])
+            factorizer(Tbuf)
+        end
         facts = Array{typeof(facts1)}(undef, nodes)
         facts[1] = facts1
         for i = 2:nodes
-            facts[i] = factorizer(T(contour_nodes[i]))
+            facts[i] = if matrix_update === nothing
+                factorizer(T(z_nodes[i]))
+            else
+                Tbuf = similar(T_prototype)
+                matrix_update(Tbuf, z_nodes[i])
+                factorizer(Tbuf)
+            end
             if debug print("*") end
         end
         if debug println() end
@@ -76,28 +136,42 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
 
         start_ns = time_ns()
         for i = 1:nodes
-            z = contour_nodes[i]
+            z = z_nodes[i]
             if nit == 0
                 if store
                     left_divider(Tinv, facts[i], X)
                 elseif lapack_lu_ws !== nothing
-                    copyto!(Tz, T(z))
+                    if matrix_update === nothing
+                        copyto!(Tz, T(z))
+                    else
+                        matrix_update(Tz, z)
+                    end
                     dense_lapack_linsolve!(Tinv, Tz, X, lapack_lu_ws)
+                elseif matrix_update !== nothing
+                    matrix_update(generic_Tz, z)
+                    Tinv .= generic_Tz \ X
                 else
                     Tinv .= T(z) \ X
                 end
-                rmul!(Tinv, contour_weights[i])
+                rmul!(Tinv, z_weights[i])
             else
                 fill_resolvent!(resolvent, z, Λ)
                 if store
                     left_divider(Tinv, facts[i], R)
                 elseif lapack_lu_ws !== nothing
-                    copyto!(Tz, T(z))
+                    if matrix_update === nothing
+                        copyto!(Tz, T(z))
+                    else
+                        matrix_update(Tz, z)
+                    end
                     dense_lapack_linsolve!(Tinv, Tz, R, lapack_lu_ws)
+                elseif matrix_update !== nothing
+                    matrix_update(generic_Tz, z)
+                    Tinv .= generic_Tz \ R
                 else
                     Tinv .= T(z) \ R
                 end
-                accumulate_filtered_moments!(Q₀, Q₁, X, Tinv, resolvent, contour_weights[i], z)
+                accumulate_filtered_moments!(Q₀, Q₁, X, Tinv, resolvent, z_weights[i], z)
                 if debug print(".") end
                 continue
             end
@@ -125,12 +199,12 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
         else
             update_nonlinear_residuals!(res, X, R, Λ, T, residual_matrix, residual_x, residual_y)
         end
-        in_contour!(inside, Λ, c, r)
+        in_contour!(inside, Λ, contour)
         max_res_inside, contour_nonempty = maximum_masked(res, inside)
         residual_ns = time_ns() - start_ns
 
         if debug
-            iter_debug_print(nit, Λ, res, c, r, spurious)
+            iter_debug_print(nit, Λ, res, contour, spurious)
         end
 
         converged = contour_nonempty && max_res_inside < ϵ
@@ -164,6 +238,45 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
 
     normalize!(X)
     Λ, X, res
+end
+
+function nlfeast!(
+    matrix_update,
+    matrix_prototype::AbstractMatrix,
+    X::AbstractMatrix{ComplexF64},
+    nodes::Integer,
+    iter::Integer;
+    c=complex(0.0, 0.0),
+    r=1.0,
+    contour=nothing,
+    kwargs...,
+)
+    contour = contour === nothing ? circular_contour_trapezoidal(c, r, nodes) : contour
+    nlfeast!(matrix_update, matrix_prototype, X, contour, iter; kwargs...)
+end
+
+function nlfeast!(
+    matrix_update,
+    matrix_prototype::AbstractMatrix,
+    X::AbstractMatrix{ComplexF64},
+    contour::Contour,
+    iter::Integer;
+    kwargs...,
+)
+    materializing_T = z -> begin
+        Tz = similar(matrix_prototype)
+        matrix_update(Tz, z)
+        Tz
+    end
+    nlfeast!(
+        materializing_T,
+        X,
+        contour,
+        iter;
+        matrix_update=matrix_update,
+        matrix_prototype=matrix_prototype,
+        kwargs...,
+    )
 end
 
 

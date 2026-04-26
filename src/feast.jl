@@ -12,8 +12,8 @@ each contour node.
 function feast!(X::AbstractMatrix, A::AbstractMatrix;
                 nodes::Integer=8, iter::Integer=10, c=complex(0.0,0.0), r=1.0, ϵ=1e-12,
                 debug=false, store=false, mixed_prec=false, factorizer=lu, left_divider=ldiv!,
-                stats::Union{Nothing,DenseFeastStats}=nothing)
-    contour = circular_contour_trapezoidal(c, r, nodes)
+                stats::Union{Nothing,DenseFeastStats}=nothing, contour=nothing)
+    contour = contour === nothing ? circular_contour_trapezoidal(c, r, nodes) : contour
     feast!(X, A, contour; iter=iter, debug=debug, ϵ=ϵ, store=store, mixed_prec=mixed_prec, factorizer=factorizer, left_divider=left_divider, stats=stats)
 end
 
@@ -50,7 +50,7 @@ function feast!(X::AbstractMatrix, A::AbstractMatrix, contour::Contour;
         if use_dense_lapack_store
             stored_shifts = [similar(ZmA) for _ in 1:nodes]
             stored_lu_ws = [dense_lapack_lu_workspace(stored_shifts[i]) for i in 1:nodes]
-            Threads.@threads for i in 1:nodes
+            for i in 1:nodes
                 materialize_standard_shift!(stored_shifts[i], A, contour.nodes[i])
                 dense_lapack_factor!(stored_shifts[i], stored_lu_ws[i])
             end
@@ -60,7 +60,7 @@ function feast!(X::AbstractMatrix, A::AbstractMatrix, contour::Contour;
             facts = Array{typeof(facts1)}(undef, nodes)
             facts[1] = facts1
 
-            Threads.@threads for i=2:nodes
+            for i=2:nodes
                   local_shift = similar(ZmA)
                   materialize_standard_shift!(local_shift, A, contour.nodes[i])
                   facts[i] = factorizer(local_shift)
@@ -161,8 +161,8 @@ end
 function gen_feast!(X::AbstractMatrix, A::AbstractMatrix, B;
                     nodes::Integer=8, iter::Integer=10, c=complex(0.0,0.0), r=1.0,
                     debug=false, store=false, ϵ=1e-12, factorizer=lu, left_divider=ldiv!,
-                    stats::Union{Nothing,DenseFeastStats}=nothing)
-    contour = circular_contour_trapezoidal(c, r, nodes)
+                    stats::Union{Nothing,DenseFeastStats}=nothing, contour=nothing)
+    contour = contour === nothing ? circular_contour_trapezoidal(c, r, nodes) : contour
     gen_feast!(X, A, B, contour; iter=iter, debug=debug, store=store, ϵ=ϵ, factorizer=factorizer, left_divider=left_divider, stats=stats)
 end
 
@@ -202,7 +202,7 @@ function gen_feast!(X::AbstractMatrix, A::AbstractMatrix, B, contour::Contour;
          if use_dense_lapack_store
              stored_shifts = [similar(ZmA) for _ in 1:nodes]
              stored_lu_ws = [dense_lapack_lu_workspace(stored_shifts[i]) for i in 1:nodes]
-             Threads.@threads for i in 1:nodes
+             for i in 1:nodes
                    materialize_generalized_shift!(stored_shifts[i], A, B, contour.nodes[i])
                    dense_lapack_factor!(stored_shifts[i], stored_lu_ws[i])
              end
@@ -212,7 +212,7 @@ function gen_feast!(X::AbstractMatrix, A::AbstractMatrix, B, contour::Contour;
              facts = Array{typeof(facts1)}(undef, nodes)
              facts[1] = facts1
 
-             Threads.@threads for i=2:nodes
+             for i=2:nodes
                    local_shift = similar(ZmA)
                    materialize_generalized_shift!(local_shift, A, B, contour.nodes[i])
                    facts[i] = factorizer(local_shift)
@@ -313,8 +313,8 @@ end
 function dual_gen_feast!(Xr::AbstractMatrix, Xl::AbstractMatrix, A::AbstractMatrix, B;
                     nodes::Integer=8, iter::Integer=10, c=complex(0.0,0.0), r=1.0,
                     debug=false, store=false, ϵ=1e-12, factorizer=lu, left_divider=ldiv!,
-                    stats::Union{Nothing,DenseFeastStats}=nothing)
-    contour = circular_contour_trapezoidal(c, r, nodes)
+                    stats::Union{Nothing,DenseFeastStats}=nothing, contour=nothing)
+    contour = contour === nothing ? circular_contour_trapezoidal(c, r, nodes) : contour
     dual_gen_feast!(Xr, Xl, A, B, contour; iter=iter, debug=debug, store=store, ϵ=ϵ, factorizer=factorizer, left_divider=left_divider, stats=stats)
 end
 
@@ -361,7 +361,7 @@ function dual_gen_feast!(Xr::AbstractMatrix, Xl::AbstractMatrix, A::AbstractMatr
          if use_dense_lapack_store
              stored_shifts = [similar(ZmA) for _ in 1:nodes]
              stored_lu_ws = [dense_lapack_lu_workspace(stored_shifts[i]) for i in 1:nodes]
-             Threads.@threads for i in 1:nodes
+             for i in 1:nodes
                    materialize_generalized_shift!(stored_shifts[i], A, B, contour.nodes[i])
                    dense_lapack_factor!(stored_shifts[i], stored_lu_ws[i])
              end
@@ -377,7 +377,7 @@ function dual_gen_feast!(Xr::AbstractMatrix, Xl::AbstractMatrix, A::AbstractMatr
                  lfacts[1] = lfacts1
              end
 
-             Threads.@threads for i=2:nodes
+             for i=2:nodes
                    local_shift = similar(ZmA)
                    materialize_generalized_shift!(local_shift, A, B, contour.nodes[i])
                    rfacts[i] = factorizer(local_shift)

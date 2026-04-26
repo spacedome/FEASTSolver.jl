@@ -4,7 +4,7 @@ module FEASTSolver
 
 using LinearAlgebra: BLAS, LAPACK, UniformScaling, ldiv!, lu!, tr, dot, LU, Factorization, axpy!, mul!, qr!, rmul!, lmul!, ldiv!, eigen!, svd!, norm, Diagonal, I, diagm
 using IterativeSolvers: bicgstabl
-using SparseArrays: similar, AbstractSparseMatrix, sprandn, sprand
+using SparseArrays: similar, AbstractSparseMatrix, sprandn, sprand, sparse, spdiagm, SparseVector, SparseMatrixCSC, nnz
 using IterativeSolvers: gmres!, bicgstabl!, gmres, bicgstabl
 using FastGaussQuadrature: gausslegendre
 using FastLapackInterface: EigenWs, GeneralizedEigenWs, LUWs, QRWs, SVDsddWs
@@ -12,9 +12,11 @@ using Distributed: @distributed, myid, remotecall, remotecall_wait, workers
 using Random: rand, randn
 
 import Base: close, length
+import LinearAlgebra: mul!
 
 # First-class dense serial FEAST variants.
 export feast!, gen_feast!, dual_gen_feast!, nlfeast!
+export AbstractSparseFeastSolver, SparseDirectSolver, SparseBiCGSTABSolver
 export DenseFeastStats, DenseFeastIterationStats
 
 # Explicit contour-parallel dense FEAST API.
@@ -25,15 +27,22 @@ export DenseDistributedFeastStats, DenseDistributedFeastIterationStats
 
 # Research utilities that are stable enough to use directly.
 export beyn, companion, block_SS!
+export Contour, CircularContour, RectangularContour, CustomContour
+export contour_nodes, contour_weights
 export in_contour, circular_contour_trapezoidal, circular_contour_gauss, rectangular_contour_gauss, rectangular_contour_trapezoidal
 export convergence_info, rational_func
 export contour_estimate_eig
+export AbstractFeastOperator, feast_gallery
+export operator_matrix, operator_prototype, operator_action_workspace
+export materialize!, matrix_materializer, matrix_operator
 
 include("contour.jl")
 include("lapack.jl")
 include("fastlapack.jl")
 include("stats.jl")
 include("utils.jl")
+include("gallery.jl")
+include("sparse_feast.jl")
 include("beyn.jl")
 include("companion.jl")
 include("feast.jl")

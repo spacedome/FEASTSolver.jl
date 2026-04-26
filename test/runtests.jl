@@ -359,6 +359,110 @@ end
     end
 end
 
+@testitem "sparse FEAST direct solver handles missing diagonal storage" setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using SparseArrays
+    using .FEASTTestSetup: initial_subspace, assert_eigenvalues_found, assert_converged
+
+    A = spdiagm(0 => [1.0, 2.0, 0.0, 4.0, 5.0, 6.0])
+    expected = complex.([1.0, 2.0])
+
+    λ, _, res = feast!(
+        initial_subspace(size(A, 1), 2, 361),
+        A;
+        nodes=8,
+        iter=10,
+        c=1.5,
+        r=0.75,
+        ϵ=1e-12,
+        store=true,
+        solver=SparseDirectSolver(),
+    )
+
+    assert_eigenvalues_found(λ, expected; atol=1e-10)
+    assert_converged(res; atol=1e-10)
+end
+
+@testitem "sparse FEAST exposes a BiCGSTAB solver policy" setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using SparseArrays
+    using .FEASTTestSetup: initial_subspace, assert_eigenvalues_found, assert_converged
+
+    A = spdiagm(0 => collect(1.0:8.0))
+    expected = complex.([1.0, 2.0])
+
+    λ, _, res = feast!(
+        initial_subspace(size(A, 1), 2, 362),
+        A;
+        nodes=8,
+        iter=10,
+        c=1.5,
+        r=0.75,
+        ϵ=1e-9,
+        solver=SparseBiCGSTABSolver(reltol=1e-12, max_mv_products=200),
+    )
+
+    assert_eigenvalues_found(λ, expected; atol=1e-8)
+    assert_converged(res; atol=1e-8)
+    @test_throws ErrorException feast!(
+        initial_subspace(size(A, 1), 2, 363),
+        A;
+        nodes=8,
+        iter=1,
+        c=1.5,
+        r=0.75,
+        store=true,
+        solver=SparseBiCGSTABSolver(),
+    )
+end
+
+@testitem "custom contours classify eigenvalues with an explicit predicate" setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using LinearAlgebra
+    using .FEASTTestSetup: initial_subspace, assert_eigenvalues_found, assert_converged
+
+    A = Matrix(Diagonal(1.0:12.0))
+    c, r = 2.5 + 0.0im, 1.6
+    base = circular_contour_trapezoidal(c, r, 8)
+    contour = CustomContour(
+        contour_nodes(base),
+        contour_weights(base);
+        inside=z -> abs(z - c) <= r,
+    )
+    expected = complex.(1.0:4.0)
+
+    @test in_contour(2.0 + 0.0im, contour)
+    @test !in_contour(7.0 + 0.0im, contour)
+
+    λ, _, res = feast!(
+        initial_subspace(12, 4, 351),
+        A;
+        contour=contour,
+        iter=10,
+        ϵ=1e-12,
+    )
+
+    assert_eigenvalues_found(λ, expected; atol=1e-10)
+    assert_converged(res; atol=1e-10)
+end
+
+@testitem "custom contours require a predicate for solver classification" setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using LinearAlgebra
+    using .FEASTTestSetup: initial_subspace
+
+    A = Matrix(Diagonal(1.0:8.0))
+    base = circular_contour_trapezoidal(2.5, 1.6, 8)
+    contour = CustomContour(contour_nodes(base), contour_weights(base))
+
+    @test_throws ErrorException feast!(
+        initial_subspace(8, 4, 352),
+        A;
+        contour=contour,
+        iter=1,
+    )
+end
+
 @testitem "nonlinear FEAST handles a linear pencil" setup=[FEASTTestSetup] begin
     using FEASTSolver
     using LinearAlgebra
@@ -387,6 +491,70 @@ end
     assert_converged(res[inside]; atol=1e-10)
     @test stats.iterations == length(stats.iteration_log)
     @test stats.iteration_log[end].variant == :nonlinear
+end
+
+@testitem "nonlinear FEAST accepts a custom contour" setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using LinearAlgebra
+    using .FEASTTestSetup: initial_subspace, assert_eigenvalues_found, assert_converged
+
+    n = 12
+    A = Matrix(Diagonal(1.0:n))
+    T(z) = z * Matrix{Float64}(I, n, n) - A
+    c, r = 2.5 + 0.0im, 1.6
+    base = circular_contour_trapezoidal(c, r, 8)
+    contour = CustomContour(
+        contour_nodes(base),
+        contour_weights(base);
+        inside=z -> abs(z - c) <= r,
+    )
+    expected = complex.(1.0:4.0)
+
+    λ, _, res = nlfeast!(
+        T,
+        initial_subspace(n, 4, 402),
+        contour,
+        10;
+        ϵ=1e-12,
+        store=true,
+    )
+
+    inside = in_contour(λ, contour)
+    assert_eigenvalues_found(λ[inside], expected; atol=1e-10)
+    assert_converged(res[inside]; atol=1e-10)
+end
+
+@testitem "FEAST gallery operators materialize and apply consistently" setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using LinearAlgebra
+    using Random
+    using SparseArrays
+
+    rng = MersenneTwister(7781)
+    operators = Any[
+        matrix_operator(z -> z * Matrix{ComplexF64}(I, 8, 8) - Diagonal(complex.(1.0:8.0)), zeros(ComplexF64, 8, 8)),
+        feast_gallery(
+            "polynomial",
+            [spdiagm(0 => complex.(-1.0:-1.0:-8)), sparse(I, 8, 8)],
+        ),
+        feast_gallery("nlevp_native_hadeler", 100, 8),
+        feast_gallery("nlevp_native_loaded_string", 8, 1, 1),
+    ]
+
+    for op in operators
+        z = 1.2 + 0.3im
+        M = operator_prototype(op)
+        materialize!(M, op, z)
+        M2 = similar(M)
+        matrix_materializer(op)(M2, z)
+        V = rand(rng, ComplexF64, size(op, 2), 3)
+        Y = zeros(ComplexF64, size(op, 1), 3)
+
+        mul!(Y, op, z, V)
+
+        @test M2 ≈ M
+        @test Y ≈ M * V
+    end
 end
 
 @testitem "distributed nonlinear FEAST handles small dense problems" tags=[:distributed] setup=[FEASTTestSetup] begin
@@ -453,6 +621,62 @@ end
         inside = in_contour(λ, c, r)
         assert_eigenvalues_found(λ[inside], expected_quadratic; atol=1e-9)
         assert_converged(res[inside]; atol=1e-9)
+    finally
+        if !isempty(added)
+            rmprocs(added)
+        end
+    end
+end
+
+@testitem "distributed nonlinear FEAST does not densify sparse operator setup" tags=[:distributed] setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using Distributed
+    using LinearAlgebra
+    using SparseArrays
+    using .FEASTTestSetup: ensure_workers, external_workers
+
+    added = ensure_workers(1)
+    try
+        worker_ids = external_workers()[1:1]
+
+        n = 10
+        T = feast_gallery(
+            "polynomial",
+            [spdiagm(0 => complex.(-1.0:-1.0:-n)), sparse(I, n, n)],
+        )
+
+        plan = DenseDistributedNonlinearFeastPlan(
+            T,
+            n,
+            4;
+            nodes=8,
+            c=2.0,
+            r=1.2,
+            store=false,
+            materialize_nodes=false,
+            worker_ids=worker_ids,
+            worker_blas_threads=1,
+        )
+        try
+            uses_generic_sparse_path = remotecall_fetch(
+                Main.eval,
+                worker_ids[1],
+                quote
+                    import SparseArrays
+                    let key = $(QuoteNode(plan.key))
+                        ws = FEASTSolver._DISTRIBUTED_DENSE_FEAST_WORKSPACES[key]
+                        ws.T === nothing &&
+                            ws.matrix_update !== nothing &&
+                            ws.Tz isa SparseArrays.SparseMatrixCSC &&
+                            ws.lu_ws === nothing
+                    end
+                end,
+            )
+            @test uses_generic_sparse_path
+        finally
+            close(plan)
+        end
+
     finally
         if !isempty(added)
             rmprocs(added)

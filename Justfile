@@ -25,9 +25,17 @@ bench-parallel:
 bench-dense:
     {{julia}} --project=benchmark --startup-file=no benchmark/run_dense.jl
 
+# Run BenchmarkTools-backed sparse FEAST/UMFPACK profiling.
+bench-sparse:
+    {{julia}} --project=benchmark --startup-file=no benchmark/run_sparse.jl
+
 # Run the research experiment comparing nonlinear FEAST against NEP-PACK NLEIGS.
 experiment-nleigs:
     {{julia}} --project=. --startup-file=no experiments/nleigs_comparison/run.jl
+
+# Run a cheap NLEIGS comparison smoke check without the large dense problem.
+experiment-nleigs-smoke:
+    FEAST_EXPERIMENT_PROBLEMS=butterfly FEAST_EXPERIMENT_METHODS=feast,nleigs FEAST_EXPERIMENT_PROCS=0 FEAST_EXPERIMENT_WARMUP=false {{julia}} --project=. --startup-file=no experiments/nleigs_comparison/run.jl
 
 # Build local documentation.
 docs:
@@ -62,7 +70,9 @@ notes:
       'test/runtests.jl is the automated TestItemRunner entrypoint.' \
       'just test uses Pkg.test(); test-only dependencies live in Project.toml extras/targets.' \
       'Run just bench-dense for BenchmarkTools-backed dense FEAST benchmarks.' \
+      'Run just bench-sparse for sparse FEAST/UMFPACK profiling.' \
       'Run just experiment-nleigs for the research comparison against NEP-PACK NLEIGS.' \
+      'Run just experiment-nleigs-smoke for a cheap experiment script sanity check.' \
       'Historical research scripts live under experiments/legacy_tests/ until curated.' \
       'Julia 1.10-1.12 compat should eventually be checked in CI, not by expanding this dev shell.' \
       'Optional plotting and upstream FEAST binding work should use separate environments or package extensions.'
