@@ -450,6 +450,12 @@ end
 function _cleanup_dense_feast_worker!(key::Symbol)
     ws = pop!(_DISTRIBUTED_DENSE_FEAST_WORKSPACES, key, nothing)
     if ws !== nothing
+        if hasproperty(ws, :stored_factors) && ws.stored_factors !== nothing
+            foreach(finalize!, ws.stored_factors)
+        end
+        if hasproperty(ws, :sparse_reusable_factor) && ws.sparse_reusable_factor !== nothing
+            finalize!(ws.sparse_reusable_factor)
+        end
         BLAS.set_num_threads(ws.old_blas_threads)
     end
     nothing

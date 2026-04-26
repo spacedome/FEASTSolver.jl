@@ -21,21 +21,23 @@ For a cheap script sanity check that does not run the large dense problem:
 just experiment-nleigs-smoke
 ```
 
-By default this runs the curated dense comparison set: `butterfly` as a small
-sanity problem and `pep0` as the large dense polynomial problem. Set
+By default this runs the curated comparison set: `butterfly` as a small sanity
+problem, `pep0` as the large dense polynomial problem, and
+`schrodinger_movebc` as the current sparse large problem. Set
 `FEAST_EXPERIMENT_PROBLEMS=butterfly` or another comma-separated list for a
-targeted local run. `gun` is the intended future sparse comparison once sparse
-NLFEAST is first-class.
+targeted local run. `gun` remains available as a sparse exploratory comparison,
+but is intentionally not part of the default set until its region and solver
+parameters are tuned.
 
 Useful environment variables:
 
-- `FEAST_EXPERIMENT_PROBLEMS=butterfly`, `pep0`, or exploratory `loaded_string`, `hadeler`, `pep0_sym`
+- `FEAST_EXPERIMENT_PROBLEMS=butterfly`, `pep0`, `schrodinger_movebc`, or exploratory `gun`, `loaded_string`, `hadeler`, `pep0_sym`
 - `FEAST_EXPERIMENT_METHODS=feast,nleigs`
 - `FEAST_EXPERIMENT_PROCS=0,4,8`
 - `FEAST_EXPERIMENT_FORMAT=pretty` or `csv`
 - `FEAST_EXPERIMENT_COLOR=auto`, `always`, or `never`
 - `FEAST_EXPERIMENT_REPEATS=1`
-- `FEAST_EXPERIMENT_PROBLEM_N=3000`
+- `FEAST_EXPERIMENT_PROBLEM_N=50000` to override a problem's built-in size
 - `FEAST_EXPERIMENT_BLAS_THREADS=16` by default on this machine, using `Sys.CPU_THREADS`
 - `FEAST_EXPERIMENT_WORKER_BLAS_THREADS=1`
 - `FEAST_EXPERIMENT_HADELER_ALPHA=100`
@@ -142,9 +144,20 @@ region to recover it. `FEAST_EXPERIMENT_NLEIGS_POLYGON_PHASE=feast_nodes` rotate
 the polygon by half a panel so its vertices have the same angular placement as
 FEAST's midpoint trapezoid nodes.
 
-The sparse `gun` problem is intentionally disabled here until sparse NLFEAST is
-implemented and benchmarked as a first-class path. Including it in the dense
-comparison would make the results misleading.
+The sparse `gun` problem is available as an explicit selector with
+`FEAST_EXPERIMENT_PROBLEMS=gun`. It uses sparse NLFEAST through the in-place
+FEAST gallery operator and sparse direct shifted solves. It is not yet part of
+the default comparison set because the target region, node count, subspace size,
+and NLEIGS settings still need the same level of tuning as `pep0`.
+
+The default sparse comparison is `schrodinger_movebc` with `n=50000`, contour
+center `-35`, radius `4.2`, `m=8`, `nodes=24`, `iter=6`, `store=false`, and an
+absolute action-residual tolerance of `1e-5`. Unlike `gun`, the FEAST side is
+implemented as a native gallery operator rather than a wrapper around NEP-PACK.
+The region targets the three real eigenpairs near `-39.15`, `-34.94`, and
+`-31.06`, while explicitly exposing nearby spurious Ritz values instead of
+hiding them behind matrix-norm relative residuals. NLEIGS uses the same center
+and radius with a 24-point polygon and no factorization reuse.
 
 The polynomial experiments (`butterfly`, `pep0`, `pep0_sym`) pass an in-place
 matrix update hook to distributed FEAST. Workers reuse their `T(z)` buffers

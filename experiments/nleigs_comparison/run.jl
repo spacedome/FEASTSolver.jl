@@ -9,7 +9,7 @@ using Random
 import NonlinearEigenproblems: create_linsolver, lin_solve
 
 const ENV_DEFAULTS = Dict(
-    "FEAST_EXPERIMENT_PROBLEMS" => "butterfly,pep0",
+    "FEAST_EXPERIMENT_PROBLEMS" => "butterfly,pep0,schrodinger_movebc",
     "FEAST_EXPERIMENT_METHODS" => "feast,nleigs",
     "FEAST_EXPERIMENT_PROCS" => "0,4,8",
     "FEAST_EXPERIMENT_FORMAT" => "pretty",
@@ -17,7 +17,7 @@ const ENV_DEFAULTS = Dict(
     "FEAST_EXPERIMENT_REPEATS" => "1",
     "FEAST_EXPERIMENT_FEAST_CONFIGS" => "",
     "FEAST_EXPERIMENT_SEED" => "9901",
-    "FEAST_EXPERIMENT_PROBLEM_N" => "3000",
+    "FEAST_EXPERIMENT_PROBLEM_N" => "",
     "FEAST_EXPERIMENT_HADELER_ALPHA" => "100",
     "FEAST_EXPERIMENT_CONTOUR_CENTER" => "",
     "FEAST_EXPERIMENT_CONTOUR_RADIUS" => "",
@@ -49,7 +49,7 @@ parse_csv(name) = filter!(!isempty, strip.(split(env(name), ",")))
 parse_int_csv(name) = parse.(Int, parse_csv(name))
 parse_bool(name) = parse(Bool, env(name))
 output_csv() = lowercase(env("FEAST_EXPERIMENT_FORMAT")) == "csv"
-problem_n(default) = isempty(env("FEAST_EXPERIMENT_PROBLEM_N")) ? default : parse(Int, env("FEAST_EXPERIMENT_PROBLEM_N"))
+problem_n(default) = isempty(get(ENV, "FEAST_EXPERIMENT_PROBLEM_N", "")) ? default : parse(Int, ENV["FEAST_EXPERIMENT_PROBLEM_N"])
 blas_threads() = parse(Int, env("FEAST_EXPERIMENT_BLAS_THREADS"))
 worker_blas_threads() = parse(Int, env("FEAST_EXPERIMENT_WORKER_BLAS_THREADS"))
 feast_materialize_nodes() = parse_bool("FEAST_EXPERIMENT_FEAST_MATERIALIZE_NODES")
@@ -167,6 +167,46 @@ end
 
 function relative_residuals(T, λ, X)
     [relative_residual(T, λ[i], view(X, :, i)) for i in eachindex(λ)]
+end
+
+function feast_operator_action_residual_tools(T; normalize_by_matrix=true)
+    M = operator_prototype(T)
+    x = zeros(ComplexF64, size(T, 1))
+    y = similar(x)
+
+    function residual(λ, v)
+        mul!(y, T, λ, v)
+        if normalize_by_matrix
+            materialize!(M, T, λ)
+            return norm(y) / norm(M)
+        end
+        norm(y) / norm(v)
+    end
+
+    function residual_update!(res, X, R, Λ)
+        @inbounds for j in axes(X, 2)
+            xnorm = zero(real(eltype(X)))
+            for i in axes(X, 1)
+                xnorm += abs2(X[i, j])
+            end
+            inv_xnorm = inv(sqrt(xnorm))
+            for i in axes(X, 1)
+                x[i] = X[i, j] * inv_xnorm
+                X[i, j] = x[i]
+            end
+            mul!(y, T, Λ[j], x)
+            copyto!(view(R, :, j), y)
+            if normalize_by_matrix
+                materialize!(M, T, Λ[j])
+                res[j] = norm(y) / norm(M)
+            else
+                res[j] = norm(y)
+            end
+        end
+        res
+    end
+
+    residual, residual_update!
 end
 
 function gun_residual_tools(nep)
@@ -306,7 +346,63 @@ function problem_config(name)
             T_prototype=operator_prototype(T),
         )
     elseif name == "gun"
-        error("gun is disabled in this experiment until sparse NLFEAST support is implemented and benchmarked deliberately")
+        T = feast_gallery("nlevp_native_gun")
+        nep = nep_gallery("nlevp_native_gun")
+        residual, residual_update = gun_residual_tools(nep)
+        return (;
+            name,
+            T,
+            nep,
+            n=size(T, 1),
+            c=140000.0 + 0.0im,
+            r=30000.0,
+            feast_label="sparse-default",
+            m=32,
+            feast_nodes=8,
+            feast_iter=3,
+            feast_store=false,
+            feast_tol=1e-8,
+            spurious=1e-5,
+            nleigs_tol=1e-8,
+            nleigs_maxit=150,
+            nleigs_blksize=32,
+            nleigs_polygon_points=32,
+            nleigs_singularities=[0.0, 108.8774^2],
+            residual,
+            residual_update,
+            T_update=matrix_materializer(T),
+            T_prototype=operator_prototype(T),
+        )
+    elseif name == "schrodinger_movebc"
+        n = problem_n(50000)
+        T = feast_gallery("schrodinger_movebc", n)
+        nep = nep_gallery("schrodinger_movebc", n)
+        residual, residual_update = feast_operator_action_residual_tools(T; normalize_by_matrix=false)
+        return (;
+            name,
+            T,
+            nep,
+            n,
+            c=-35.0 + 0.0im,
+            r=4.2,
+            feast_label="sparse-default",
+            m=8,
+            feast_nodes=24,
+            feast_iter=6,
+            feast_store=false,
+            feast_tol=1e-5,
+            spurious=1e-5,
+            nleigs_tol=1e-5,
+            nleigs_solver_tol=1e-5,
+            nleigs_maxit=150,
+            nleigs_blksize=16,
+            nleigs_polygon_points=24,
+            nleigs_singularities=[-10.0],
+            residual,
+            residual_update,
+            T_update=matrix_materializer(T),
+            T_prototype=operator_prototype(T),
+        )
     elseif name == "loaded_string"
         n = problem_n(500)
         T = feast_gallery("nlevp_native_loaded_string", n, 1, 1)
@@ -360,7 +456,7 @@ function problem_config(name)
             T_prototype=operator_prototype(T),
         )
     elseif name == "pep0"
-        n = problem_n(500)
+        n = problem_n(3000)
         nep = nep_gallery("pep0", n)
         T = feast_gallery("polynomial", nep.A)
         residual, residual_update = pep_action_residual_tools(nep)
@@ -784,7 +880,9 @@ function run_nleigs(problem, seed)
     maxit = problem_int(problem, "FEAST_EXPERIMENT_NLEIGS_MAXIT", :nleigs_maxit, 100)
     minit = parse(Int, env("FEAST_EXPERIMENT_NLEIGS_MINIT"))
     maxdgr = parse(Int, env("FEAST_EXPERIMENT_NLEIGS_MAXDGR"))
-    tol = parse(Float64, env("FEAST_EXPERIMENT_NLEIGS_TOL"))
+    tol = isempty(get(ENV, "FEAST_EXPERIMENT_NLEIGS_TOL", "")) && :nleigs_solver_tol in propertynames(problem) ?
+          problem.nleigs_solver_tol :
+          parse(Float64, env("FEAST_EXPERIMENT_NLEIGS_TOL"))
     blksize = problem_int(problem, "FEAST_EXPERIMENT_NLEIGS_BLKSIZE", :nleigs_blksize, 20)
     static = parse_bool("FEAST_EXPERIMENT_NLEIGS_STATIC")
     leja = parse(Int, env("FEAST_EXPERIMENT_NLEIGS_LEJA"))

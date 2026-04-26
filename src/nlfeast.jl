@@ -40,6 +40,7 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
     stats::Union{Nothing,DenseFeastStats}=nothing,
     matrix_update=nothing,
     matrix_prototype=nothing,
+    solver::AbstractSparseFeastSolver=SparseDirectSolver(),
     contour=nothing)
 
     contour = contour === nothing ? circular_contour_trapezoidal(c, r, nodes) : contour
@@ -58,6 +59,7 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Intege
         stats=stats,
         matrix_update=matrix_update,
         matrix_prototype=matrix_prototype,
+        solver=solver,
     )
 end
 
@@ -66,7 +68,8 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, contour::Contour, iter::Inte
     factorizer=lu, left_divider=ldiv!, residual_update=nothing,
     stats::Union{Nothing,DenseFeastStats}=nothing,
     matrix_update=nothing,
-    matrix_prototype=nothing)
+    matrix_prototype=nothing,
+    solver::AbstractSparseFeastSolver=SparseDirectSolver())
 
     matrix_update, matrix_prototype = _nlfeast_operator_storage(T, matrix_update, matrix_prototype)
     N, m₀ = size(X)
@@ -81,6 +84,9 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, contour::Contour, iter::Inte
     T_prototype = matrix_prototype === nothing ? T(z_nodes[1]) : matrix_prototype
     residual_matrix = T_prototype isa StridedMatrix ? similar(T_prototype) : nothing
     residual_x, residual_y = zeros(ComplexF64, N), zeros(ComplexF64, N)
+    sparse_path = T_prototype isa AbstractSparseMatrix
+    store && sparse_path && !_sparse_supports_stored_factors(solver) &&
+        error("store=true for sparse nonlinear FEAST requires a solver with reusable factorizations")
 
     qr_ws = X isa StridedMatrix ? QRWs(X) : nothing
     if qr_ws === nothing
@@ -99,10 +105,22 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, contour::Contour, iter::Inte
             lapack_lu_ws = dense_lapack_lu_workspace(Tz)
         end
     end
-    generic_Tz = !store && matrix_update !== nothing && lapack_lu_ws === nothing ? similar(T_prototype) : nothing
+    generic_Tz = !store && matrix_update !== nothing && lapack_lu_ws === nothing && !sparse_path ? similar(T_prototype) : nothing
+    sparse_Tz = !store && matrix_update !== nothing && sparse_path ? similar(T_prototype) : nothing
+    sparse_reusable_factor = nothing
+    facts = nothing
 
     if store
-        facts1 = if matrix_update === nothing
+        facts1 = if sparse_path
+            Tmat = if matrix_update === nothing
+                T(z_nodes[1])
+            else
+                Tbuf = similar(T_prototype)
+                matrix_update(Tbuf, z_nodes[1])
+                Tbuf
+            end
+            _sparse_factor(solver, Tmat)
+        elseif matrix_update === nothing
             factorizer(T(z_nodes[1]))
         else
             Tbuf = similar(T_prototype)
@@ -112,7 +130,16 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, contour::Contour, iter::Inte
         facts = Array{typeof(facts1)}(undef, nodes)
         facts[1] = facts1
         for i = 2:nodes
-            facts[i] = if matrix_update === nothing
+            facts[i] = if sparse_path
+                Tmat = if matrix_update === nothing
+                    T(z_nodes[i])
+                else
+                    Tbuf = similar(T_prototype)
+                    matrix_update(Tbuf, z_nodes[i])
+                    Tbuf
+                end
+                _sparse_factor(solver, Tmat)
+            elseif matrix_update === nothing
                 factorizer(T(z_nodes[i]))
             else
                 Tbuf = similar(T_prototype)
@@ -122,6 +149,7 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, contour::Contour, iter::Inte
             if debug print("*") end
         end
         if debug println() end
+        sparse_path && _record_stored_factor_memory!(stats, facts)
     end
 
     solve_start_ns = time_ns()
@@ -139,7 +167,11 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, contour::Contour, iter::Inte
             z = z_nodes[i]
             if nit == 0
                 if store
-                    left_divider(Tinv, facts[i], X)
+                    if sparse_path
+                        _sparse_solve_factored!(Tinv, solver, facts[i], X)
+                    else
+                        left_divider(Tinv, facts[i], X)
+                    end
                 elseif lapack_lu_ws !== nothing
                     if matrix_update === nothing
                         copyto!(Tz, T(z))
@@ -148,8 +180,24 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, contour::Contour, iter::Inte
                     end
                     dense_lapack_linsolve!(Tinv, Tz, X, lapack_lu_ws)
                 elseif matrix_update !== nothing
-                    matrix_update(generic_Tz, z)
-                    Tinv .= generic_Tz \ X
+                    if sparse_path
+                        matrix_update(sparse_Tz, z)
+                        if solver isa SparseDirectSolver
+                            if sparse_reusable_factor === nothing
+                                sparse_reusable_factor = _sparse_factor(solver, sparse_Tz)
+                                _sparse_solve_factored!(Tinv, solver, sparse_reusable_factor, X)
+                            else
+                                _sparse_linsolve_reuse_symbolic!(Tinv, solver, sparse_reusable_factor, sparse_Tz, X)
+                            end
+                        else
+                            _sparse_linsolve!(Tinv, solver, sparse_Tz, X)
+                        end
+                    else
+                        matrix_update(generic_Tz, z)
+                        Tinv .= generic_Tz \ X
+                    end
+                elseif sparse_path
+                    _sparse_linsolve!(Tinv, solver, T(z), X)
                 else
                     Tinv .= T(z) \ X
                 end
@@ -157,7 +205,11 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, contour::Contour, iter::Inte
             else
                 fill_resolvent!(resolvent, z, Λ)
                 if store
-                    left_divider(Tinv, facts[i], R)
+                    if sparse_path
+                        _sparse_solve_factored!(Tinv, solver, facts[i], R)
+                    else
+                        left_divider(Tinv, facts[i], R)
+                    end
                 elseif lapack_lu_ws !== nothing
                     if matrix_update === nothing
                         copyto!(Tz, T(z))
@@ -166,8 +218,24 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, contour::Contour, iter::Inte
                     end
                     dense_lapack_linsolve!(Tinv, Tz, R, lapack_lu_ws)
                 elseif matrix_update !== nothing
-                    matrix_update(generic_Tz, z)
-                    Tinv .= generic_Tz \ R
+                    if sparse_path
+                        matrix_update(sparse_Tz, z)
+                        if solver isa SparseDirectSolver
+                            if sparse_reusable_factor === nothing
+                                sparse_reusable_factor = _sparse_factor(solver, sparse_Tz)
+                                _sparse_solve_factored!(Tinv, solver, sparse_reusable_factor, R)
+                            else
+                                _sparse_linsolve_reuse_symbolic!(Tinv, solver, sparse_reusable_factor, sparse_Tz, R)
+                            end
+                        else
+                            _sparse_linsolve!(Tinv, solver, sparse_Tz, R)
+                        end
+                    else
+                        matrix_update(generic_Tz, z)
+                        Tinv .= generic_Tz \ R
+                    end
+                elseif sparse_path
+                    _sparse_linsolve!(Tinv, solver, T(z), R)
                 else
                     Tinv .= T(z) \ R
                 end
@@ -212,7 +280,7 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, contour::Contour, iter::Inte
         spurious_converged = nit > 1 && spurious_found && max_spurious_res_inside < ϵ
         _record_dense_feast_iteration!(
             stats,
-            :nonlinear,
+            sparse_path ? :sparse_nonlinear : :nonlinear,
             nit,
             res,
             inside,
@@ -234,6 +302,12 @@ function nlfeast!(T, X::AbstractMatrix{ComplexF64}, contour::Contour, iter::Inte
     end
     if stats !== nothing
         stats.solve_total_ns += time_ns() - solve_start_ns
+    end
+    if sparse_path && facts !== nothing
+        foreach(finalize!, facts)
+    end
+    if sparse_reusable_factor !== nothing
+        finalize!(sparse_reusable_factor)
     end
 
     normalize!(X)

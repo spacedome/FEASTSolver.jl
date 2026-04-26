@@ -295,6 +295,7 @@ end
 @testitem "generalized FEAST accepts identity operator" setup=[FEASTTestSetup] begin
     using FEASTSolver
     using LinearAlgebra
+    using SparseArrays
     using .FEASTTestSetup: initial_subspace, assert_eigenvalues_found, assert_converged
 
     A = Matrix(Diagonal(1.0:8.0))
@@ -318,6 +319,20 @@ end
         initial_subspace(8, 4, 252),
         initial_subspace(8, 4, 253),
         A,
+        I;
+        nodes=8,
+        iter=10,
+        c=2.0,
+        r=1.2,
+        ϵ=1e-10,
+    )
+
+    assert_eigenvalues_found(λ, expected; atol=1e-10)
+    assert_converged(res; atol=1e-10)
+
+    λ, _, res = gen_feast!(
+        initial_subspace(8, 4, 254),
+        sparse(A),
         I;
         nodes=8,
         iter=10,
@@ -366,6 +381,7 @@ end
 
     A = spdiagm(0 => [1.0, 2.0, 0.0, 4.0, 5.0, 6.0])
     expected = complex.([1.0, 2.0])
+    stats = DenseFeastStats()
 
     λ, _, res = feast!(
         initial_subspace(size(A, 1), 2, 361),
@@ -377,10 +393,13 @@ end
         ϵ=1e-12,
         store=true,
         solver=SparseDirectSolver(),
+        stats=stats,
     )
 
     assert_eigenvalues_found(λ, expected; atol=1e-10)
     assert_converged(res; atol=1e-10)
+    @test stats.stored_factor_count == 8
+    @test stats.stored_factor_bytes > 0
 end
 
 @testitem "sparse FEAST exposes a BiCGSTAB solver policy" setup=[FEASTTestSetup] begin
@@ -414,6 +433,66 @@ end
         store=true,
         solver=SparseBiCGSTABSolver(),
     )
+end
+
+@testitem "sparse generalized FEAST direct solver finds requested eigenvalues" setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using SparseArrays
+    using .FEASTTestSetup: initial_subspace, assert_eigenvalues_found, assert_converged
+
+    A = spdiagm(0 => collect(1.0:10.0))
+    B = spdiagm(0 => 2.0 .+ collect(1.0:10.0) ./ 10.0)
+    expected = complex.((1.0:3.0) ./ (2.0 .+ (1.0:3.0) ./ 10.0))
+    stats = DenseFeastStats()
+
+    λ, _, res = gen_feast!(
+        initial_subspace(size(A, 1), 4, 364),
+        A,
+        B;
+        nodes=12,
+        iter=10,
+        c=0.9,
+        r=0.55,
+        ϵ=1e-12,
+        store=true,
+        stats=stats,
+    )
+
+    assert_eigenvalues_found(λ, expected; atol=1e-10)
+    assert_converged(res; atol=1e-10)
+    @test stats.stored_factor_count == 12
+    @test stats.stored_factor_bytes > 0
+end
+
+@testitem "MatrixDepot sparse Poisson problem" setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using LinearAlgebra
+    using MatrixDepot
+    using SparseArrays
+    using .FEASTTestSetup: initial_subspace, assert_eigenvalues_found, assert_converged
+
+    A = sparse(matrixdepot("poisson", 5))
+    exact = eigvals(Matrix(A))
+    c, r = 1.3, 0.25
+    expected = complex.(exact[in_contour(exact, c, r)])
+    stats = DenseFeastStats()
+
+    λ, _, res = feast!(
+        initial_subspace(size(A, 1), length(expected) + 2, 365),
+        A;
+        nodes=12,
+        iter=15,
+        c=c,
+        r=r,
+        ϵ=1e-11,
+        store=true,
+        stats=stats,
+    )
+
+    assert_eigenvalues_found(λ, expected; atol=1e-9)
+    assert_converged(res; atol=1e-9)
+    @test stats.stored_factor_count == 12
+    @test stats.stored_factor_bytes > 0
 end
 
 @testitem "custom contours classify eigenvalues with an explicit predicate" setup=[FEASTTestSetup] begin
@@ -491,6 +570,42 @@ end
     assert_converged(res[inside]; atol=1e-10)
     @test stats.iterations == length(stats.iteration_log)
     @test stats.iteration_log[end].variant == :nonlinear
+end
+
+@testitem "sparse nonlinear FEAST handles a linear polynomial" setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using LinearAlgebra
+    using SparseArrays
+    using .FEASTTestSetup: initial_subspace, assert_eigenvalues_found, assert_converged
+
+    n = 12
+    T = feast_gallery(
+        "polynomial",
+        [spdiagm(0 => complex.(-1.0:-1.0:-n)), sparse(I, n, n)],
+    )
+    expected = complex.(1.0:4.0)
+
+    for (store, seed) in ((true, 411), (false, 412))
+        stats = DenseFeastStats()
+        λ, _, res = nlfeast!(
+            T,
+            initial_subspace(n, 4, seed),
+            8,
+            10;
+            c=2.5,
+            r=1.6,
+            ϵ=1e-12,
+            store=store,
+            stats=stats,
+        )
+
+        inside = in_contour(λ, 2.5, 1.6)
+        assert_eigenvalues_found(λ[inside], expected; atol=1e-10)
+        assert_converged(res[inside]; atol=1e-10)
+        @test stats.iteration_log[end].variant == :sparse_nonlinear
+        @test stats.stored_factor_count == (store ? 8 : 0)
+        @test stats.stored_factor_bytes >= 0
+    end
 end
 
 @testitem "nonlinear FEAST accepts a custom contour" setup=[FEASTTestSetup] begin

@@ -117,5 +117,69 @@ Findings:
   exactly the same polygonal target sets used by NLEIGS.
 - For publication runs, repeat the default large comparison with multiple timed
   samples on a larger machine.
-- When sparse NLFEAST is implemented, add one large sparse problem, likely
-  derived from `gun`, as the third curated comparison case.
+- Sparse NLFEAST now has a direct sparse shifted-solve path.
+  `schrodinger_movebc` is part of the default comparison set; `gun` remains an
+  explicit exploratory selector until its region, subspace size, contour node
+  count, and NLEIGS settings are tuned with the same care used for `pep0`.
+
+## 2026-04-25: `schrodinger_movebc` Sparse Region
+
+Problem:
+
+- Native FEAST gallery implementation of NEP-PACK's moving-boundary
+  Schrodinger problem.
+- Sparse problem with in-place `T!(M, z)` materialization and sparse direct
+  shifted solves.
+- Main local setting: `n=50000`.
+- Fair-memory policy: FEAST `store=false`; NLEIGS `reusefact=0`.
+
+Current default:
+
+- FEAST contour: center `-35 + 0im`, radius `4.2`.
+- FEAST subspace: `m=8`.
+- FEAST nodes: `24`.
+- FEAST iterations: `6`.
+- FEAST tolerance: absolute action residual `1e-5`.
+- NLEIGS target: same center/radius, 24 polygon points, singularity `-10`.
+- NLEIGS tolerance: `1e-5`.
+
+Representative local results:
+
+- `n=50000`, FEAST serial, no-store:
+  3 converged interior eigenpairs plus 4 spurious interior Ritz values, two RII
+  steps, about `3.0s`.
+- `n=50000`, FEAST 4 workers, no-store:
+  same eigenpair classification, about `2.5s`.
+- `n=50000`, FEAST 8 workers, no-store:
+  same eigenpair classification, about `2.8s`; overhead beats the extra
+  parallelism for this 24-node contour on the local 16-thread machine.
+- `n=50000`, NLEIGS no-reuse:
+  3 converged interior eigenpairs, about `11.9s`.
+
+These are single-sample local runs after warmup, not publication timing
+statistics.
+
+Region and tolerance notes:
+
+- The target cluster is the three real eigenpairs near `-39.15`, `-34.94`, and
+  `-31.06`.
+- Matrix-norm relative residuals are misleading for this problem because
+  `norm(T(λ))` can be enormous near the target region. The benchmark therefore
+  uses absolute action residuals on normalized vectors.
+- At `n=10000`, radius `4.2` cleanly exposed the same three real eigenpairs and
+  one nearby spurious Ritz value under absolute residual checks.
+- At `n=50000`, `m=8`, nodes `24`, and `tol=1e-5` gives the current best local
+  comparison: FEAST performs RII refinement and NLEIGS recovers the same three
+  eigenpairs.
+- At `n=100000`, radius `4.2` was not robust locally: `m=8,nodes=24,iter=6` and
+  `m=12,nodes=32,iter=8` both hit the FEAST iteration limit with unstable
+  spurious Ritz values. This should be revisited on a larger machine and with a
+  broader contour/subspace search before using `n=100000` in reported results.
+
+Implementation notes:
+
+- Distributed sparse NLFEAST workers now use the same sparse symbolic-reuse path
+  as serial NLFEAST when an in-place matrix materializer is provided.
+- Distributed nonlinear accumulation now calls the shared fused moment
+  accumulator used by serial NLFEAST. Before this change, worker accumulation
+  dominated the sparse distributed run and hid the contour-level parallelism.

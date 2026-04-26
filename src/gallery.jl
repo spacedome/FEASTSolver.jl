@@ -48,6 +48,17 @@ struct GunGalleryOperator{T<:SparseMatrixCSC{Float64,Int},P} <: AbstractFeastGal
     sparse_pattern::P
 end
 
+struct SchrodingerMoveBCGalleryOperator{T<:SparseMatrixCSC{Float64,Int},P} <: AbstractFeastGalleryOperator
+    A0::T
+    I0::T
+    G::T
+    F::T
+    L0::Float64
+    L1::Float64
+    V0::Float64
+    sparse_pattern::P
+end
+
 struct GalleryMatrixMaterializer{O<:AbstractFeastOperator}
     operator::O
 end
@@ -62,6 +73,8 @@ Base.size(op::LoadedStringGalleryOperator) = size(op.A0)
 Base.size(op::LoadedStringGalleryOperator, dim::Integer) = size(op.A0, dim)
 Base.size(op::GunGalleryOperator) = size(op.K)
 Base.size(op::GunGalleryOperator, dim::Integer) = size(op.K, dim)
+Base.size(op::SchrodingerMoveBCGalleryOperator) = size(op.A0)
+Base.size(op::SchrodingerMoveBCGalleryOperator, dim::Integer) = size(op.A0, dim)
 (op::AbstractFeastOperator)(z) = operator_matrix(op, z)
 (materializer::GalleryMatrixMaterializer)(M, z) = materialize!(M, materializer.operator, z)
 
@@ -173,6 +186,7 @@ end
 operator_prototype(op::HadelerGalleryOperator) = similar(op.A0, ComplexF64)
 operator_prototype(op::LoadedStringGalleryOperator) = similar(op.A0, ComplexF64)
 operator_prototype(op::GunGalleryOperator) = sparse_pattern_prototype(op.sparse_pattern)
+operator_prototype(op::SchrodingerMoveBCGalleryOperator) = sparse_pattern_prototype(op.sparse_pattern)
 
 function materialize!(M, op::PolynomialGalleryOperator, z)
     copyto!(M, op.matrices[end])
@@ -262,6 +276,30 @@ function mul!(Y::AbstractVecOrMat, op::GunGalleryOperator, z, V::AbstractVecOrMa
     Y
 end
 
+function schrodinger_movebc_coefficients(op::SchrodingerMoveBCGalleryOperator, z)
+    root = sqrt(z + op.V0)
+    span = op.L1 - op.L0
+    g = cosh(span * root)
+    f = sinh(span * root) / root
+    (one(z), -z, g, f)
+end
+
+function materialize!(M::SparseMatrixCSC, op::SchrodingerMoveBCGalleryOperator, z)
+    materialize_sparse_combination!(M, op.sparse_pattern, schrodinger_movebc_coefficients(op, z))
+end
+
+function mul!(Y::AbstractVecOrMat, op::SchrodingerMoveBCGalleryOperator, z, V::AbstractVecOrMat, workspace::AbstractVecOrMat)
+    _, mz, g, f = schrodinger_movebc_coefficients(op, z)
+    mul!(Y, op.A0, V)
+    mul!(workspace, op.I0, V)
+    axpy!(mz, workspace, Y)
+    mul!(workspace, op.G, V)
+    axpy!(g, workspace, Y)
+    mul!(workspace, op.F, V)
+    axpy!(f, workspace, Y)
+    Y
+end
+
 function feast_gallery(name::AbstractString, args...; kwargs...)
     if name == "polynomial"
         return PolynomialGalleryOperator(args[1])
@@ -271,6 +309,8 @@ function feast_gallery(name::AbstractString, args...; kwargs...)
         return loaded_string_gallery(args...; kwargs...)
     elseif name == "nlevp_native_gun"
         return gun_gallery()
+    elseif name == "schrodinger_movebc"
+        return schrodinger_movebc_gallery(args...; kwargs...)
     end
     error("unknown FEAST gallery problem '$name'")
 end
@@ -339,4 +379,31 @@ function gun_gallery()
     W1 = read_gallery_sparse_matrix(base * "W1.txt")
     W2 = read_gallery_sparse_matrix(base * "W2.txt")
     GunGalleryOperator(K, M, W1, W2, sparse_combination_pattern((K, M, W1, W2)))
+end
+
+function schrodinger_movebc_gallery(n::Integer=1000, L0=1, L1=8, α=25 * π / 2, V0=10.0)
+    n >= 3 || error("schrodinger_movebc requires n >= 3")
+    L0, L1, α, V0 = Float64(L0), Float64(L1), Float64(α), Float64(V0)
+    xv = collect(range(0.0, stop=L0, length=n))
+    h = xv[2] - xv[1]
+    potential = 1 .+ sin.(α .* xv[1:end-1])
+
+    Dn = spdiagm(
+        -1 => [ones(n - 2); 0.0] ./ h^2,
+        0 => [-2 .* ones(n - 1); 0.0] ./ h^2,
+        1 => ones(n - 1) ./ h^2,
+    )
+    Vn = spdiagm(0 => [potential; 0.0])
+    I0 = spdiagm(0 => [ones(n - 1); 0.0])
+
+    G = sparse([n], [n], [1.0], n, n)
+    F = sparse(
+        [n, n, n],
+        [n - 2, n - 1, n],
+        [1 / (2h), -2 / h, 3 / (2h)],
+        n,
+        n,
+    )
+    A0 = Dn - Vn
+    SchrodingerMoveBCGalleryOperator(A0, I0, G, F, L0, L1, V0, sparse_combination_pattern((A0, I0, G, F)))
 end

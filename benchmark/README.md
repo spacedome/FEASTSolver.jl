@@ -56,6 +56,7 @@ Useful environment variables:
 
 This harness separately times sparse shifted-matrix construction, fresh
 `lu(A - zI)`, reusable-pattern materialization, `lu!` with
-`reuse_symbolic=true`, factored solves, and the full sparse `feast!` path. It is
-intended to catch accidental symbolic-analysis or sparse-structure allocation
-inside the contour loop.
+`reuse_symbolic=true`, factored solves, and the full sparse `feast!` path. It
+also reports `stored_factor_count` and `stored_factor_bytes` from FEAST stats
+when `FEAST_SPARSE_BENCH_STORE=true`. It is intended to catch accidental
+symbolic-analysis or sparse-structure allocation inside the contour loop.

@@ -12,17 +12,20 @@ The dense serial reference family is `feast!`, `gen_feast!`, and
 `stats=DenseFeastStats()` when iteration counts, convergence counts, residuals,
 and phase timings should be recorded.
 
-Sparse standard FEAST is exposed by the same `feast!` name through dispatch on
-`A::AbstractSparseMatrix`. The default `SparseDirectSolver()` uses Julia's
-SuiteSparse/UMFPACK path via sparse `lu`; `SparseBiCGSTABSolver()` is available
-for experiments but is not yet the tuned workspace-oriented path.
+Sparse standard and generalized FEAST are exposed by the same `feast!` and
+`gen_feast!` names through dispatch on `A::AbstractSparseMatrix`. The default
+`SparseDirectSolver()` uses Julia's SuiteSparse/UMFPACK path via sparse `lu`;
+`SparseBiCGSTABSolver()` is available for experiments but is not yet the tuned
+workspace-oriented path.
 
 The nonlinear implementation currently exported as first-class is `nlfeast!`.
 It accepts FEAST-native nonlinear operators with `operator_prototype(op)`,
 `materialize!(M, op, z)`, and `mul!(Y, op, z, V)` methods, plus the same
-`stats=` diagnostics hook. Moment-expanded and inexact/iterative nonlinear
-experiments are kept in-tree, but are intentionally not exported as the normal
-user-facing interface.
+`stats=` diagnostics hook. Sparse nonlinear operators use the same sparse solver
+policy as linear sparse FEAST: cached sparse factors when `store=true` and
+symbolic reuse for fixed-pattern in-place materializers when `store=false`.
+Moment-expanded and inexact/iterative nonlinear experiments are kept in-tree,
+but are intentionally not exported as the normal user-facing interface.
 
 Contour handling is explicit but keeps the simple path simple. Solver wrappers
 default to a circular trapezoidal contour from `c`, `r`, and `nodes`, while the

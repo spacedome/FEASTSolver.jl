@@ -58,6 +58,8 @@ function print_stats(label, stats)
         ",rayleigh_ritz_s=", seconds(stats.rayleigh_ritz_ns),
         ",residual_s=", seconds(stats.residual_ns),
         ",filter_s=", seconds(stats.filter_ns),
+        ",stored_factor_count=", stats.stored_factor_count,
+        ",stored_factor_bytes=", stats.stored_factor_bytes,
     )
 end
 

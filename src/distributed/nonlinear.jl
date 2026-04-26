@@ -66,6 +66,7 @@ mutable struct DenseNonlinearFeastDistributedWorkspace
     matrix_prototype
     Tz
     lu_ws
+    sparse_reusable_factor
     stored_factors
     old_blas_threads::Int
 end
@@ -476,6 +477,7 @@ function _init_dense_nlfeast_worker!(
 
     Tz = nothing
     lu_ws = nothing
+    sparse_reusable_factor = nothing
     stored_factors = nothing
     if store
         stored_factors = if matrix_update !== nothing
@@ -499,6 +501,11 @@ function _init_dense_nlfeast_worker!(
                     factorizer === lu &&
                     left_divider === ldiv!
                 lu_ws = dense_lapack_lu_workspace(Tz)
+            elseif Tz isa SparseMatrixCSC &&
+                    factorizer === lu &&
+                    left_divider === ldiv!
+                matrix_update(Tz, nodes[first(node_indices)])
+                sparse_reusable_factor = _sparse_factor(SparseDirectSolver(), Tz)
             end
         else
             T_prototype = node_matrices === nothing ? T(nodes[node_indices[1]]) : node_matrices[1]
@@ -530,6 +537,7 @@ function _init_dense_nlfeast_worker!(
         matrix_prototype,
         Tz,
         lu_ws,
+        sparse_reusable_factor,
         stored_factors,
         old_blas_threads,
     )
@@ -572,20 +580,7 @@ function _dense_nlfeast_worker_step!(
             continue
         else
             fill_resolvent!(ws.resolvent, z, Λ)
-            @inbounds for j in axes(ws.temp, 2)
-                α = ws.resolvent[j] * ws.weights[node_index]
-                for i in axes(ws.temp, 1)
-                    ws.temp[i, j] = (ws.X[i, j] - ws.temp[i, j]) * α
-                end
-            end
-        end
-
-        @inbounds for j in axes(ws.temp, 2)
-            for i in axes(ws.temp, 1)
-                value = ws.temp[i, j]
-                Q₀part[i, j] += value
-                Q₁part[i, j] += z * value
-            end
+            accumulate_filtered_moments!(Q₀part, Q₁part, ws.X, ws.temp, ws.resolvent, ws.weights[node_index], z)
         end
         accum_ns += time_ns() - start_ns
     end
@@ -605,10 +600,12 @@ function _dense_nlfeast_solve!(Y, ws::DenseNonlinearFeastDistributedWorkspace, l
         ws.matrix_update(ws.Tz, z)
         materialize_ns = time_ns() - start_ns
         start_ns = time_ns()
-        if ws.lu_ws === nothing
-            Y .= ws.Tz \ rhs
-        else
+        if ws.lu_ws !== nothing
             dense_lapack_linsolve!(Y, ws.Tz, rhs, ws.lu_ws)
+        elseif ws.sparse_reusable_factor !== nothing
+            _sparse_linsolve_reuse_symbolic!(Y, SparseDirectSolver(), ws.sparse_reusable_factor, ws.Tz, rhs)
+        else
+            Y .= ws.Tz \ rhs
         end
         linsolve_ns = time_ns() - start_ns
     elseif ws.lu_ws !== nothing

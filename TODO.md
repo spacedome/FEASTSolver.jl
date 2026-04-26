@@ -33,9 +33,9 @@
     - First-class: dense standard `feast!`, dense generalized `gen_feast!`, and dense non-Hermitian/generalized dual `dual_gen_feast!`, all with clean contour handling, stable tests, and low allocation per iteration.
     - First-class nonlinear: keep `nlfeast!`/Beyn-style nonlinear variants in scope, but test and document them separately from linear dense FEAST.
     - API boundary: export the first-class dense serial family, the canonical nonlinear prototype, and the explicit distributed FEAST plan/stat types. Keep unfinished IFEAST, iterative nonlinear, and moment/SS experiments available as qualified `FEASTSolver.*` names rather than treating them as the default user interface.
-    - Near-term: make sparse matrices work through the same dense-facing API only where the shifted solve abstraction is clean; do not copy the FORTRAN CSR API shape into Julia unless performance forces it. First pass exists for standard `feast!(X, A::AbstractSparseMatrix)` with `SparseDirectSolver()` and an experimental `SparseBiCGSTABSolver()`.
-    - Sparse direct profiling note: Julia's UMFPACK wrapper stores reusable solve workspace on `UmfpackLU` and supports `lu!(F, A; reuse_symbolic=true)`, but numeric factorization still allocates a new UMFPACK numeric object. Sparse standard FEAST now avoids sparse shift-structure allocation and reuses symbolic analysis in `store=false`; remaining direct-solver allocation is dominated by numeric factorization unless `store=true` caches factors.
-    - Later: generalized and dual sparse linear FEAST should reuse the sparse solver policy once standard sparse FEAST has enough tests and allocation/performance measurements.
+    - Near-term: make sparse matrices work through the same dense-facing API only where the shifted solve abstraction is clean; do not copy the FORTRAN CSR API shape into Julia unless performance forces it. First passes exist for standard `feast!(X, A::AbstractSparseMatrix)`, generalized `gen_feast!(X, A::AbstractSparseMatrix, B)`, and sparse-operator `nlfeast!` with `SparseDirectSolver()` and an experimental `SparseBiCGSTABSolver()`.
+    - Sparse direct profiling note: Julia's UMFPACK wrapper stores reusable solve workspace on `UmfpackLU` and supports `lu!(F, A; reuse_symbolic=true)`, but numeric factorization still allocates a new UMFPACK numeric object. Sparse standard/generalized FEAST and sparse-operator NLFEAST now avoid sparse shift-structure allocation and reuse symbolic analysis in `store=false` when an in-place materializer supplies fixed sparsity; remaining direct-solver allocation is dominated by numeric factorization unless `store=true` caches factors.
+    - Later: dual sparse generalized FEAST should reuse the sparse solver policy once the direct sparse shifted-solve path has enough tests and allocation/performance measurements.
     - Later: iterative FEAST/IFEAST, after dense and sparse-direct variants have shared workspace abstractions and meaningful convergence diagnostics.
     - Later: contour-level parallelism using Julia mechanisms rather than MPI-first PFEAST compatibility.
     - Defer by default: banded-specific APIs, unless a real benchmark shows band storage/factorization is worth the extra public surface.
@@ -99,8 +99,9 @@
     available NEP gallery problem. Current direction: one small dense sanity
     problem (`butterfly`), one large dense polynomial problem (`pep0`, default
     size 3000, center 0, radius 0.095, m roughly 2x the observed interior count),
-    and one future large sparse problem once sparse NLFEAST is deliberately
-    implemented.
+    and one large sparse problem (`schrodinger_movebc`, default size 50000,
+    center -35, radius 4.2, m=8, nodes=24) now that sparse NLFEAST has a first
+    direct-solver path.
   - Current `pep0` NLEIGS observation: even with BLAS threading and larger block
     sizes, NLEIGS is sensitive to the target radius. At radius 0.1, FEAST
     recovers a wider 32-eigenpair region while NLEIGS recovers only a subset; at
@@ -116,10 +117,10 @@
   - Future contour-abstraction work should let NLFEAST accept explicit custom
     contours, so we can test FEAST on exactly the same polygonal target sets
     where NLEIGS struggles.
-  - Sparse NLFEAST is not yet a first-class supported benchmark path. The
-    sparse `gun` NLEVP problem is intentionally disabled in the NLEIGS
-    comparison experiment until sparse factorization/workspace behavior is
-    designed and benchmarked deliberately.
+  - Sparse NLFEAST now has a first sparse-direct path. The native
+    `schrodinger_movebc` gallery problem is part of the default NLEIGS
+    comparison set; `gun` remains an explicit exploratory selector until its
+    region/subspace/node settings are tuned.
 
 - [ ] Resurrect Julia bindings for the upstream FEAST library
   - Revisit the old Julia BinaryBuilder bindings work.
