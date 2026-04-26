@@ -17,6 +17,10 @@ test filter='':
 test-slow filter='':
     FEAST_TEST_SLOW=1 {{julia}} --project=. --startup-file=no -e 'using Pkg; filter = ARGS[1]; Pkg.test(test_args=isempty(filter) ? String[] : [filter])' {{quote(filter)}}
 
+# Run flagged numerical torture tests. These are correctness tests, not benchmarks.
+test-torture filter='':
+    FEAST_TEST_ONLY_TORTURE=1 FEAST_TEST_TORTURE=1 FEAST_TEST_SLOW=1 {{julia}} --project=. --startup-file=no -e 'using Pkg; filter = ARGS[1]; Pkg.test(test_args=isempty(filter) ? String[] : [filter])' {{quote(filter)}}
+
 # Run the older simple dense FEAST contour-parallel scaling benchmark.
 bench-parallel:
     {{julia}} --project=. --startup-file=no benchmark/dense_parallel_scaling.jl
@@ -67,6 +71,7 @@ notes:
       'Run just smoke, just test, and just docs for the normal local loop.' \
       'Run just test REGEX to run only matching TestItems through Pkg.test(test_args=...).' \
       'Run just test-slow to include TestItems tagged :slow.' \
+      'Run just test-torture to include flagged generated/NLEVP numerical stress tests.' \
       'test/runtests.jl is the automated TestItemRunner entrypoint.' \
       'just test uses Pkg.test(); test-only dependencies live in Project.toml extras/targets.' \
       'Run just bench-dense for BenchmarkTools-backed dense FEAST benchmarks.' \
