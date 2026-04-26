@@ -27,6 +27,7 @@ Useful environment variables:
 - `FEAST_EXPERIMENT_M=30`
 - `FEAST_EXPERIMENT_FEAST_CONFIGS='label=m30-n16,m=30,nodes=16,iter=3,store=true;label=m40-n16,m=40,nodes=16,iter=3,store=true'`
 - `FEAST_EXPERIMENT_WARMUP=true`
+- `FEAST_EXPERIMENT_DISTRIBUTED_WARMUP=true`
 - `FEAST_EXPERIMENT_FEAST_NODES=16`
 - `FEAST_EXPERIMENT_FEAST_ITER=3`
 - `FEAST_EXPERIMENT_FEAST_STORE=true`
@@ -52,6 +53,11 @@ matrices on the master. Workers build `T(z)` locally, which is the fairer mode
 for large no-store experiments. Set `FEAST_EXPERIMENT_FEAST_MATERIALIZE_NODES=true`
 if a local callable cannot be serialized to workers.
 
+Distributed FEAST warmup is enabled by default when `FEAST_EXPERIMENT_WARMUP=true`.
+It runs a small same-problem distributed solve before timed runs so worker-local
+JIT compilation is not counted as algorithm setup. Disable it with
+`FEAST_EXPERIMENT_DISTRIBUTED_WARMUP=false` when measuring cold Julia startup.
+
 `FEAST_EXPERIMENT_FEAST_CONFIGS` overrides the single `FEAST_EXPERIMENT_M`,
 `FEAST_EXPERIMENT_FEAST_NODES`, `FEAST_EXPERIMENT_FEAST_ITER`, and
 `FEAST_EXPERIMENT_FEAST_STORE` settings with a semicolon-separated list of
@@ -73,6 +79,10 @@ The gun problem uses an action-based residual hook instead of materializing the
 full nonlinear operator during residual checks. That keeps the experiment closer
 to how the large problem should be evaluated while leaving the solver's default
 `T(λ)` interface unchanged.
+
+The polynomial experiments (`butterfly`, `pep0`, `pep0_sym`) pass an in-place
+matrix update hook to distributed FEAST. Workers reuse their `T(z)` buffers
+instead of allocating a fresh matrix from NEP-PACK at every contour node.
 
 FEAST result lines include:
 

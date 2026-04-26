@@ -27,6 +27,7 @@ const ENV_DEFAULTS = Dict(
     "FEAST_EXPERIMENT_FEAST_MATERIALIZE_NODES" => "false",
     "FEAST_EXPERIMENT_M" => "",
     "FEAST_EXPERIMENT_WARMUP" => "true",
+    "FEAST_EXPERIMENT_DISTRIBUTED_WARMUP" => "true",
     "FEAST_EXPERIMENT_NLEIGS_MAXIT" => "100",
     "FEAST_EXPERIMENT_NLEIGS_MINIT" => "20",
     "FEAST_EXPERIMENT_NLEIGS_MAXDGR" => "100",
@@ -47,6 +48,9 @@ problem_n(default) = isempty(env("FEAST_EXPERIMENT_PROBLEM_N")) ? default : pars
 blas_threads() = parse(Int, env("FEAST_EXPERIMENT_BLAS_THREADS"))
 worker_blas_threads() = parse(Int, env("FEAST_EXPERIMENT_WORKER_BLAS_THREADS"))
 feast_materialize_nodes() = parse_bool("FEAST_EXPERIMENT_FEAST_MATERIALIZE_NODES")
+distributed_warmup() = parse_bool("FEAST_EXPERIMENT_WARMUP") && parse_bool("FEAST_EXPERIMENT_DISTRIBUTED_WARMUP")
+
+const DISTRIBUTED_FEAST_WARMED = Set{Tuple{String,Int,Int,Int,Bool,Bool}}()
 
 mutable struct CountingLinSolverCreator{C} <: LinSolverCreator
     inner::C
@@ -101,6 +105,19 @@ end
 
 function polynomial_operator(A)
     z -> z^4 * A[5] + z^3 * A[4] + z^2 * A[3] + z * A[2] + A[1]
+end
+
+function polynomial_operator_update(A)
+    function update!(Tz, z)
+        copyto!(Tz, A[1])
+        power = z
+        @inbounds for i in 2:length(A)
+            Ai = A[i]
+            @. Tz = Tz + power * Ai
+            power *= z
+        end
+        Tz
+    end
 end
 
 function relative_residual(T, λ, x)
@@ -245,6 +262,7 @@ function problem_config(name)
             nleigs_singularities=[Inf],
             residual=(λ, x) -> relative_residual(T, λ, x),
             residual_update=nothing,
+            T_update=polynomial_operator_update(A),
         )
     elseif name == "gun"
         nep = nep_gallery("nlevp_native_gun")
@@ -269,6 +287,7 @@ function problem_config(name)
             nleigs_singularities=[Inf],
             residual,
             residual_update,
+            T_update=nothing,
         )
     elseif name == "loaded_string"
         n = problem_n(500)
@@ -292,6 +311,7 @@ function problem_config(name)
             nleigs_singularities=[1.0],
             residual=(λ, x) -> relative_residual(T, λ, x),
             residual_update=nothing,
+            T_update=nothing,
         )
     elseif name == "hadeler"
         n = problem_n(500)
@@ -317,6 +337,7 @@ function problem_config(name)
             nleigs_singularities=[Inf],
             residual,
             residual_update,
+            T_update=nothing,
         )
     elseif name == "pep0"
         n = problem_n(500)
@@ -341,6 +362,7 @@ function problem_config(name)
             nleigs_singularities=[Inf],
             residual,
             residual_update,
+            T_update=polynomial_operator_update(nep.A),
         )
     elseif name == "pep0_sym"
         n = problem_n(500)
@@ -365,6 +387,7 @@ function problem_config(name)
             nleigs_singularities=[Inf],
             residual,
             residual_update,
+            T_update=polynomial_operator_update(nep.A),
         )
     else
         error("unknown experiment problem '$name'; expected butterfly, gun, loaded_string, hadeler, pep0, or pep0_sym")
@@ -511,6 +534,7 @@ function run_feast(problem, processes, seed)
         )
         summarize_result(problem, "nlfeast", 0, elapsed, λ, V, common_res; extra=extra)
     else
+        warmup_distributed_feast!(problem, processes, worker_ids, worker_threads, seed)
         local λ
         local V
         local res
@@ -525,6 +549,7 @@ function run_feast(problem, processes, seed)
                 ϵ=problem.feast_tol,
                 store=problem.feast_store,
                 materialize_nodes=feast_materialize_nodes(),
+                matrix_update=problem.T_update,
                 spurious=problem.spurious,
                 worker_ids=worker_ids,
                 worker_blas_threads=worker_threads,
@@ -565,6 +590,46 @@ function run_feast(problem, processes, seed)
             trace=feast_trace(stats),
         )
         summarize_result(problem, "distributed_nlfeast", processes, elapsed, λ, V, common_res; extra=extra)
+    end
+    nothing
+end
+
+function warmup_distributed_feast!(problem, processes, worker_ids, worker_threads, seed)
+    processes <= 0 && return nothing
+    distributed_warmup() || return nothing
+    key = (
+        problem.name,
+        problem.n,
+        processes,
+        worker_threads,
+        problem.feast_store,
+        feast_materialize_nodes(),
+    )
+    key in DISTRIBUTED_FEAST_WARMED && return nothing
+    push!(DISTRIBUTED_FEAST_WARMED, key)
+
+    warm_m = min(problem.m, max(4, problem.m ÷ 4))
+    warm_nodes = min(problem.feast_nodes, max(processes, 8))
+    X = initial_subspace(problem.n, warm_m, seed + 303 + processes)
+    try
+        distributed_nlfeast!(
+            problem.T,
+            X,
+            warm_nodes,
+            1;
+            c=problem.c,
+            r=problem.r,
+            ϵ=-1.0,
+            store=problem.feast_store,
+            materialize_nodes=feast_materialize_nodes(),
+            matrix_update=problem.T_update,
+            spurious=problem.spurious,
+            worker_ids=worker_ids,
+            worker_blas_threads=worker_threads,
+            residual_update=problem.residual_update,
+        )
+    catch err
+        @warn "distributed FEAST warmup failed; continuing without it" problem=problem.name processes=processes exception=(err, catch_backtrace())
     end
     nothing
 end

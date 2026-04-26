@@ -23,6 +23,7 @@ mutable struct DenseDistributedNonlinearFeastPlan <: AbstractDenseDistributedFea
     assignments::Vector{Vector{Int}}
     store::Bool
     materialize_nodes::Bool
+    matrix_update
     worker_blas_threads::Int
     factorizer
     left_divider
@@ -60,6 +61,7 @@ mutable struct DenseNonlinearFeastDistributedWorkspace
     resolvent::Vector{ComplexF64}
     factorizer
     left_divider
+    matrix_update
     Tz
     lu_ws
     stored_factors
@@ -86,6 +88,7 @@ function DenseDistributedNonlinearFeastPlan(
     contour::Contour;
     store=true,
     materialize_nodes=true,
+    matrix_update=nothing,
     worker_ids=_default_feast_worker_ids(),
     worker_blas_threads::Integer=1,
     factorizer=lu,
@@ -124,8 +127,9 @@ function DenseDistributedNonlinearFeastPlan(
     svd_ws = SVDsddWs(Q₀, job='S')
     eigen_ws = EigenWs(A, rvecs=true)
 
-    T_prototype = T(ComplexF64(contour.nodes[1]))
-    residual_matrix = T_prototype isa StridedMatrix ? similar(T_prototype) : nothing
+    # Avoid materializing T(z) during plan construction. Large dense NEPs can
+    # spend seconds here, and action residual hooks do not need a matrix buffer.
+    residual_matrix = nothing
     residual_x = zeros(ComplexF64, N)
     residual_y = zeros(ComplexF64, N)
     key = gensym(:dense_nlfeast)
@@ -144,6 +148,7 @@ function DenseDistributedNonlinearFeastPlan(
         assignments,
         Bool(store),
         Bool(materialize_nodes),
+        matrix_update,
         Int(worker_blas_threads),
         factorizer,
         left_divider,
@@ -199,6 +204,7 @@ function distributed_nlfeast!(
     iter::Integer;
     store=true,
     materialize_nodes=true,
+    matrix_update=nothing,
     worker_ids=_default_feast_worker_ids(),
     worker_blas_threads::Integer=1,
     factorizer=lu,
@@ -213,6 +219,7 @@ function distributed_nlfeast!(
         contour;
         store=store,
         materialize_nodes=materialize_nodes,
+        matrix_update=matrix_update,
         worker_ids=worker_ids,
         worker_blas_threads=worker_blas_threads,
         factorizer=factorizer,
@@ -310,7 +317,13 @@ function distributed_nlfeast!(
             # Expert fast path for action-only NEPs that cannot cheaply form T(λ).
             residual_update(res, X, R, Λ)
         elseif plan.residual_matrix === nothing
-            update_nonlinear_residuals!(res, X, R, Λ, T, plan.residual_x, plan.residual_y)
+            Tλ = T(first(Λ))
+            if Tλ isa StridedMatrix
+                plan.residual_matrix = similar(Tλ)
+                update_nonlinear_residuals!(res, X, R, Λ, T, plan.residual_matrix, plan.residual_x, plan.residual_y)
+            else
+                update_nonlinear_residuals!(res, X, R, Λ, T, plan.residual_x, plan.residual_y)
+            end
         else
             update_nonlinear_residuals!(res, X, R, Λ, T, plan.residual_matrix, plan.residual_x, plan.residual_y)
         end
@@ -377,6 +390,7 @@ function _init_dense_nlfeast_workers!(plan::DenseDistributedNonlinearFeastPlan)
             plan.worker_blas_threads,
             plan.factorizer,
             plan.left_divider,
+            plan.matrix_update,
         )
     end
     for future in plan.futures
@@ -398,6 +412,7 @@ function _init_dense_nlfeast_worker!(
     worker_blas_threads::Int,
     factorizer,
     left_divider,
+    matrix_update,
 )
     old_blas_threads = BLAS.get_num_threads()
     BLAS.set_num_threads(worker_blas_threads)
@@ -419,10 +434,15 @@ function _init_dense_nlfeast_worker!(
             [factorizer(node_matrices[i]) for i in eachindex(node_indices)]
         end
     else
-        T_prototype = node_matrices === nothing ? T(nodes[node_indices[1]]) : node_matrices[1]
-        if T_prototype isa StridedMatrix && eltype(T_prototype) <: DenseLapackScalar
-            Tz = similar(T_prototype)
+        if node_matrices === nothing && (matrix_update !== nothing || (factorizer === lu && left_divider === ldiv!))
+            Tz = zeros(ComplexF64, N, N)
             lu_ws = dense_lapack_lu_workspace(Tz)
+        else
+            T_prototype = node_matrices === nothing ? T(nodes[node_indices[1]]) : node_matrices[1]
+            if T_prototype isa StridedMatrix && eltype(T_prototype) <: DenseLapackScalar
+                Tz = similar(T_prototype)
+                lu_ws = dense_lapack_lu_workspace(Tz)
+            end
         end
     end
 
@@ -440,6 +460,7 @@ function _init_dense_nlfeast_worker!(
         resolvent,
         factorizer,
         left_divider,
+        matrix_update,
         Tz,
         lu_ws,
         stored_factors,
@@ -514,7 +535,12 @@ function _dense_nlfeast_solve!(Y, ws::DenseNonlinearFeastDistributedWorkspace, l
     elseif ws.lu_ws !== nothing
         if ws.node_matrices === nothing
             start_ns = time_ns()
-            copyto!(ws.Tz, ws.T(ws.nodes[ws.node_indices[local_index]]))
+            z = ws.nodes[ws.node_indices[local_index]]
+            if ws.matrix_update === nothing
+                copyto!(ws.Tz, ws.T(z))
+            else
+                ws.matrix_update(ws.Tz, z)
+            end
             materialize_ns = time_ns() - start_ns
         else
             copyto!(ws.Tz, ws.node_matrices[local_index])
