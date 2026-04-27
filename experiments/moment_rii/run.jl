@@ -1567,17 +1567,27 @@ function scalar_roots_in_contour(candidates, center, radius)
     roots[FEASTSolver.in_contour(roots, center, radius)]
 end
 
+function real_periodic_roots_in_contour(base, period, center, radius)
+    lower = (real(center) - radius - base) / period
+    upper = (real(center) + radius - base) / period
+    candidates = [base + period * k for k in floor(Int, lower)-2:ceil(Int, upper)+2]
+    scalar_roots_in_contour(candidates, center, radius)
+end
+
+function imaginary_periodic_roots_in_contour(base, period, center, radius)
+    lower = (imag(center) - radius - base) / period
+    upper = (imag(center) + radius - base) / period
+    candidates = [im * (base + period * k) for k in floor(Int, lower)-2:ceil(Int, upper)+2]
+    scalar_roots_in_contour(candidates, center, radius)
+end
+
 function scalar_sine_case()
     (
         name="sin",
         f=z -> sin(z),
         df=z -> cos(z),
         fmat=S -> sin(S),
-        roots=(center, radius) -> scalar_roots_in_contour(
-            [k * pi for k in -ceil(Int, radius / pi)-2:ceil(Int, radius / pi)+2],
-            center,
-            radius,
-        ),
+        roots=(center, radius) -> real_periodic_roots_in_contour(0.0, pi, center, radius),
     )
 end
 
@@ -1587,11 +1597,7 @@ function scalar_cosine_case()
         f=z -> cos(z),
         df=z -> -sin(z),
         fmat=S -> cos(S),
-        roots=(center, radius) -> scalar_roots_in_contour(
-            [(k + 0.5) * pi for k in -ceil(Int, radius / pi)-3:ceil(Int, radius / pi)+3],
-            center,
-            radius,
-        ),
+        roots=(center, radius) -> real_periodic_roots_in_contour(0.5pi, pi, center, radius),
     )
 end
 
@@ -1602,15 +1608,10 @@ function scalar_shifted_sine_case(alpha=0.3)
         f=z -> sin(z) - alpha,
         df=z -> cos(z),
         fmat=S -> sin(S) .- alpha .* Matrix{ComplexF64}(I, size(S, 1), size(S, 2)),
-        roots=(center, radius) -> begin
-            kmax = ceil(Int, radius / (2pi)) + 3
-            candidates = ComplexF64[]
-            for k in -kmax:kmax
-                push!(candidates, a + 2pi * k)
-                push!(candidates, pi - a + 2pi * k)
-            end
-            scalar_roots_in_contour(candidates, center, radius)
-        end,
+        roots=(center, radius) -> vcat(
+            real_periodic_roots_in_contour(a, 2pi, center, radius),
+            real_periodic_roots_in_contour(pi - a, 2pi, center, radius),
+        ),
     )
 end
 
@@ -1620,11 +1621,7 @@ function scalar_expm1_case()
         f=z -> exp(z) - 1,
         df=z -> exp(z),
         fmat=S -> exp(S) .- Matrix{ComplexF64}(I, size(S, 1), size(S, 2)),
-        roots=(center, radius) -> scalar_roots_in_contour(
-            [2pi * im * k for k in -ceil(Int, radius / (2pi))-2:ceil(Int, radius / (2pi))+2],
-            center,
-            radius,
-        ),
+        roots=(center, radius) -> imaginary_periodic_roots_in_contour(0.0, 2pi, center, radius),
     )
 end
 
@@ -1895,7 +1892,7 @@ function diagonal_full_residuals(cases, values, vectors)
     residuals
 end
 
-function matrix_vector_residuals(Tmatrix, values, vectors; adjoint=false)
+function matrix_vector_residuals(Tmatrix, values, vectors; adjoint=false, normalization=:operator)
     residuals = zeros(Float64, length(values))
     for j in eachindex(values)
         x = vectors[:, j]
@@ -1906,7 +1903,14 @@ function matrix_vector_residuals(Tmatrix, values, vectors; adjoint=false)
         end
         Tλ = Tmatrix(values[j])
         residual = adjoint ? Tλ' * x : Tλ * x
-        residuals[j] = norm(residual) / (max(norm(Tλ), eps(Float64)) * xnorm)
+        denominator = if normalization === :operator
+            max(norm(Tλ), eps(Float64)) * xnorm
+        elseif normalization === :vector
+            xnorm
+        else
+            error("unknown residual normalization: $normalization")
+        end
+        residuals[j] = norm(residual) / denominator
     end
     residuals
 end
@@ -1924,18 +1928,34 @@ function diagonal_reduced_operators(cases, Xbasis, Ybasis)
     Tred, Tred_derivative
 end
 
-function similarity_analytic_tools(cases)
+function analytic_component_scales(cases, center, radius; mode=:none, nodes=64)
+    if mode === :none
+        return ones(Float64, length(cases))
+    elseif mode === :center
+        return Float64[max(1.0, abs(case.f(center))) for case in cases]
+    elseif mode === :contour_max
+        z_nodes, _ = circular_rule(center, radius, nodes)
+        return Float64[
+            max(1.0, maximum(abs(case.f(z)) for z in z_nodes))
+            for case in cases
+        ]
+    end
+    error("unknown analytic component scaling mode: $mode")
+end
+
+function similarity_analytic_tools(cases; component_scales=nothing)
     n = length(cases)
     nodes = 1.0 .+ 0.15 .* (0:n - 1)
     V = ComplexF64[nodes[i]^(j - 1) for i in 1:n, j in 1:n]
     n >= 2 && (V[:, 2] .+= 0.05im .* V[:, 1])
     Vinv = inv(V)
+    scales = component_scales === nothing ? ones(Float64, n) : Float64.(component_scales)
 
     function diagonal_values(z)
-        ComplexF64[cases[i].f(z) for i in 1:n]
+        ComplexF64[cases[i].f(z) / scales[i] for i in 1:n]
     end
     function diagonal_derivatives(z)
-        ComplexF64[cases[i].df(z) for i in 1:n]
+        ComplexF64[cases[i].df(z) / scales[i] for i in 1:n]
     end
     function Tmatrix(z)
         V * Diagonal(diagonal_values(z)) * Vinv
@@ -1968,6 +1988,7 @@ function reduced_analytic_determinant_extraction(
     radius;
     determinant_nodes=2048,
     determinant_capacity=64,
+    residual_normalization=:operator,
 )
     size(Xbasis, 2) == size(Ybasis, 2) || error("reduced determinant extraction needs square left/right bases")
     function Tred(z)
@@ -1993,8 +2014,8 @@ function reduced_analytic_determinant_extraction(
     left_vectors = Ybasis * left_reduced
     normalize_columns_local!(right_vectors)
     normalize_columns_local!(left_vectors)
-    right_residuals = matrix_vector_residuals(Tmatrix, values, right_vectors)
-    left_residuals = matrix_vector_residuals(Tmatrix, values, left_vectors; adjoint=true)
+    right_residuals = matrix_vector_residuals(Tmatrix, values, right_vectors; normalization=residual_normalization)
+    left_residuals = matrix_vector_residuals(Tmatrix, values, left_vectors; adjoint=true, normalization=residual_normalization)
     reduced_residuals = [reduced_nep_residual(Tred, value) for value in values]
     inside = FEASTSolver.in_contour(values, center, radius)
     (
@@ -2025,6 +2046,7 @@ function reduced_analytic_ss_extraction(
     count_estimate=nothing,
     count_error=NaN,
     ss_mode=:similarity,
+    residual_normalization=:operator,
 )
     size(Xbasis, 2) == size(Ybasis, 2) || error("reduced SS extraction needs square left/right bases")
     d = size(Xbasis, 2)
@@ -2070,8 +2092,8 @@ function reduced_analytic_ss_extraction(
     left_vectors = Ybasis * left_reduced
     normalize_columns_local!(right_vectors)
     normalize_columns_local!(left_vectors)
-    right_residuals = matrix_vector_residuals(Tmatrix, values, right_vectors)
-    left_residuals = matrix_vector_residuals(Tmatrix, values, left_vectors; adjoint=true)
+    right_residuals = matrix_vector_residuals(Tmatrix, values, right_vectors; normalization=residual_normalization)
+    left_residuals = matrix_vector_residuals(Tmatrix, values, left_vectors; adjoint=true, normalization=residual_normalization)
     reduced_residuals = [reduced_nep_residual(Tred, value) for value in values]
     inside = FEASTSolver.in_contour(values, center, radius)
     reported_count = count_estimate === nothing ? rank : Int(count_estimate)
@@ -2105,6 +2127,7 @@ function reduced_analytic_extraction(
     reduced_ranktol=1e-10,
     reduced_maxrank=typemax(Int),
     reduced_ss_mode=:similarity,
+    residual_normalization=:operator,
 )
     if extractor === :determinant
         return reduced_analytic_determinant_extraction(
@@ -2116,6 +2139,7 @@ function reduced_analytic_extraction(
             radius;
             determinant_nodes=determinant_nodes,
             determinant_capacity=determinant_capacity,
+            residual_normalization=residual_normalization,
         )
     elseif extractor === :ss_hankel
         return reduced_analytic_ss_extraction(
@@ -2130,6 +2154,7 @@ function reduced_analytic_extraction(
             ranktol=reduced_ranktol,
             maxrank=reduced_maxrank,
             ss_mode=reduced_ss_mode,
+            residual_normalization=residual_normalization,
         )
     elseif extractor === :ss_counted
         function Tred(z)
@@ -2160,6 +2185,7 @@ function reduced_analytic_extraction(
             count_estimate=count_estimate,
             count_error=abs(sums[1] - count_estimate),
             ss_mode=reduced_ss_mode,
+            residual_normalization=residual_normalization,
         )
     end
     error("unknown reduced analytic extractor: $extractor")
@@ -3498,21 +3524,85 @@ function dual_scalar_rii_step_polynomial(coeffs, values, Xright, Xleft, z_nodes,
     Qright, Qleft, stats
 end
 
-function print_dual_scalar_rii_status(label, extraction, expected, center, radius; residual_tol, match_atol)
+function dual_scalar_rii_step_generic(
+    Tsolve,
+    Tadjoint_solve,
+    Tmatrix,
+    values,
+    Xright,
+    Xleft,
+    z_nodes,
+    z_weights;
+    residual_ranktol=0.0,
+)
+    n, k = size(Xright)
+    Rright = zeros(ComplexF64, n, k)
+    Rleft = zeros(ComplexF64, n, k)
+    for j in eachindex(values)
+        Tλ = Tmatrix(values[j])
+        Rright[:, j] .= Tλ * Xright[:, j]
+        Rleft[:, j] .= Tλ' * Xleft[:, j]
+    end
+
+    if residual_ranktol > 0
+        Rright_basis, Rright_coeffs, right_singulars = low_rank_column_factor(Rright; ranktol=residual_ranktol)
+        Rleft_basis, Rleft_coeffs, left_singulars = low_rank_column_factor(Rleft; ranktol=residual_ranktol)
+    else
+        Rright_basis, Rright_coeffs, right_singulars = Rright, Matrix{ComplexF64}(I, k, k), svdvals(Rright)
+        Rleft_basis, Rleft_coeffs, left_singulars = Rleft, Matrix{ComplexF64}(I, k, k), svdvals(Rleft)
+    end
+
+    Qright = zeros(ComplexF64, n, k)
+    Qleft = zeros(ComplexF64, n, k)
+    for (z, weight) in zip(z_nodes, z_weights)
+        solved_right = size(Rright_basis, 2) == 0 ? zeros(ComplexF64, n, k) : Tsolve(z, Rright_basis) * Rright_coeffs
+        solved_left = size(Rleft_basis, 2) == 0 ? zeros(ComplexF64, n, k) : Tadjoint_solve(z, Rleft_basis) * Rleft_coeffs
+        for j in eachindex(values)
+            αright = weight / (z - values[j])
+            αleft = conj(weight) / conj(z - values[j])
+            Qright[:, j] .+= αright .* (Xright[:, j] .- solved_right[:, j])
+            Qleft[:, j] .+= αleft .* (Xleft[:, j] .- solved_left[:, j])
+        end
+    end
+    stats = (
+        right_residual_rank=size(Rright_basis, 2),
+        left_residual_rank=size(Rleft_basis, 2),
+        right_candidate_cols=size(Qright, 2),
+        left_candidate_cols=size(Qleft, 2),
+        right_singulars=right_singulars,
+        left_singulars=left_singulars,
+    )
+    Qright, Qleft, stats
+end
+
+function dual_scalar_rii_summary(extraction, expected; residual_tol, match_atol)
     inside = extraction.inside
     good = inside .& (extraction.residuals .<= residual_tol)
     matched = match_expected_count(extraction.values[good], expected; atol=match_atol)
     spurious_good = max(count(good) - matched, 0)
+    (
+        inside=count(inside),
+        good=count(good),
+        matched=matched,
+        spurious_good=spurious_good,
+        max_residual=any(inside) ? maximum(extraction.residuals[inside]) : Inf,
+        max_right_residual=any(inside) ? maximum(extraction.right_residuals[inside]) : Inf,
+        max_left_residual=any(inside) ? maximum(extraction.left_residuals[inside]) : Inf,
+    )
+end
+
+function print_dual_scalar_rii_status(label, extraction, expected, center, radius; residual_tol, match_atol)
+    summary = dual_scalar_rii_summary(extraction, expected; residual_tol=residual_tol, match_atol=match_atol)
     @printf(
         "  %s inside=%d good=%d matched=%d spurious_good=%d max_res=%.3e max_right=%.3e max_left=%.3e\n",
         label,
-        count(inside),
-        count(good),
-        matched,
-        spurious_good,
-        any(inside) ? maximum(extraction.residuals[inside]) : Inf,
-        any(inside) ? maximum(extraction.right_residuals[inside]) : Inf,
-        any(inside) ? maximum(extraction.left_residuals[inside]) : Inf,
+        summary.inside,
+        summary.good,
+        summary.matched,
+        summary.spurious_good,
+        summary.max_residual,
+        summary.max_right_residual,
+        summary.max_left_residual,
     )
 end
 
@@ -3861,6 +3951,7 @@ end
 
 function run_dual_moment_compressed_rii_analytic_experiment(;
     cases=(scalar_sine_case(), scalar_cosine_case(), scalar_shifted_sine_case(), scalar_expm1_case()),
+    center=0.0 + 0.0im,
     radius=20.0,
     basis_moments=4,
     basis_nodes=8,
@@ -3876,12 +3967,16 @@ function run_dual_moment_compressed_rii_analytic_experiment(;
     reduced_nodes=256,
     reduced_ranktol=1e-10,
     reduced_ss_mode=:similarity,
+    residual_normalization=:operator,
+    component_scaling=:none,
+    component_scaling_nodes=64,
     residual_tol=1e-8,
     match_atol=1e-6,
 )
-    center = 0.0 + 0.0im
     labels = join((case.name for case in cases), ",")
-    Tmatrix, Tderivative, Tsolve, Tadjoint_solve, expected_roots = similarity_analytic_tools(cases)
+    component_scales = analytic_component_scales(cases, center, radius; mode=component_scaling, nodes=component_scaling_nodes)
+    Tmatrix, Tderivative, Tsolve, Tadjoint_solve, expected_roots =
+        similarity_analytic_tools(cases; component_scales=component_scales)
     expected = expected_roots(center, radius)
     n = length(cases)
     z_nodes, z_weights = circular_rule(center, radius, basis_nodes)
@@ -3933,6 +4028,7 @@ function run_dual_moment_compressed_rii_analytic_experiment(;
         reduced_nodes=reduced_nodes,
         reduced_ranktol=reduced_ranktol,
         reduced_ss_mode=reduced_ss_mode,
+        residual_normalization=residual_normalization,
     )
     @printf("    reduced_count=%d count_error=%.3e\n", extraction0.count_estimate, extraction0.count_error)
     print_dual_scalar_rii_status("iter=0", extraction0, expected, center, radius; residual_tol=residual_tol, match_atol=match_atol)
@@ -3966,6 +4062,7 @@ function run_dual_moment_compressed_rii_analytic_experiment(;
             reduced_nodes=reduced_nodes,
             reduced_ranktol=reduced_ranktol,
             reduced_ss_mode=reduced_ss_mode,
+            residual_normalization=residual_normalization,
         )
         @printf(
             "    update_moments=%d reduced_count=%d residual_ranks=(%d,%d) candidate_cols=(%d,%d) basis=(%d,%d) sigma=(%.3e, %.3e)\n",
@@ -3994,6 +4091,7 @@ end
 
 function run_dual_moment_compressed_rii_analytic_iteration(;
     cases=(scalar_sine_case(), scalar_cosine_case()),
+    center=0.0 + 0.0im,
     radius=20.0,
     basis_moments=4,
     basis_nodes=8,
@@ -4010,12 +4108,19 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
     reduced_nodes=256,
     reduced_ranktol=1e-10,
     reduced_ss_mode=:similarity,
+    residual_normalization=:operator,
+    component_scaling=:none,
+    component_scaling_nodes=64,
     residual_tol=1e-8,
     match_atol=1e-6,
+    biorthogonalize=false,
+    update_mode=:moment_compressed,
+    verbose=true,
 )
-    center = 0.0 + 0.0im
     labels = join((case.name for case in cases), ",")
-    Tmatrix, Tderivative, Tsolve, Tadjoint_solve, expected_roots = similarity_analytic_tools(cases)
+    component_scales = analytic_component_scales(cases, center, radius; mode=component_scaling, nodes=component_scaling_nodes)
+    Tmatrix, Tderivative, Tsolve, Tadjoint_solve, expected_roots =
+        similarity_analytic_tools(cases; component_scales=component_scales)
     expected = expected_roots(center, radius)
     n = length(cases)
     z_nodes, z_weights = circular_rule(center, radius, basis_nodes)
@@ -4033,27 +4138,45 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
         Xbasis = Xbasis[:, 1:common]
         Ybasis = Ybasis[:, 1:common]
     end
-
-    println()
-    println("Iterated dual moment-compressed RII analytic update: [$labels]")
-    println("  repeats the same residual Laurent chart update; extractor=$extractor supplies scalar Ritz data")
-    @printf(
-        "  radius=%.3g expected=%d basis_nodes=%d rii_nodes=%d update_moments=%d initial_basis=(%d,%d) basis_sigma=(%.3e, %.3e)\n",
-        radius,
-        length(expected),
-        basis_nodes,
-        rii_nodes,
-        update_moment_count,
-        size(Xbasis, 2),
-        size(Ybasis, 2),
-        isempty(right_basis_singulars) ? NaN : right_basis_singulars[end] / right_basis_singulars[1],
-        isempty(left_basis_singulars) ? NaN : left_basis_singulars[end] / left_basis_singulars[1],
-    )
-    if size(Xbasis, 2) == 0
-        println("  skipped: rank truncation removed the whole initial basis")
-        return
+    if biorthogonalize
+        Xbasis, Ybasis, _ = biorthogonalize_bases(Xbasis, Ybasis)
     end
 
+    if verbose
+        println()
+        println("Iterated dual moment-compressed RII analytic update: [$labels]")
+        println("  repeats the same residual Laurent chart update; extractor=$extractor supplies scalar Ritz data")
+        @printf(
+            "  center=%.6g%+.6gi radius=%.3g expected=%d basis_nodes=%d rii_nodes=%d update_moments=%d update_mode=%s component_scaling=%s initial_basis=(%d,%d) basis_sigma=(%.3e, %.3e)\n",
+            real(center),
+            imag(center),
+            radius,
+            length(expected),
+            basis_nodes,
+            rii_nodes,
+            update_moment_count,
+            string(update_mode),
+            string(component_scaling),
+            size(Xbasis, 2),
+            size(Ybasis, 2),
+            isempty(right_basis_singulars) ? NaN : right_basis_singulars[end] / right_basis_singulars[1],
+            isempty(left_basis_singulars) ? NaN : left_basis_singulars[end] / left_basis_singulars[1],
+        )
+    end
+    if size(Xbasis, 2) == 0
+        verbose && println("  skipped: rank truncation removed the whole initial basis")
+        return (
+            extraction=nothing,
+            Xbasis=Xbasis,
+            Ybasis=Ybasis,
+            expected=expected,
+            summaries=NamedTuple[],
+            center=center,
+            radius=radius,
+        )
+    end
+
+    summaries = NamedTuple[]
     extraction = reduced_analytic_extraction(
         Tmatrix,
         Tderivative,
@@ -4068,25 +4191,61 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
         reduced_nodes=reduced_nodes,
         reduced_ranktol=reduced_ranktol,
         reduced_ss_mode=reduced_ss_mode,
+        residual_normalization=residual_normalization,
     )
-    @printf("    iter=0 reduced_count=%d count_error=%.3e\n", extraction.count_estimate, extraction.count_error)
-    print_dual_scalar_rii_status("iter=0", extraction, expected, center, radius; residual_tol=residual_tol, match_atol=match_atol)
+    push!(summaries, merge((iteration=0,), dual_scalar_rii_summary(extraction, expected; residual_tol=residual_tol, match_atol=match_atol)))
+    if verbose
+        @printf("    iter=0 reduced_count=%d count_error=%.3e\n", extraction.count_estimate, extraction.count_error)
+        print_dual_scalar_rii_status("iter=0", extraction, expected, center, radius; residual_tol=residual_tol, match_atol=match_atol)
+    end
     for iteration in 1:iterations
-        Xbasis, Ybasis, stats = moment_compressed_dual_rii_bases_generic(
-            Tsolve,
-            Tadjoint_solve,
-            Tmatrix,
-            Xbasis,
-            Ybasis,
-            extraction,
-            rii_z_nodes,
-            rii_z_weights,
-            center,
-            radius;
-            moment_count=update_moment_count,
-            residual_ranktol=residual_ranktol,
-            compression_ranktol=compression_ranktol,
-        )
+        if update_mode === :moment_compressed
+            Xbasis, Ybasis, stats = moment_compressed_dual_rii_bases_generic(
+                Tsolve,
+                Tadjoint_solve,
+                Tmatrix,
+                Xbasis,
+                Ybasis,
+                extraction,
+                rii_z_nodes,
+                rii_z_weights,
+                center,
+                radius;
+                moment_count=update_moment_count,
+                residual_ranktol=residual_ranktol,
+                compression_ranktol=compression_ranktol,
+            )
+        elseif update_mode === :scalar_expanded
+            selected = extraction.inside
+            if !any(selected)
+                verbose && println("  iteration stopped: no Ritz values inside contour")
+                break
+            end
+            Qright, Qleft, solve_stats = dual_scalar_rii_step_generic(
+                Tsolve,
+                Tadjoint_solve,
+                Tmatrix,
+                extraction.values[selected],
+                extraction.right_vectors[:, selected],
+                extraction.left_vectors[:, selected],
+                rii_z_nodes,
+                rii_z_weights;
+                residual_ranktol=residual_ranktol,
+            )
+            Xbasis, right_singulars = physical_basis_from_columns(Qright; ranktol=compression_ranktol)
+            Ybasis, left_singulars = physical_basis_from_columns(Qleft; ranktol=compression_ranktol)
+            if size(Xbasis, 2) != size(Ybasis, 2)
+                common = min(size(Xbasis, 2), size(Ybasis, 2))
+                Xbasis = Xbasis[:, 1:common]
+                Ybasis = Ybasis[:, 1:common]
+            end
+            stats = merge(solve_stats, (right_singulars=right_singulars, left_singulars=left_singulars))
+        else
+            error("unknown analytic RII update_mode: $update_mode")
+        end
+        if biorthogonalize
+            Xbasis, Ybasis, _ = biorthogonalize_bases(Xbasis, Ybasis)
+        end
         extraction = reduced_analytic_extraction(
             Tmatrix,
             Tderivative,
@@ -4101,30 +4260,306 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
             reduced_nodes=reduced_nodes,
             reduced_ranktol=reduced_ranktol,
             reduced_ss_mode=reduced_ss_mode,
+            residual_normalization=residual_normalization,
         )
-        @printf(
-            "    iter=%d reduced_count=%d residual_ranks=(%d,%d) candidate_cols=(%d,%d) basis=(%d,%d) sigma=(%.3e, %.3e)\n",
-            iteration,
-            extraction.count_estimate,
-            stats.right_residual_rank,
-            stats.left_residual_rank,
-            stats.right_candidate_cols,
-            stats.left_candidate_cols,
-            size(Xbasis, 2),
-            size(Ybasis, 2),
-            isempty(stats.right_singulars) ? NaN : stats.right_singulars[end] / stats.right_singulars[1],
-            isempty(stats.left_singulars) ? NaN : stats.left_singulars[end] / stats.left_singulars[1],
+        push!(
+            summaries,
+            merge(
+                (
+                    iteration=iteration,
+                    reduced_count=extraction.count_estimate,
+                    right_residual_rank=stats.right_residual_rank,
+                    left_residual_rank=stats.left_residual_rank,
+                    right_candidate_cols=stats.right_candidate_cols,
+                    left_candidate_cols=stats.left_candidate_cols,
+                    right_basis_cols=size(Xbasis, 2),
+                    left_basis_cols=size(Ybasis, 2),
+                ),
+                dual_scalar_rii_summary(extraction, expected; residual_tol=residual_tol, match_atol=match_atol),
+            ),
         )
-        print_dual_scalar_rii_status(
-            "iter=$iteration",
-            extraction,
-            expected,
-            center,
-            radius;
-            residual_tol=residual_tol,
-            match_atol=match_atol,
-        )
+        if verbose
+            @printf(
+                "    iter=%d reduced_count=%d residual_ranks=(%d,%d) candidate_cols=(%d,%d) basis=(%d,%d) sigma=(%.3e, %.3e)\n",
+                iteration,
+                extraction.count_estimate,
+                stats.right_residual_rank,
+                stats.left_residual_rank,
+                stats.right_candidate_cols,
+                stats.left_candidate_cols,
+                size(Xbasis, 2),
+                size(Ybasis, 2),
+                isempty(stats.right_singulars) ? NaN : stats.right_singulars[end] / stats.right_singulars[1],
+                isempty(stats.left_singulars) ? NaN : stats.left_singulars[end] / stats.left_singulars[1],
+            )
+            print_dual_scalar_rii_status(
+                "iter=$iteration",
+                extraction,
+                expected,
+                center,
+                radius;
+                residual_tol=residual_tol,
+                match_atol=match_atol,
+            )
+        end
     end
+    (
+        extraction=extraction,
+        Xbasis=Xbasis,
+        Ybasis=Ybasis,
+        expected=expected,
+        summaries=summaries,
+        center=center,
+        radius=radius,
+    )
+end
+
+function good_extraction_values(extraction; residual_tol)
+    extraction === nothing && return ComplexF64[]
+    good = extraction.inside .& (extraction.residuals .<= residual_tol)
+    ComplexF64.(extraction.values[good])
+end
+
+function sorted_unique_values(values; atol=1e-6)
+    unique_values(sort(ComplexF64.(values); by=z -> (real(z), imag(z))); atol=atol)
+end
+
+function disk_grid_centers(center, radius, spacing)
+    xs = (real(center)-radius):spacing:(real(center)+radius)
+    ys = (imag(center)-radius):spacing:(imag(center)+radius)
+    ComplexF64[
+        x + im * y
+        for x in xs, y in ys
+        if abs((x + im * y) - center) <= radius
+    ]
+end
+
+function run_dual_local_chart_sweep_analytic(;
+    cases=(scalar_sine_case(), scalar_cosine_case(), scalar_shifted_sine_case(), scalar_expm1_case()),
+    outer_center=0.0 + 0.0im,
+    outer_radius=20.0,
+    centers=nothing,
+    radii=(0.5, 0.8, 1.2),
+    basis_moments=4,
+    basis_nodes=16,
+    rii_nodes=256,
+    update_moment_count=1,
+    iterations=1,
+    basis_ranktol=0.5,
+    compression_ranktol=1e-10,
+    residual_ranktol=1e-10,
+    determinant_nodes=1024,
+    determinant_capacity=96,
+    extractor=:ss_counted,
+    reduced_moments=16,
+    reduced_nodes=1024,
+    reduced_ranktol=1e-10,
+    reduced_ss_mode=:similarity,
+    residual_normalization=:vector,
+    component_scaling=:contour_max,
+    component_scaling_nodes=64,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    biorthogonalize=false,
+    update_mode=:moment_compressed,
+    selection=:matched,
+    skip_empty_expected=centers === nothing,
+    print_charts=true,
+)
+    _, _, _, _, expected_roots = similarity_analytic_tools(cases)
+    expected_global = expected_roots(outer_center, outer_radius)
+    chart_centers = centers === nothing ? expected_global : ComplexF64.(centers)
+    chart_centers = sorted_unique_values(chart_centers; atol=match_atol)
+    source = centers === nothing ? "known roots" : "supplied centers"
+    purpose = if centers === nothing
+        "supervised exact-root centers; validates local chart sufficiency"
+    elseif selection === :residual && !skip_empty_expected
+        "residual-scored supplied centers; validates automatic chart-cover merging"
+    else
+        "supplied centers; validates local chart sufficiency"
+    end
+
+    println()
+    println("Dual local-chart sweep analytic update")
+    println("  centers=$source; $purpose")
+    @printf(
+        "  outer_center=%.6g%+.6gi outer_radius=%.3g expected_unique=%d radii=%s residual_normalization=%s component_scaling=%s\n",
+        real(outer_center),
+        imag(outer_center),
+        outer_radius,
+        length(expected_global),
+        string(collect(radii)),
+        string(residual_normalization),
+        string(component_scaling),
+    )
+
+    found = ComplexF64[]
+    records = NamedTuple[]
+    for chart_center in chart_centers
+        best_record = nothing
+        best_values = ComplexF64[]
+        best_score = (-1, -1, Inf)
+        for radius in radii
+            local_expected = expected_roots(chart_center, radius)
+            skip_empty_expected && isempty(local_expected) && continue
+            result = try
+                run_dual_moment_compressed_rii_analytic_iteration(;
+                    cases=cases,
+                    center=chart_center,
+                    radius=radius,
+                    basis_moments=basis_moments,
+                    basis_nodes=basis_nodes,
+                    rii_nodes=rii_nodes,
+                    update_moment_count=update_moment_count,
+                    iterations=iterations,
+                    basis_ranktol=basis_ranktol,
+                    compression_ranktol=compression_ranktol,
+                    residual_ranktol=residual_ranktol,
+                    determinant_nodes=determinant_nodes,
+                    determinant_capacity=determinant_capacity,
+                    extractor=extractor,
+                    reduced_moments=reduced_moments,
+                    reduced_nodes=reduced_nodes,
+                    reduced_ranktol=reduced_ranktol,
+                    reduced_ss_mode=reduced_ss_mode,
+                    residual_normalization=residual_normalization,
+                    component_scaling=component_scaling,
+                    component_scaling_nodes=component_scaling_nodes,
+                    residual_tol=residual_tol,
+                    match_atol=match_atol,
+                    biorthogonalize=biorthogonalize,
+                    update_mode=update_mode,
+                    verbose=false,
+                )
+            catch err
+                record = (
+                    center=chart_center,
+                    radius=radius,
+                    local_expected=length(local_expected),
+                    inside=0,
+                    good=0,
+                    matched=0,
+                    max_residual=Inf,
+                    failed=true,
+                    error=string(typeof(err)),
+                )
+                push!(records, record)
+                continue
+            end
+            extraction = result.extraction
+            if extraction === nothing
+                record = (
+                    center=chart_center,
+                    radius=radius,
+                    local_expected=length(local_expected),
+                    inside=0,
+                    good=0,
+                    matched=0,
+                    max_residual=Inf,
+                    failed=true,
+                    error="empty_basis",
+                )
+                push!(records, record)
+                continue
+            end
+            values = good_extraction_values(extraction; residual_tol=residual_tol)
+            matched = match_expected_count(values, local_expected; atol=match_atol)
+            summary = dual_scalar_rii_summary(extraction, local_expected; residual_tol=residual_tol, match_atol=match_atol)
+            record = (
+                center=chart_center,
+                radius=radius,
+                local_expected=length(local_expected),
+                inside=summary.inside,
+                good=summary.good,
+                matched=matched,
+                max_residual=summary.max_residual,
+                failed=false,
+                error="",
+            )
+            push!(records, record)
+            score = if selection === :matched
+                (matched, summary.good, -summary.max_residual)
+            elseif selection === :residual
+                (summary.good, matched, -summary.max_residual)
+            else
+                error("unknown local chart selection mode: $selection")
+            end
+            if score > best_score
+                best_score = score
+                best_record = record
+                best_values = values
+            end
+        end
+        if best_record === nothing
+            if print_charts
+                @printf(
+                    "    center=%+.6g%+.6gi no usable local chart\n",
+                    real(chart_center),
+                    imag(chart_center),
+                )
+            end
+            continue
+        end
+        append!(found, best_values)
+        if print_charts
+            @printf(
+                "    center=%+.6g%+.6gi best_r=%.3g local=%d good=%d matched=%d max_res=%.3e\n",
+                real(chart_center),
+                imag(chart_center),
+                best_record.radius,
+                best_record.local_expected,
+                best_record.good,
+                best_record.matched,
+                best_record.max_residual,
+            )
+        end
+    end
+
+    found_unique = sorted_unique_values(found; atol=match_atol)
+    matched_global = match_expected_count(found_unique, expected_global; atol=match_atol)
+    @printf(
+        "  union_good=%d matched_global=%d/%d\n",
+        length(found_unique),
+        matched_global,
+        length(expected_global),
+    )
+    (
+        records=records,
+        found=found_unique,
+        expected=expected_global,
+        matched=matched_global,
+        centers=chart_centers,
+    )
+end
+
+function run_dual_grid_chart_cover_analytic(;
+    outer_center=0.0 + 0.0im,
+    outer_radius=20.0,
+    spacing=2.4,
+    chart_radius=1.8,
+    kwargs...,
+)
+    centers = disk_grid_centers(outer_center, outer_radius, spacing)
+    println()
+    @printf(
+        "Grid chart cover: outer_center=%.6g%+.6gi outer_radius=%.3g spacing=%.3g chart_radius=%.3g centers=%d\n",
+        real(outer_center),
+        imag(outer_center),
+        outer_radius,
+        spacing,
+        chart_radius,
+        length(centers),
+    )
+    run_dual_local_chart_sweep_analytic(;
+        outer_center=outer_center,
+        outer_radius=outer_radius,
+        centers=centers,
+        radii=(chart_radius,),
+        selection=:residual,
+        skip_empty_expected=false,
+        print_charts=false,
+        kwargs...,
+    )
 end
 
 function run_dual_reduced_polynomial_control(;
@@ -4923,6 +5358,20 @@ function main()
         extractor=:ss_counted,
         reduced_moments=16,
         reduced_nodes=1024,
+        residual_tol=1e-8,
+        match_atol=1e-6,
+    )
+    run_dual_grid_chart_cover_analytic(;
+        spacing=2.4,
+        chart_radius=1.8,
+        basis_nodes=32,
+        rii_nodes=512,
+        iterations=2,
+        basis_ranktol=1e-8,
+        determinant_nodes=1024,
+        reduced_nodes=1024,
+        residual_normalization=:vector,
+        component_scaling=:contour_max,
         residual_tol=1e-8,
         match_atol=1e-6,
     )

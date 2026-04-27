@@ -425,6 +425,20 @@ with diagnostics good enough to choose the right chart in ordinary cases.
   reduced counted-SS extractor. They agree on the successful radius-20
   three-function control and fail similarly on the stiff `exp(z)-1` mixture, so
   the remaining issue is not this algebraic extraction choice.
+- The stiff four-function toy exposed two chart-policy requirements. First,
+  strict vector residuals are needed as a diagnostic because operator-relative
+  residuals can hide displaced values when `exp(z)` dominates `norm(T(z))`.
+  Second, local analytic scaling matters: multiplying each scalar component by
+  a nonzero chart-local constant does not change the roots, but it removes the
+  huge positive-real imbalance that made otherwise valid local charts appear to
+  fail.
+- With strict vector residuals and contour-max component scaling, supervised
+  local charts recover all 44 unique roots inside the radius-20 four-function
+  control. A residual-scored grid cover with spacing `2.4` and local radius
+  `1.8` also recovers all 44 without using exact root centers. This is the
+  current robust answer: one large monomial chart is a diagnostic/seed, while
+  reliable generalized moment-NLFEAST uses scaled local charts, dual reduced
+  extraction, residual Laurent updates, and a merge policy.
 
 ## Linear SS-RII Control Result
 
