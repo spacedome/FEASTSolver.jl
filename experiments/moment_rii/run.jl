@@ -3089,6 +3089,245 @@ function polynomial_vector_residuals(coeffs, values, vectors)
     residuals
 end
 
+function polynomial_left_vector_residuals(coeffs, values, vectors)
+    residuals = zeros(Float64, length(values))
+    for j in eachindex(values)
+        v = vectors[:, j]
+        vnorm = norm(v)
+        if vnorm <= eps(Float64)
+            residuals[j] = Inf
+        else
+            Tλ = polynomial_matrix(coeffs, values[j])
+            residuals[j] = norm(Tλ' * v) / (max(norm(Tλ), eps(Float64)) * vnorm)
+        end
+    end
+    residuals
+end
+
+function normalize_columns_local!(X)
+    for j in axes(X, 2)
+        xnorm = norm(view(X, :, j))
+        xnorm > eps(Float64) && (X[:, j] ./= xnorm)
+    end
+    X
+end
+
+function reduced_polynomial_extraction(coeffs, Xbasis, Ybasis, center, radius)
+    size(Xbasis, 2) == size(Ybasis, 2) || error("reduced extraction needs square left/right bases")
+    reduced_coeffs = [Ybasis' * A * Xbasis for A in coeffs]
+    values, _, reduced_residuals = companion(reduced_coeffs)
+    finite = finite_eigenvalue_mask(values)
+    values = ComplexF64.(values[finite])
+    reduced_residuals = reduced_residuals[finite]
+
+    k = length(values)
+    nred = size(Xbasis, 2)
+    Vred = zeros(ComplexF64, nred, k)
+    Ured = zeros(ComplexF64, nred, k)
+    for j in eachindex(values)
+        Tλ = polynomial_matrix(reduced_coeffs, values[j])
+        F = svd(Tλ)
+        Ured[:, j] .= F.U[:, end]
+        Vred[:, j] .= F.V[:, end]
+    end
+
+    Xfull = Xbasis * Vred
+    Yfull = Ybasis * Ured
+    normalize_columns_local!(Xfull)
+    normalize_columns_local!(Yfull)
+    right_residuals = polynomial_vector_residuals(coeffs, values, Xfull)
+    left_residuals = polynomial_left_vector_residuals(coeffs, values, Yfull)
+    combined_residuals = max.(right_residuals, left_residuals)
+    inside = FEASTSolver.in_contour(values, center, radius)
+    (
+        values=values,
+        right_vectors=Xfull,
+        left_vectors=Yfull,
+        inside=inside,
+        residuals=combined_residuals,
+        right_residuals=right_residuals,
+        left_residuals=left_residuals,
+        reduced_residuals=reduced_residuals,
+    )
+end
+
+function physical_basis_from_columns(X; ranktol=1e-10)
+    F = svd(X)
+    isempty(F.S) && return zeros(ComplexF64, size(X, 1), 0), Float64[]
+    rank = count(F.S ./ F.S[1] .> ranktol)
+    rank = min(rank, size(X, 1), length(F.S))
+    F.U[:, 1:rank], copy(F.S)
+end
+
+function low_rank_column_factor(A; ranktol=1e-12)
+    F = svd(A)
+    if isempty(F.S) || F.S[1] <= eps(Float64)
+        return zeros(ComplexF64, size(A, 1), 0), zeros(ComplexF64, 0, size(A, 2)), Float64[]
+    end
+    rank = count(F.S ./ F.S[1] .> ranktol)
+    rank = min(rank, size(A, 1), size(A, 2), length(F.S))
+    basis = F.U[:, 1:rank]
+    coeffs = Diagonal(F.S[1:rank]) * F.V[:, 1:rank]'
+    basis, coeffs, copy(F.S)
+end
+
+function dual_scalar_rii_step_polynomial(coeffs, values, Xright, Xleft, z_nodes, z_weights; residual_ranktol=0.0)
+    n, k = size(Xright)
+    Rright = zeros(ComplexF64, n, k)
+    Rleft = zeros(ComplexF64, n, k)
+    for j in eachindex(values)
+        Tλ = polynomial_matrix(coeffs, values[j])
+        Rright[:, j] .= Tλ * Xright[:, j]
+        Rleft[:, j] .= Tλ' * Xleft[:, j]
+    end
+
+    if residual_ranktol > 0
+        Rright_basis, Rright_coeffs, right_singulars = low_rank_column_factor(Rright; ranktol=residual_ranktol)
+        Rleft_basis, Rleft_coeffs, left_singulars = low_rank_column_factor(Rleft; ranktol=residual_ranktol)
+    else
+        Rright_basis, Rright_coeffs, right_singulars = Rright, Matrix{ComplexF64}(I, k, k), svdvals(Rright)
+        Rleft_basis, Rleft_coeffs, left_singulars = Rleft, Matrix{ComplexF64}(I, k, k), svdvals(Rleft)
+    end
+
+    Qright = zeros(ComplexF64, n, k)
+    Qleft = zeros(ComplexF64, n, k)
+    for (z, weight) in zip(z_nodes, z_weights)
+        Tz = polynomial_matrix(coeffs, z)
+        solved_right = isempty(Rright_basis) ? zeros(ComplexF64, n, k) : (Tz \ Rright_basis) * Rright_coeffs
+        solved_left = isempty(Rleft_basis) ? zeros(ComplexF64, n, k) : (Tz' \ Rleft_basis) * Rleft_coeffs
+        for j in eachindex(values)
+            αright = weight / (z - values[j])
+            αleft = conj(weight) / conj(z - values[j])
+            Qright[:, j] .+= αright .* (Xright[:, j] .- solved_right[:, j])
+            Qleft[:, j] .+= αleft .* (Xleft[:, j] .- solved_left[:, j])
+        end
+    end
+    stats = (
+        right_rank=size(Rright_basis, 2),
+        left_rank=size(Rleft_basis, 2),
+        right_singulars=right_singulars,
+        left_singulars=left_singulars,
+    )
+    Qright, Qleft, stats
+end
+
+function print_dual_scalar_rii_status(label, extraction, expected, center, radius; residual_tol, match_atol)
+    inside = extraction.inside
+    good = inside .& (extraction.residuals .<= residual_tol)
+    matched = match_expected_count(extraction.values[good], expected; atol=match_atol)
+    spurious_good = max(count(good) - matched, 0)
+    @printf(
+        "  %s inside=%d good=%d matched=%d spurious_good=%d max_res=%.3e max_right=%.3e max_left=%.3e\n",
+        label,
+        count(inside),
+        count(good),
+        matched,
+        spurious_good,
+        any(inside) ? maximum(extraction.residuals[inside]) : Inf,
+        any(inside) ? maximum(extraction.right_residuals[inside]) : Inf,
+        any(inside) ? maximum(extraction.left_residuals[inside]) : Inf,
+    )
+end
+
+function run_dual_scalar_rii_polynomial_experiment(;
+    name="dual_sensitive_polynomial",
+    make_problem=dual_sensitive_polynomial_problem,
+    basis_moments=5,
+    basis_nodes=24,
+    rii_nodes=48,
+    iterations=3,
+    basis_ranktol=1e-10,
+    compression_ranktol=1e-10,
+    residual_tol=1e-6,
+    match_atol=1e-3,
+    extraction_mode=:dual,
+    residual_ranktol=1e-12,
+)
+    problem = make_problem()
+    coeffs, center, radius, n = problem[1], problem[2], problem[3], problem[4]
+    expected = length(problem) >= 5 ? ComplexF64.(problem[5]) : companion_reference(coeffs, center, radius)
+    z_nodes, z_weights = circular_rule(center, radius, basis_nodes)
+    rii_z_nodes, rii_z_weights = circular_rule(center, radius, rii_nodes)
+
+    Random.seed!(9601)
+    Xprobe = rand(ComplexF64, n, n)
+    Wprobe = rand(ComplexF64, n, n)
+    Tsolve = (z, B) -> polynomial_matrix(coeffs, z) \ B
+    right_moments = initial_moments_generic_scaled(Tsolve, Xprobe, z_nodes, z_weights, center, radius, basis_moments)
+    left_moments = initial_adjoint_moments_polynomial_scaled(coeffs, Wprobe, z_nodes, z_weights, center, radius, basis_moments)
+    Xbasis, _ = moment_block_basis(right_moments, basis_moments; ranktol=basis_ranktol)
+    Ybasis, _ = moment_block_basis(left_moments, basis_moments; ranktol=basis_ranktol)
+    if size(Xbasis, 2) != size(Ybasis, 2)
+        common = min(size(Xbasis, 2), size(Ybasis, 2))
+        Xbasis = Xbasis[:, 1:common]
+        Ybasis = Ybasis[:, 1:common]
+    end
+    if extraction_mode === :biorth
+        Xbasis, Ybasis, _ = biorthogonalize_bases(Xbasis, Ybasis)
+    elseif extraction_mode !== :dual
+        error("extraction_mode must be :dual or :biorth")
+    end
+
+    println()
+    println("Dual scalar-RII polynomial iteration: $name")
+    println("  expanded Ritz-vector correction followed by low-rank residual solves and physical SVD compression")
+    @printf(
+        "  basis_nodes=%d rii_nodes=%d basis=(%d,%d) match_tol=%.1e residual_tol=%.1e\n",
+        basis_nodes,
+        rii_nodes,
+        size(Xbasis, 2),
+        size(Ybasis, 2),
+        match_atol,
+        residual_tol,
+    )
+
+    extraction = reduced_polynomial_extraction(coeffs, Xbasis, Ybasis, center, radius)
+    print_dual_scalar_rii_status("iter=0", extraction, expected, center, radius; residual_tol=residual_tol, match_atol=match_atol)
+    for iteration in 1:iterations
+        selected = extraction.inside
+        if !any(selected)
+            println("  iteration stopped: no Ritz values inside contour")
+            break
+        end
+        Qright, Qleft, solve_stats = dual_scalar_rii_step_polynomial(
+            coeffs,
+            extraction.values[selected],
+            extraction.right_vectors[:, selected],
+            extraction.left_vectors[:, selected],
+            rii_z_nodes,
+            rii_z_weights,
+            residual_ranktol=residual_ranktol,
+        )
+        Xbasis, right_singulars = physical_basis_from_columns(Qright; ranktol=compression_ranktol)
+        Ybasis, left_singulars = physical_basis_from_columns(Qleft; ranktol=compression_ranktol)
+        if size(Xbasis, 2) != size(Ybasis, 2)
+            common = min(size(Xbasis, 2), size(Ybasis, 2))
+            Xbasis = Xbasis[:, 1:common]
+            Ybasis = Ybasis[:, 1:common]
+        end
+        extraction_mode === :biorth && ((Xbasis, Ybasis, _) = biorthogonalize_bases(Xbasis, Ybasis))
+        extraction = reduced_polynomial_extraction(coeffs, Xbasis, Ybasis, center, radius)
+        @printf(
+            "    residual ranks right=%d left=%d; compressed ranks right=%d left=%d sigma_right=%.3e sigma_left=%.3e\n",
+            solve_stats.right_rank,
+            solve_stats.left_rank,
+            size(Xbasis, 2),
+            size(Ybasis, 2),
+            isempty(right_singulars) ? NaN : right_singulars[end] / right_singulars[1],
+            isempty(left_singulars) ? NaN : left_singulars[end] / left_singulars[1],
+        )
+        print_dual_scalar_rii_status(
+            "iter=$iteration",
+            extraction,
+            expected,
+            center,
+            radius;
+            residual_tol=residual_tol,
+            match_atol=match_atol,
+        )
+    end
+end
+
 function run_dual_reduced_polynomial_control(;
     name="many_eigenvalue_nonnormal_polynomial",
     make_problem=many_eigenvalue_nonnormal_polynomial_problem,
@@ -3835,6 +4074,17 @@ function main()
         make_problem=dual_sensitive_polynomial_problem,
         basis_nodes=48,
         basis_ranktol=1e-10,
+        residual_tol=1e-6,
+        match_atol=1e-3,
+    )
+    run_dual_scalar_rii_polynomial_experiment(;
+        name="dual_sensitive_polynomial_bad_initial",
+        make_problem=dual_sensitive_polynomial_problem,
+        basis_nodes=6,
+        rii_nodes=48,
+        iterations=1,
+        basis_ranktol=1e-6,
+        residual_ranktol=1e-10,
         residual_tol=1e-6,
         match_atol=1e-3,
     )

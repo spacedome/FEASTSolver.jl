@@ -359,6 +359,21 @@ with diagnostics good enough to choose the right chart in ordinary cases.
   additional residual-small spurious root. This supports making left/right
   Petrov-Galerkin extraction and spurious diagnostics first-class rather than
   treating the left space as an optional conditioning tweak.
+- The first iterative dual nonlinear FEAST prototype now works on a deliberately
+  bad polynomial chart. A rank-truncated initial dual-sensitive solve finds
+  residual-small but wrong Ritz values. One two-sided scalar RII step, using
+  `T(z) \ R_right` and `T(z)' \ R_left` exactly as dual linear FEAST does,
+  recovers all twelve target roots and removes the spurious values. The step
+  then compresses the corrected columns back to physical left/right bases with
+  an SVD.
+- The expensive residual solves in that scalar RII step can be low-rank
+  compressed. If the right residual block factors as `R = U*C`, each contour
+  node only needs solves with `U`; the per-root columns are reconstructed
+  cheaply before applying the scalar resolvent weights. On the bad polynomial
+  chart this reduces the residual solve width from nine Ritz columns to three
+  right and three left columns while preserving convergence. This is the first
+  concrete bridge between scalar Ritz-vector RII and a compact realization
+  update.
 
 ## Linear SS-RII Control Result
 
@@ -487,12 +502,12 @@ stall.
    left/right contour filtering, biorthogonal physical bases, and a
    Petrov-Galerkin reduced NEP extraction. The first determinant/argument
    principle prototype solves the diagonal `sin/cos` radius-20 failure and the
-   reduced polynomial controls. The current missing piece is a compact
-   iteration/update step for the left and right spaces. A scalar Ritz-vector
-   residual update is available conceptually, but it expands the number of
-   right-hand sides to the number of reduced roots and therefore does not solve
-   the low-dimensional many-root case. The desired update must correct the
-   reduced realization or reduced NEP as a whole.
+   reduced polynomial controls. A first scalar Ritz-vector RII loop now
+   confirms the two-sided nonlinear correction formula and compresses the
+   corrected columns back to physical left/right bases. The remaining task is
+   to express this as a realization/reduced-NEP update directly, so the
+   algorithm does not require materializing every reduced Ritz vector except as
+   a local diagnostic or fallback.
 8. Next: turn reduced-NEP extraction into an algorithmic component. Polynomial
    problems can use reduced companion/QZ solves; generic analytic problems need
    either derivative-based argument-principle extraction, reduced NLFEAST/SS, or
