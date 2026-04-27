@@ -1571,6 +1571,7 @@ function scalar_sine_case()
     (
         name="sin",
         f=z -> sin(z),
+        df=z -> cos(z),
         fmat=S -> sin(S),
         roots=(center, radius) -> scalar_roots_in_contour(
             [k * pi for k in -ceil(Int, radius / pi)-2:ceil(Int, radius / pi)+2],
@@ -1584,6 +1585,7 @@ function scalar_cosine_case()
     (
         name="cos",
         f=z -> cos(z),
+        df=z -> -sin(z),
         fmat=S -> cos(S),
         roots=(center, radius) -> scalar_roots_in_contour(
             [(k + 0.5) * pi for k in -ceil(Int, radius / pi)-3:ceil(Int, radius / pi)+3],
@@ -1598,6 +1600,7 @@ function scalar_shifted_sine_case(alpha=0.3)
     (
         name="sin_minus_$alpha",
         f=z -> sin(z) - alpha,
+        df=z -> cos(z),
         fmat=S -> sin(S) .- alpha .* Matrix{ComplexF64}(I, size(S, 1), size(S, 2)),
         roots=(center, radius) -> begin
             kmax = ceil(Int, radius / (2pi)) + 3
@@ -1615,6 +1618,7 @@ function scalar_expm1_case()
     (
         name="exp_minus_1",
         f=z -> exp(z) - 1,
+        df=z -> exp(z),
         fmat=S -> exp(S) .- Matrix{ComplexF64}(I, size(S, 1), size(S, 2)),
         roots=(center, radius) -> scalar_roots_in_contour(
             [2pi * im * k for k in -ceil(Int, radius / (2pi))-2:ceil(Int, radius / (2pi))+2],
@@ -1710,6 +1714,200 @@ function unique_values(values; atol=1e-6)
         end
     end
     unique
+end
+
+function moment_block_basis(moments, moment_count; ranktol=1e-10)
+    n, m = size(moments[1])
+    blocks = zeros(ComplexF64, n, moment_count * m)
+    for j in 1:moment_count
+        blocks[:, (j - 1) * m + 1:j * m] .= moments[j]
+    end
+    F = svd(blocks)
+    isempty(F.S) && return zeros(ComplexF64, n, 0), Float64[]
+    rank = count(F.S ./ F.S[1] .> ranktol)
+    rank = min(rank, n, length(F.S))
+    F.U[:, 1:rank], copy(F.S)
+end
+
+function initial_adjoint_moments_diagonal_scaled(cases, Wprobe, z_nodes, z_weights, center, radius, moment_count)
+    n, m = size(Wprobe)
+    moments = [zeros(ComplexF64, n, m) for _ in 1:moment_count]
+    solved = similar(Wprobe, ComplexF64)
+    for (z, weight) in zip(z_nodes, z_weights)
+        for i in 1:n
+            solved[i, :] .= Wprobe[i, :] ./ conj(cases[i].f(z))
+        end
+        μ = conj((z - center) / radius)
+        μpower = one(ComplexF64)
+        for p in eachindex(moments)
+            moments[p] .+= (conj(weight) * μpower) .* solved
+            μpower *= μ
+        end
+    end
+    moments
+end
+
+function monic_roots_from_power_sums(power_sums, root_count)
+    root_count == 0 && return ComplexF64[]
+    coeffs = zeros(ComplexF64, root_count)
+    for k in 1:root_count
+        term = power_sums[k]
+        for j in 1:(k - 1)
+            term += coeffs[j] * power_sums[k - j]
+        end
+        coeffs[k] = -term / k
+    end
+    companion = zeros(ComplexF64, root_count, root_count)
+    companion[1, :] .= .-coeffs
+    for i in 2:root_count
+        companion[i, i - 1] = 1
+    end
+    eigvals(companion)
+end
+
+function determinant_power_sums(Tred, Tred_derivative; center, radius, nodes=1024, capacity=64)
+    z_nodes, z_weights = circular_rule(center, radius, nodes)
+    sums = zeros(ComplexF64, capacity + 1)
+    for (z, weight) in zip(z_nodes, z_weights)
+        M = Tred(z)
+        dM = Tred_derivative(z)
+        logarithmic_derivative = tr(M \ dM)
+        μ = (z - center) / radius
+        μpower = one(ComplexF64)
+        for k in 0:capacity
+            sums[k + 1] += weight * μpower * logarithmic_derivative
+            μpower *= μ
+        end
+    end
+    root_count = max(0, round(Int, real(sums[1])))
+    root_count <= capacity || error("root count $root_count exceeds determinant power-sum capacity $capacity")
+    roots = monic_roots_from_power_sums(sums[2:root_count + 1], root_count)
+    roots, root_count, sums
+end
+
+function determinant_value_and_derivative(Tred, Tred_derivative, λ)
+    M = Tred(λ)
+    value = det(M)
+    derivative = try
+        value * tr(M \ Tred_derivative(λ))
+    catch
+        NaN + NaN * im
+    end
+    if !isfinite(real(derivative)) || !isfinite(imag(derivative)) || abs(derivative) <= eps(Float64)
+        h = sqrt(eps(Float64)) * max(1.0, abs(λ))
+        derivative = (det(Tred(λ + h)) - det(Tred(λ - h))) / (2h)
+    end
+    value, derivative
+end
+
+function refine_determinant_roots(Tred, Tred_derivative, roots; steps=12, step_limit=1.0)
+    refined = ComplexF64.(roots)
+    for j in eachindex(refined)
+        λ = refined[j]
+        for _ in 1:steps
+            value, derivative = determinant_value_and_derivative(Tred, Tred_derivative, λ)
+            (!isfinite(real(value)) || !isfinite(imag(value)) || abs(derivative) <= eps(Float64)) && break
+            step = value / derivative
+            if abs(step) > step_limit
+                step *= step_limit / abs(step)
+            end
+            λ -= step
+            abs(step) <= 1e-12 * max(1.0, abs(λ)) && break
+        end
+        refined[j] = λ
+    end
+    refined
+end
+
+function reduced_nep_residual(Tred, λ)
+    values = svdvals(Tred(λ))
+    isempty(values) && return Inf
+    minimum(values) / max(maximum(values), eps(Float64))
+end
+
+function diagonal_reduced_operators(cases, Xbasis, Ybasis)
+    n = length(cases)
+    function Tred(z)
+        D = Diagonal(ComplexF64[cases[i].f(z) for i in 1:n])
+        Ybasis' * D * Xbasis
+    end
+    function Tred_derivative(z)
+        D = Diagonal(ComplexF64[cases[i].df(z) for i in 1:n])
+        Ybasis' * D * Xbasis
+    end
+    Tred, Tred_derivative
+end
+
+function run_dual_reduced_determinant_diagonal_stress(;
+    cases=(scalar_sine_case(), scalar_cosine_case()),
+    radii=(10.0, 20.0),
+    basis_moments=4,
+    basis_ranktol=1e-10,
+    determinant_nodes=2048,
+    determinant_capacity=64,
+    residual_tol=1e-8,
+)
+    center = 0.0 + 0.0im
+    Tsolve, _, _, expected_roots = diagonal_analytic_tools(cases)
+    n = length(cases)
+    labels = join((case.name for case in cases), ",")
+
+    println()
+    println("Dual reduced determinant extraction stress: [$labels]")
+    println("  left/right moment bases feed an argument-principle solve of det(Y' T(lambda) X)")
+    for radius in radii
+        expected = expected_roots(center, radius)
+        z_nodes, z_weights = circular_rule(center, radius, max(128, 16 * basis_moments))
+        Random.seed!(9401 + round(Int, radius * 10))
+        Xprobe = rand(ComplexF64, n, n)
+        Wprobe = rand(ComplexF64, n, n)
+        right_moments = initial_moments_generic_scaled(Tsolve, Xprobe, z_nodes, z_weights, center, radius, basis_moments)
+        left_moments = initial_adjoint_moments_diagonal_scaled(cases, Wprobe, z_nodes, z_weights, center, radius, basis_moments)
+        Xbasis, right_singulars = moment_block_basis(right_moments, basis_moments; ranktol=basis_ranktol)
+        Ybasis, left_singulars = moment_block_basis(left_moments, basis_moments; ranktol=basis_ranktol)
+        for (label, Ytest) in (("dual", Ybasis), ("galerkin", Xbasis))
+            if size(Xbasis, 2) == 0 || size(Ytest, 2) == 0 || size(Xbasis, 2) != size(Ytest, 2)
+                println("  radius=$radius $label skipped: incompatible reduced basis sizes")
+                continue
+            end
+            Tred, Tred_derivative = diagonal_reduced_operators(cases, Xbasis, Ytest)
+            μ_roots, count_estimate, sums = determinant_power_sums(
+                Tred,
+                Tred_derivative;
+                center=center,
+                radius=radius,
+                nodes=determinant_nodes,
+                capacity=determinant_capacity,
+            )
+            λ_roots = center .+ radius .* μ_roots
+            λ_roots = refine_determinant_roots(Tred, Tred_derivative, λ_roots; step_limit=0.25 * radius)
+            inside = FEASTSolver.in_contour(λ_roots, center, radius)
+            residuals = [reduced_nep_residual(Tred, λ) for λ in λ_roots]
+            good = inside .& (residuals .<= residual_tol)
+            matched = match_expected_count(λ_roots[good], expected; atol=1e-6)
+            count_error = abs(sums[1] - count_estimate)
+            @printf(
+                "  radius=%.3g mode=%s expected=%d count=%d count_err=%.3e basis=(%d,%d) good=%d/%d matched=%d max_good=%.3e max_all=%.3e\n",
+                radius,
+                label,
+                length(expected),
+                count_estimate,
+                count_error,
+                size(Xbasis, 2),
+                size(Ytest, 2),
+                count(good),
+                count(inside),
+                matched,
+                any(good) ? maximum(residuals[good]) : Inf,
+                any(inside) ? maximum(residuals[inside]) : Inf,
+            )
+        end
+        @printf(
+            "    basis singular ratios right=%.3e left=%.3e\n",
+            isempty(right_singulars) ? NaN : right_singulars[end] / right_singulars[1],
+            isempty(left_singulars) ? NaN : left_singulars[end] / left_singulars[1],
+        )
+    end
 end
 
 function block_hankel_singular_values(moments, moment_count)
@@ -2773,6 +2971,90 @@ function many_eigenvalue_nonnormal_polynomial_problem()
     coeffs, center, radius, n
 end
 
+function initial_adjoint_moments_polynomial_scaled(coeffs, Wprobe, z_nodes, z_weights, center, radius, moment_count)
+    n, m = size(Wprobe)
+    moments = [zeros(ComplexF64, n, m) for _ in 1:moment_count]
+    for (z, weight) in zip(z_nodes, z_weights)
+        solved = polynomial_matrix(coeffs, z)' \ Wprobe
+        μ = conj((z - center) / radius)
+        μpower = one(ComplexF64)
+        for p in eachindex(moments)
+            moments[p] .+= (conj(weight) * μpower) .* solved
+            μpower *= μ
+        end
+    end
+    moments
+end
+
+function polynomial_vector_residuals(coeffs, values, vectors)
+    residuals = zeros(Float64, length(values))
+    for j in eachindex(values)
+        v = vectors[:, j]
+        vnorm = norm(v)
+        if vnorm <= eps(Float64)
+            residuals[j] = Inf
+        else
+            Tλ = polynomial_matrix(coeffs, values[j])
+            residuals[j] = norm(Tλ * v) / (max(norm(Tλ), eps(Float64)) * vnorm)
+        end
+    end
+    residuals
+end
+
+function run_dual_reduced_polynomial_control(;
+    make_problem=many_eigenvalue_nonnormal_polynomial_problem,
+    basis_moments=5,
+    basis_nodes=64,
+    basis_ranktol=1e-10,
+    residual_tol=1e-7,
+)
+    coeffs, center, radius, n = make_problem()
+    expected = companion_reference(coeffs, center, radius)
+    z_nodes, z_weights = circular_rule(center, radius, basis_nodes)
+    Random.seed!(9501)
+    Xprobe = rand(ComplexF64, n, n)
+    Wprobe = rand(ComplexF64, n, n)
+    Tsolve = (z, B) -> polynomial_matrix(coeffs, z) \ B
+    right_moments = initial_moments_generic_scaled(Tsolve, Xprobe, z_nodes, z_weights, center, radius, basis_moments)
+    left_moments = initial_adjoint_moments_polynomial_scaled(coeffs, Wprobe, z_nodes, z_weights, center, radius, basis_moments)
+    Xbasis, right_singulars = moment_block_basis(right_moments, basis_moments; ranktol=basis_ranktol)
+    Ybasis, left_singulars = moment_block_basis(left_moments, basis_moments; ranktol=basis_ranktol)
+
+    println()
+    println("Dual reduced polynomial control: many_eigenvalue_nonnormal_polynomial")
+    println("  reduced polynomial extraction from left/right moment-filtered physical spaces")
+    for (label, Ytest) in (("dual", Ybasis), ("galerkin", Xbasis))
+        if size(Xbasis, 2) == 0 || size(Ytest, 2) == 0 || size(Xbasis, 2) != size(Ytest, 2)
+            println("  mode=$label skipped: incompatible reduced basis sizes")
+            continue
+        end
+        reduced_coeffs = [Ytest' * A * Xbasis for A in coeffs]
+        λ, Vred, reduced_residuals = companion(reduced_coeffs)
+        inside = FEASTSolver.in_contour(λ, center, radius)
+        original_vectors = Xbasis * Vred
+        original_residuals = polynomial_vector_residuals(coeffs, λ, original_vectors)
+        good = inside .& (original_residuals .<= residual_tol)
+        matched = match_expected_count(λ[good], expected; atol=1e-6)
+        @printf(
+            "  mode=%s expected=%d returned_inside=%d good=%d matched=%d reduced_max=%.3e original_max=%.3e basis=(%d,%d)\n",
+            label,
+            length(expected),
+            count(inside),
+            count(good),
+            matched,
+            any(inside) ? maximum(reduced_residuals[inside]) : Inf,
+            any(inside) ? maximum(original_residuals[inside]) : Inf,
+            size(Xbasis, 2),
+            size(Ytest, 2),
+        )
+    end
+    @printf(
+        "    basis singular ratios right=%.3e left=%.3e\n",
+        isempty(right_singulars) ? NaN : right_singulars[end] / right_singulars[1],
+        isempty(left_singulars) ? NaN : left_singulars[end] / left_singulars[1],
+    )
+end
+
 function match_expected_count(values, expected; atol)
     isempty(expected) && return 0
     count(expected) do λ
@@ -3451,6 +3733,7 @@ function main()
         residual_tol=1e-8,
     )
     run_polynomial_projective_chart_control()
+    run_dual_reduced_polynomial_control()
     run_nonlinear_update_comparison("deficient_quadratic", deficient_quadratic_problem; nodes=16, iterations=5, moment_count=2, ranktol=1e-9, residual_tol=1e-8)
     run_nonlinear_update_comparison("butterfly", butterfly_problem; nodes=32, iterations=3, moment_count=2, ranktol=1e-9, residual_tol=1e-8, keep_extra=3)
     run_nonlinear_update_comparison("butterfly_target", butterfly_problem; nodes=32, iterations=3, moment_count=2, ranktol=1e-9, residual_tol=1e-8, target_count=true, modes=(:projected, :shifted, :shifted_gauge_balanced, :projected_newton))
@@ -3498,6 +3781,7 @@ function main()
     run_scalar_rank_adaptive_stress()
     run_diagonal_analytic_moment_stress()
     run_diagonal_analytic_rank_adaptive_stress()
+    run_dual_reduced_determinant_diagonal_stress()
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__

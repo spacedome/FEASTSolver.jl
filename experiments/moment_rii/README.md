@@ -336,6 +336,20 @@ with diagnostics good enough to choose the right chart in ordinary cases.
   realization was added as a dual-inspired gauge check; it does not fix the
   diagonal radius-20 failure by itself, so the missing piece is likely the real
   left/right residual update or reduced-NEP extraction, not just SVD scaling.
+- The first true reduced-NEP extraction prototype is much stronger. Left and
+  right moment-filtered bases reduce the diagonal `sin/cos` radius-20 problem to
+  a `2 x 2` NEP. Applying the argument principle to
+  `det(Y' * T(lambda) * X)` gives the exact root count 25, and a determinant
+  Newton cleanup refines all 25 roots to about machine precision. This solves
+  the failure that defeated direct `S` extraction, confirming that the reduced
+  nonlinear problem can contain many roots even when the physical trial/test
+  spaces are tiny.
+- On the nonnormal degree-eight polynomial control with `n=4` and twenty target
+  roots, reducing the polynomial coefficients with moment-filtered physical
+  bases and solving the reduced polynomial recovers all twenty roots. In these
+  full-rank controls Galerkin and dual Petrov-Galerkin extraction both work; the
+  expected role of the left basis is conditioning and nonnormal robustness, as
+  in linear dual FEAST.
 
 ## Linear SS-RII Control Result
 
@@ -390,9 +404,10 @@ candidate higher-moment NLFEAST update must become the formula above when
 - Add a true dual/Petrov-Galerkin nonlinear extraction. The linear
   `dual_gen_feast!` model says the robust nonnormal path is left/right filtering
   plus biorthogonalized reduced equations. The moment analogue should carry a
-  left realization or left physical test space and use it to solve
+  left realization or left physical test space and solve
   `Y' * T(lambda) * X`, rather than relying solely on eigenvalues of the small
-  multiplication matrix `S`.
+  multiplication matrix `S`. The current determinant prototype supports this
+  direction but still needs a production-grade reduced NEP solver interface.
 - Distinguish "mathematically minimal" from "numerically observable". The
   radius-20 scalar sine case can have small first-block and lifted pair
   residuals while scalar residuals plateau around `1e-6`--`1e-5`, which is a
@@ -459,18 +474,24 @@ stall.
 6. In progress: compare stronger realization-theoretic gauges. Schur gauge
    alone is not enough, balanced Ho-Kalman/Hankel extraction alone is not
    enough, and orthogonal moment bases still need observability control.
-7. Next: implement the true dual-FEAST analogue for nonlinear moments:
+7. In progress: implement the true dual-FEAST analogue for nonlinear moments:
    left/right contour filtering, biorthogonal physical bases, and a
-   Petrov-Galerkin reduced NEP extraction.
-8. Next: formalize the role of local rational coordinates. The companion
+   Petrov-Galerkin reduced NEP extraction. The first determinant/argument
+   principle prototype solves the diagonal `sin/cos` radius-20 failure and the
+   reduced polynomial control.
+8. Next: turn reduced-NEP extraction into an algorithmic component. Polynomial
+   problems can use reduced companion/QZ solves; generic analytic problems need
+   either derivative-based argument-principle extraction, reduced NLFEAST/SS, or
+   NLEIGS-style reduced solvers.
+9. Next: formalize the role of local rational coordinates. The companion
    problem suggests why finite polynomial problems behave better: the enlarged
    linear state gives a global finite coordinate system. Analytic NEPs with
    infinitely many roots need local finite realizations, so nested contours or
    rational bases may be the natural replacement for one global companion.
-9. Later: if natural gauge and realization methods stall, inspect NEP-PACK and
+10. Later: if natural gauge and realization methods stall, inspect NEP-PACK and
    adjacent NEP/SS/Beyn literature for deflation strategies. Treat scalar
    residual-based deflation as a fallback, not the main method.
-10. Later: broaden the literature review beyond NEP methods into adjacent
+11. Later: broaden the literature review beyond NEP methods into adjacent
    realization/system-identification and rational Krylov filtering work.
 
 ## Design Constraints
