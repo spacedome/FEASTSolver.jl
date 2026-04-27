@@ -439,6 +439,31 @@ with diagnostics good enough to choose the right chart in ordinary cases.
   current robust answer: one large monomial chart is a diagnostic/seed, while
   reliable generalized moment-NLFEAST uses scaled local charts, dual reduced
   extraction, residual Laurent updates, and a merge policy.
+- A triangular analytic control now breaks the simultaneously diagonalizable
+  assumption. The determinant roots are still known from the diagonal scalar
+  factors, but the operator is upper triangular and can be strongly nonnormal.
+  The first grid cover missed an entire real-axis chain because the Cartesian
+  grid did not include the real axis; this was a chart-cover bug, not an
+  update failure. A centered grid plus multiple local radii recovers all 44
+  unique roots even with triangular coupling `10`.
+- Multiple-root controls are diagnostic, not a near-term API target. The scalar
+  `sin(z)^2` stress reports algebraic count 14 on radius 10 and recovers all
+  14 multiplicity-counted roots. A shared-root triangular `sin/exp(z)-1`
+  control at zero reports algebraic count 2 and recovers both copies despite
+  geometric coalescence. This is useful evidence that the reduced counted-SS
+  extraction sees generalized residue information, but the practical solver
+  should not require explicit Jordan-chain handling unless it improves ordinary
+  subspace quality or convergence diagnostics. This mirrors Beyn/SS/linear
+  FEAST usage, where explicit Jordan calculations are usually avoidable.
+- A zero-update comparison helps explain how Beyn/SS often avoid extra
+  machinery. On the scaled local chart cover for the simultaneously similar
+  four-function analytic control, counted-SS alone (`iterations=0`) already
+  recovers all 44 unique roots. On the upper-triangular nonnormal control with
+  coupling `10`, the same chart cover recovers only 34 roots with zero residual
+  updates, 42 after one residual Laurent update, and all 44 after two. This
+  suggests the lower rung is "good local moment realization plus reduced
+  extraction"; the FEAST residual update is the next rung for repairing weak or
+  nonnormal physical trial/test spaces, not a mandatory cost for every chart.
 
 ## Linear SS-RII Control Result
 

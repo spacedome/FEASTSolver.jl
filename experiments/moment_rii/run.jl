@@ -1615,6 +1615,17 @@ function scalar_shifted_sine_case(alpha=0.3)
     )
 end
 
+function scalar_squared_sine_case()
+    (
+        name="sin_squared",
+        f=z -> sin(z)^2,
+        df=z -> 2sin(z) * cos(z),
+        fmat=S -> sin(S)^2,
+        roots=(center, radius) -> real_periodic_roots_in_contour(0.0, pi, center, radius),
+        multiplicity=2,
+    )
+end
+
 function scalar_expm1_case()
     (
         name="exp_minus_1",
@@ -1623,6 +1634,22 @@ function scalar_expm1_case()
         fmat=S -> exp(S) .- Matrix{ComplexF64}(I, size(S, 1), size(S, 2)),
         roots=(center, radius) -> imaginary_periodic_roots_in_contour(0.0, 2pi, center, radius),
     )
+end
+
+function case_root_multiplicity(case)
+    hasproperty(case, :multiplicity) ? case.multiplicity : 1
+end
+
+function expected_roots_counting_multiplicity(cases, center, radius)
+    roots = ComplexF64[]
+    for case in cases
+        for root in case.roots(center, radius)
+            for _ in 1:case_root_multiplicity(case)
+                push!(roots, root)
+            end
+        end
+    end
+    sort(roots; by=z -> (real(z), imag(z)))
 end
 
 function run_scalar_analytic_gauge_stress(;
@@ -1977,6 +2004,47 @@ function similarity_analytic_tools(cases; component_scales=nothing)
         unique_values(sort(roots; by=z -> (real(z), imag(z))); atol=1e-10)
     end
     Tmatrix, Tderivative, Tsolve, Tadjoint_solve, expected_roots
+end
+
+function triangular_analytic_tools(cases; component_scales=nothing, coupling=1.0)
+    n = length(cases)
+    scales = component_scales === nothing ? ones(Float64, n) : Float64.(component_scales)
+    row_scale = Diagonal(ComplexF64.(1 ./ scales))
+    N = zeros(ComplexF64, n, n)
+    for i in 1:n-1
+        N[i, i + 1] = coupling
+    end
+
+    function diagonal_values(z)
+        ComplexF64[cases[i].f(z) for i in 1:n]
+    end
+    function diagonal_derivatives(z)
+        ComplexF64[cases[i].df(z) for i in 1:n]
+    end
+    function Tmatrix(z)
+        row_scale * (Diagonal(diagonal_values(z)) + N)
+    end
+    function Tderivative(z)
+        row_scale * Diagonal(diagonal_derivatives(z))
+    end
+    function Tsolve(z, B)
+        Tmatrix(z) \ B
+    end
+    function Tadjoint_solve(z, B)
+        Tmatrix(z)' \ B
+    end
+    function expected_roots(center, radius)
+        roots = ComplexF64[]
+        for case in cases
+            append!(roots, case.roots(center, radius))
+        end
+        unique_values(sort(roots; by=z -> (real(z), imag(z))); atol=1e-10)
+    end
+    Tmatrix, Tderivative, Tsolve, Tadjoint_solve, expected_roots
+end
+
+function triangular_operator_builder(; coupling=1.0)
+    (cases; component_scales=nothing) -> triangular_analytic_tools(cases; component_scales=component_scales, coupling=coupling)
 end
 
 function reduced_analytic_determinant_extraction(
@@ -3953,6 +4021,8 @@ function run_dual_moment_compressed_rii_analytic_experiment(;
     cases=(scalar_sine_case(), scalar_cosine_case(), scalar_shifted_sine_case(), scalar_expm1_case()),
     center=0.0 + 0.0im,
     radius=20.0,
+    operator_builder=similarity_analytic_tools,
+    operator_label="similarity",
     basis_moments=4,
     basis_nodes=8,
     rii_nodes=256,
@@ -3976,7 +4046,7 @@ function run_dual_moment_compressed_rii_analytic_experiment(;
     labels = join((case.name for case in cases), ",")
     component_scales = analytic_component_scales(cases, center, radius; mode=component_scaling, nodes=component_scaling_nodes)
     Tmatrix, Tderivative, Tsolve, Tadjoint_solve, expected_roots =
-        similarity_analytic_tools(cases; component_scales=component_scales)
+        operator_builder(cases; component_scales=component_scales)
     expected = expected_roots(center, radius)
     n = length(cases)
     z_nodes, z_weights = circular_rule(center, radius, basis_nodes)
@@ -3997,6 +4067,7 @@ function run_dual_moment_compressed_rii_analytic_experiment(;
 
     println()
     println("Dual moment-compressed RII analytic update: [$labels]")
+    println("  operator=$operator_label")
     println("  extractor=$extractor for the small reduced NEP; no polynomial companion linearization")
     @printf(
         "  radius=%.3g expected=%d basis_nodes=%d rii_nodes=%d initial_basis=(%d,%d) basis_sigma=(%.3e, %.3e)\n",
@@ -4093,6 +4164,8 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
     cases=(scalar_sine_case(), scalar_cosine_case()),
     center=0.0 + 0.0im,
     radius=20.0,
+    operator_builder=similarity_analytic_tools,
+    operator_label="similarity",
     basis_moments=4,
     basis_nodes=8,
     rii_nodes=256,
@@ -4120,7 +4193,7 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
     labels = join((case.name for case in cases), ",")
     component_scales = analytic_component_scales(cases, center, radius; mode=component_scaling, nodes=component_scaling_nodes)
     Tmatrix, Tderivative, Tsolve, Tadjoint_solve, expected_roots =
-        similarity_analytic_tools(cases; component_scales=component_scales)
+        operator_builder(cases; component_scales=component_scales)
     expected = expected_roots(center, radius)
     n = length(cases)
     z_nodes, z_weights = circular_rule(center, radius, basis_nodes)
@@ -4145,7 +4218,7 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
     if verbose
         println()
         println("Iterated dual moment-compressed RII analytic update: [$labels]")
-        println("  repeats the same residual Laurent chart update; extractor=$extractor supplies scalar Ritz data")
+        println("  operator=$operator_label; repeats the same residual Laurent chart update; extractor=$extractor supplies scalar Ritz data")
         @printf(
             "  center=%.6g%+.6gi radius=%.3g expected=%d basis_nodes=%d rii_nodes=%d update_moments=%d update_mode=%s component_scaling=%s initial_basis=(%d,%d) basis_sigma=(%.3e, %.3e)\n",
             real(center),
@@ -4325,8 +4398,10 @@ function sorted_unique_values(values; atol=1e-6)
 end
 
 function disk_grid_centers(center, radius, spacing)
-    xs = (real(center)-radius):spacing:(real(center)+radius)
-    ys = (imag(center)-radius):spacing:(imag(center)+radius)
+    kmax = floor(Int, radius / spacing)
+    offsets = spacing .* (-kmax:kmax)
+    xs = real(center) .+ offsets
+    ys = imag(center) .+ offsets
     ComplexF64[
         x + im * y
         for x in xs, y in ys
@@ -4338,6 +4413,8 @@ function run_dual_local_chart_sweep_analytic(;
     cases=(scalar_sine_case(), scalar_cosine_case(), scalar_shifted_sine_case(), scalar_expm1_case()),
     outer_center=0.0 + 0.0im,
     outer_radius=20.0,
+    operator_builder=similarity_analytic_tools,
+    operator_label="similarity",
     centers=nothing,
     radii=(0.5, 0.8, 1.2),
     basis_moments=4,
@@ -4366,7 +4443,7 @@ function run_dual_local_chart_sweep_analytic(;
     skip_empty_expected=centers === nothing,
     print_charts=true,
 )
-    _, _, _, _, expected_roots = similarity_analytic_tools(cases)
+    _, _, _, _, expected_roots = operator_builder(cases; component_scales=nothing)
     expected_global = expected_roots(outer_center, outer_radius)
     chart_centers = centers === nothing ? expected_global : ComplexF64.(centers)
     chart_centers = sorted_unique_values(chart_centers; atol=match_atol)
@@ -4381,7 +4458,7 @@ function run_dual_local_chart_sweep_analytic(;
 
     println()
     println("Dual local-chart sweep analytic update")
-    println("  centers=$source; $purpose")
+    println("  operator=$operator_label; centers=$source; $purpose")
     @printf(
         "  outer_center=%.6g%+.6gi outer_radius=%.3g expected_unique=%d radii=%s residual_normalization=%s component_scaling=%s\n",
         real(outer_center),
@@ -4407,6 +4484,8 @@ function run_dual_local_chart_sweep_analytic(;
                     cases=cases,
                     center=chart_center,
                     radius=radius,
+                    operator_builder=operator_builder,
+                    operator_label=operator_label,
                     basis_moments=basis_moments,
                     basis_nodes=basis_nodes,
                     rii_nodes=rii_nodes,
@@ -4535,31 +4614,118 @@ end
 function run_dual_grid_chart_cover_analytic(;
     outer_center=0.0 + 0.0im,
     outer_radius=20.0,
+    operator_label="similarity",
     spacing=2.4,
     chart_radius=1.8,
+    chart_radii=(chart_radius,),
     kwargs...,
 )
     centers = disk_grid_centers(outer_center, outer_radius, spacing)
     println()
     @printf(
-        "Grid chart cover: outer_center=%.6g%+.6gi outer_radius=%.3g spacing=%.3g chart_radius=%.3g centers=%d\n",
+        "Grid chart cover: outer_center=%.6g%+.6gi outer_radius=%.3g spacing=%.3g chart_radii=%s centers=%d\n",
         real(outer_center),
         imag(outer_center),
         outer_radius,
         spacing,
-        chart_radius,
+        string(collect(chart_radii)),
         length(centers),
     )
     run_dual_local_chart_sweep_analytic(;
         outer_center=outer_center,
         outer_radius=outer_radius,
+        operator_label=operator_label,
         centers=centers,
-        radii=(chart_radius,),
+        radii=chart_radii,
         selection=:residual,
         skip_empty_expected=false,
         print_charts=false,
         kwargs...,
     )
+end
+
+function run_dual_grid_chart_cover_triangular_analytic(;
+    coupling=1.0,
+    kwargs...,
+)
+    run_dual_grid_chart_cover_analytic(;
+        operator_builder=triangular_operator_builder(; coupling=coupling),
+        operator_label="triangular(coupling=$coupling)",
+        kwargs...,
+    )
+end
+
+function run_dual_multiple_root_analytic_stress(;
+    cases=(scalar_squared_sine_case(),),
+    center=0.0 + 0.0im,
+    radius=10.0,
+    operator_builder=similarity_analytic_tools,
+    operator_label="similarity",
+    basis_moments=8,
+    basis_nodes=64,
+    rii_nodes=256,
+    update_moment_count=1,
+    iterations=1,
+    basis_ranktol=1e-10,
+    determinant_nodes=2048,
+    determinant_capacity=64,
+    extractor=:ss_counted,
+    reduced_moments=16,
+    reduced_nodes=1024,
+    residual_normalization=:vector,
+    component_scaling=:contour_max,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+)
+    labels = join((case.name for case in cases), ",")
+    unique_expected = begin
+        _, _, _, _, expected_roots = operator_builder(cases; component_scales=nothing)
+        expected_roots(center, radius)
+    end
+    algebraic_expected = expected_roots_counting_multiplicity(cases, center, radius)
+    result = run_dual_moment_compressed_rii_analytic_iteration(;
+        cases=cases,
+        center=center,
+        radius=radius,
+        operator_builder=operator_builder,
+        operator_label=operator_label,
+        basis_moments=basis_moments,
+        basis_nodes=basis_nodes,
+        rii_nodes=rii_nodes,
+        update_moment_count=update_moment_count,
+        iterations=iterations,
+        basis_ranktol=basis_ranktol,
+        determinant_nodes=determinant_nodes,
+        determinant_capacity=determinant_capacity,
+        extractor=extractor,
+        reduced_moments=reduced_moments,
+        reduced_nodes=reduced_nodes,
+        residual_normalization=residual_normalization,
+        component_scaling=component_scaling,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        verbose=false,
+    )
+    extraction = result.extraction
+    values = good_extraction_values(extraction; residual_tol=residual_tol)
+    unique_matched = match_expected_count(values, unique_expected; atol=match_atol)
+    algebraic_matched = match_expected_count_with_multiplicity(values, algebraic_expected; atol=match_atol)
+    println()
+    println("Dual multiple-root analytic stress: [$labels]")
+    println("  diagnostic only: repeated/shared roots test algebraic count without making Jordan chains a core requirement")
+    @printf(
+        "  operator=%s radius=%.3g unique_expected=%d algebraic_expected=%d count_estimate=%d good=%d unique_matched=%d algebraic_matched=%d max_res=%.3e\n",
+        operator_label,
+        radius,
+        length(unique_expected),
+        length(algebraic_expected),
+        extraction === nothing ? 0 : extraction.count_estimate,
+        length(values),
+        unique_matched,
+        algebraic_matched,
+        extraction === nothing || !any(extraction.inside) ? Inf : maximum(extraction.residuals[extraction.inside]),
+    )
+    result
 end
 
 function run_dual_reduced_polynomial_control(;
@@ -4629,6 +4795,29 @@ function match_expected_count(values, expected; atol)
     count(expected) do λ
         !isempty(values) && minimum(abs.(values .- λ)) <= atol
     end
+end
+
+function match_expected_count_with_multiplicity(values, expected; atol)
+    isempty(expected) && return 0
+    used = falses(length(values))
+    matched = 0
+    for λ in expected
+        best = 0
+        best_distance = Inf
+        for j in eachindex(values)
+            used[j] && continue
+            distance = abs(values[j] - λ)
+            if distance < best_distance
+                best = j
+                best_distance = distance
+            end
+        end
+        if best != 0 && best_distance <= atol
+            used[best] = true
+            matched += 1
+        end
+    end
+    matched
 end
 
 function state_contamination_diagnostics(coeffs, X, S, expected, center, radius; residual_tol=1e-8, match_tol=1e-6)
@@ -5372,6 +5561,44 @@ function main()
         reduced_nodes=1024,
         residual_normalization=:vector,
         component_scaling=:contour_max,
+        residual_tol=1e-8,
+        match_atol=1e-6,
+    )
+    run_dual_grid_chart_cover_triangular_analytic(;
+        coupling=10.0,
+        spacing=2.4,
+        chart_radii=(0.8, 1.2, 1.8, 2.4, 3.0),
+        basis_nodes=32,
+        rii_nodes=512,
+        iterations=2,
+        basis_ranktol=1e-8,
+        determinant_nodes=1024,
+        reduced_nodes=1024,
+        residual_normalization=:vector,
+        component_scaling=:contour_max,
+        residual_tol=1e-8,
+        match_atol=1e-6,
+    )
+    run_dual_multiple_root_analytic_stress(;
+        radius=10.0,
+        basis_moments=8,
+        basis_nodes=64,
+        iterations=1,
+        determinant_capacity=64,
+        residual_tol=1e-8,
+        match_atol=1e-6,
+    )
+    run_dual_multiple_root_analytic_stress(;
+        cases=(scalar_sine_case(), scalar_expm1_case()),
+        operator_builder=triangular_operator_builder(; coupling=3.0),
+        operator_label="triangular(coupling=3.0)",
+        radius=1.0,
+        basis_moments=4,
+        basis_nodes=32,
+        iterations=1,
+        determinant_capacity=16,
+        reduced_moments=8,
+        reduced_nodes=512,
         residual_tol=1e-8,
         match_atol=1e-6,
     )
