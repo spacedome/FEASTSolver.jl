@@ -129,6 +129,31 @@ analytic matrix-function machinery.
 5. Only after the serial dense prototype is numerically convincing, decide how
    this maps onto sparse and distributed NLFEAST.
 
+## Robust Path From Here
+
+The current goal is not to claim a universal higher-moment NLFEAST formula.
+The more defensible target is a small class of charted realization algorithms
+with diagnostics good enough to choose the right chart in ordinary cases.
+
+1. Lock down the linear layer: projected SS-FEAST must reduce to ordinary FEAST
+   on `T(z)=zI-A`, while allowing fewer physical probe columns than wanted
+   eigenvalues.
+2. Lock down the polynomial layer: compare polynomial moment-RII against FEAST
+   on the companion pencil, and treat infinite roots as projective chart
+   changes through the reversed polynomial `nu^d P(1/nu)`.
+3. Build a `Chart` abstraction for the nonlinear layer. A chart is a contour,
+   spectral coordinate, moment basis or offset, extraction method, and
+   realization gauge.
+4. Attach diagnostics to every chart: Hankel rank gap, retained singular-value
+   ratio, `cond(S)`, eigenvector conditioning of `S`, pair residual, scalar
+   residuals, and whether pair/scalar residuals disagree.
+5. Make adaptive selection explicit. First try gauge balancing in the current
+   chart; then try moment offsets or rational coordinates; then split into
+   nested or local contours and merge converged roots.
+6. Replace the current supervised scalar experiments with real count/rank
+   estimation. The scalar demos still use known roots only to size the local
+   finite realization; production code needs a contour count estimator.
+
 ## Findings So Far
 
 - Lifted normalization is essential. Normalizing only the physical block `X`
@@ -216,6 +241,101 @@ analytic matrix-function machinery.
   For nonlinear problems the state dimension can exceed `n`; the correct
   experimental cap is the Hankel capacity, such as `K * probe_cols` and
   `K * left_probe_cols`.
+- Ad-hoc residual/persistence selection was tested as a possible pruning aid,
+  but it did not change the targeted failures. This supports the view that
+  scalar-level deflation is the wrong primary lever for this method.
+- Gauge control is now the main positive result. The scalar `sin(z)` radius-20
+  case previously had a tiny invariant-pair residual but only one of thirteen
+  scalar roots converged because the small multiplication matrix was violently
+  nonnormal (`cond(eigenvectors(S))` around `1e12`). Applying diagonal
+  similarity balancing to the pair during the shifted-realization iteration
+  converges all thirteen roots with max scalar residual around `1e-10`. This is
+  a natural realization-gauge fix, not a scalar Ritz deflation rule.
+- The gauge experiment distinguishes useful and non-useful gauges. A Schur
+  gauge is unitary and makes the small operator triangular, but it does not
+  prevent rank collapse on the scalar radius-20 shifted update. Non-unitary
+  diagonal balancing is the important operation. Chebyshev shifted moments plus
+  diagonal balancing also converge all thirteen scalar roots, so the basis can
+  help, but only after the realization gauge is controlled.
+- Gauge balancing preserves the successful low-node `n=4` polynomial
+  many-eigenvalue result and slightly improves its full pair residual. It does
+  not fix the exact target-count shifted butterfly failure. In that case the
+  small operator is already well conditioned, so the failure is not a gauge
+  conditioning problem; it is likely a shifted-update/restriction geometry
+  problem. Projected extraction and projected Newton remain the stable choices
+  for that case.
+- Scalar analytic functions with infinitely many roots expose a second
+  limitation: a single monomial moment realization on a large contour can bury
+  roots near the center while accurately recovering roots closer to the contour.
+  `cos(z)` on radius 20 is the current counterexample. Diagonal gauge
+  balancing is necessary but not sufficient; using offset moments such as
+  `Q_2, Q_3, ...` recovers the outer ten roots, while smaller nested contours
+  recover the central pair. A union of nested gauge-balanced contour solves
+  recovers all twelve roots.
+- This makes the companion-polynomial analogy useful again. A polynomial
+  companion linearization gives a finite-dimensional coordinate system where
+  all roots of the polynomial live at comparable footing in an enlarged state.
+  For analytic functions with infinitely many roots, any finite moment
+  realization is a local rational approximation. The right general method is
+  therefore probably not "one huge contour, one monomial basis"; it is
+  gauge-controlled local realizations, possibly with adaptive nested contours,
+  moment offsets, or rational bases.
+- Polynomial companion control now agrees with the moment formulation on the
+  `n=4`, degree-eight many-eigenvalue polynomial. FEAST on the `32 x 32`
+  companion pencil recovers all twenty finite target roots, and both projected
+  Newton and gauge-balanced shifted moment updates recover the same twenty
+  roots in the polynomial-native invariant-pair representation.
+- A degree-deficient polynomial control confirms that infinite roots are a
+  chart issue at the polynomial layer. The original companion pencil has one
+  infinite/singular eigenvalue because the leading coefficient is singular.
+  Reversing the polynomial and solving near `nu=0` recovers that root as a
+  finite projective-chart eigenvalue.
+- The first adaptive scalar chart prototype is deliberately supervised but
+  encouraging. On `cos(z)` with outer radius 20, it grows nested contours,
+  chooses between moment offsets by new converged roots, and recovers all
+  twelve known roots. The remaining algorithmic gap is replacing exact local
+  root counts with rank/count estimates and principled split rules.
+- A first rank-adaptive scalar chart prototype now removes the exact root
+  counts from chart sizing. It estimates local realization size from Hankel
+  singular values, uses the outer-contour rank estimate as the target count,
+  grows nested contours, and recovers all twelve `cos(z)` roots on radius 20.
+  The rank threshold matters: `1e-5` undercounts this example as ten roots,
+  while `1e-6` recovers the expected twelve. This makes rank-estimation
+  diagnostics part of the algorithm, not an implementation detail.
+- Scalar rank-estimation stress tests show both sides of the count problem.
+  Near-contour exterior roots can inflate numerical Hankel rank, as in
+  `sin(z)` on radius 6, while large contours can bury weak interior states and
+  undercount, as in `sin(z)` and `sin(z)-0.3` on radius 20 or 30. The adaptive
+  chart stress still recovers all tested scalar roots for radii 10 and 20, but
+  `sin`-type radius-20 cases can recover all roots while the outer rank target
+  remains too small. The policy therefore now treats the outer contour as a
+  final consistency chart instead of stopping as soon as an estimated count is
+  reached.
+- The first non-scalar analytic toy problem is diagonal with `sin(z)` and
+  `cos(z)` on separate physical components. A residual-normalization fix
+  exposed that pair residual alone had been too optimistic: physical
+  eigenvectors can be nearly annihilated by the first block `X`. With
+  Chebyshev moments, observable-eigen gauge, and a best-history stopping
+  diagnostic, a single rank-estimated radius-10 chart recovers all thirteen
+  roots. Radius 20 remains unsolved: rank-adaptive nested charts recover the
+  central thirteen roots, but the outer roots are not represented to tight
+  scalar residual tolerance. This is a useful failure because it separates
+  chart quality and physical observability from simple scalar deflation.
+- A one-step generic lifted Newton refinement was tested on a poor radius-20
+  diagonal analytic pair and did not improve it. That suggests local Newton is
+  not a magic cleanup stage if the realization/chart has already mixed the
+  residue directions badly. We need better chart quality, two-sided extraction,
+  or a more structured analytic invariant-pair correction before local Newton.
+- Dual FEAST is a distinct clue, not just a synonym for projected Hankel. The
+  current projected Hankel path only observes right moments with a left probe.
+  True dual FEAST filters left and right subspaces, biorthogonalizes them, and
+  performs a Petrov-Galerkin extraction. For higher-moment NLFEAST this suggests
+  that `S` may be the wrong final scalar extractor in hard nonlinear cases: the
+  moment iteration should build left/right physical trial spaces, then solve or
+  refine the small reduced NEP `Y' * T(lambda) * X`. A balanced Hankel
+  realization was added as a dual-inspired gauge check; it does not fix the
+  diagonal radius-20 failure by itself, so the missing piece is likely the real
+  left/right residual update or reduced-NEP extraction, not just SVD scaling.
 
 ## Linear SS-RII Control Result
 
@@ -267,6 +387,12 @@ candidate higher-moment NLFEAST update must become the formula above when
   scalar residuals then look bad because `X*y` is tiny. Any production method
   needs a gauge/minimality condition that keeps scalar eigenvectors visible in
   the physical space.
+- Add a true dual/Petrov-Galerkin nonlinear extraction. The linear
+  `dual_gen_feast!` model says the robust nonnormal path is left/right filtering
+  plus biorthogonalized reduced equations. The moment analogue should carry a
+  left realization or left physical test space and use it to solve
+  `Y' * T(lambda) * X`, rather than relying solely on eigenvalues of the small
+  multiplication matrix `S`.
 - Distinguish "mathematically minimal" from "numerically observable". The
   radius-20 scalar sine case can have small first-block and lifted pair
   residuals while scalar residuals plateau around `1e-6`--`1e-5`, which is a
@@ -297,12 +423,17 @@ The next serious prototype should be factored into explicit stages:
 3. Extract a minimal realization `(X, S)` and diagnostics from the small pencil.
 4. Apply an update that produces corrected Markov parameters, not just corrected
    scalar Ritz vectors.
-5. Deflate, retain, or replace states using rank/residual/history evidence.
+5. Control the realization gauge so the small multiplication operator is a
+   numerically meaningful representative of the same invariant pair.
+6. Only after the gauge is stable, deflate, retain, or replace states using
+   rank/residual/history evidence.
 
 The linear control says stages 1--3 are sound. The first nonlinear polynomial
 tests say stage 4 is viable when it is treated as a realization update rather
-than scalar RII. Stage 5, plus a stable gauge for harder analytic problems, is
-now the main research problem.
+than scalar RII. The scalar stress tests say stage 5 is not optional: without a
+stable gauge, small pair residuals can hide unusable scalar Ritz values. Stage 6
+should not become ad-hoc scalar pruning unless the natural realization tools
+stall.
 
 ## Nonlinear Experiment Plan
 
@@ -320,15 +451,27 @@ now the main research problem.
 4. In progress: add diagnostics that separate wanted states from retained transient states:
    scalar residuals, pair residual restricted to wanted states, pair residual on
    all retained states, and retained-rank singular-value ratios. Ritz-value
-   persistence across iterations is still missing.
-5. Next: design and test deflation/replacement policies. The first pass should be
-   conservative: do not prune solely by contour membership; require residual
-   history or rank-gap evidence, and replace discarded directions with fresh
-   probe directions rather than simply shrinking the realization.
-6. Later: return to the scalar `sin(z)` stress tests after the polynomial cases
-   are understood. They are useful, but they are dominated by observability and
-   basis conditioning, so they should validate the final gauge policy rather
-   than drive the first design.
+   persistence across iterations is now printed for nonlinear comparison runs.
+5. In progress: make gauge control part of the algorithmic state. The scalar
+   experiments show diagonal balancing and observable-eigen scaling are useful
+   in different failure modes; Chebyshev moments plus observable-eigen scaling
+   are currently the cleanest non-scalar radius-10 chart.
+6. In progress: compare stronger realization-theoretic gauges. Schur gauge
+   alone is not enough, balanced Ho-Kalman/Hankel extraction alone is not
+   enough, and orthogonal moment bases still need observability control.
+7. Next: implement the true dual-FEAST analogue for nonlinear moments:
+   left/right contour filtering, biorthogonal physical bases, and a
+   Petrov-Galerkin reduced NEP extraction.
+8. Next: formalize the role of local rational coordinates. The companion
+   problem suggests why finite polynomial problems behave better: the enlarged
+   linear state gives a global finite coordinate system. Analytic NEPs with
+   infinitely many roots need local finite realizations, so nested contours or
+   rational bases may be the natural replacement for one global companion.
+9. Later: if natural gauge and realization methods stall, inspect NEP-PACK and
+   adjacent NEP/SS/Beyn literature for deflation strategies. Treat scalar
+   residual-based deflation as a fallback, not the main method.
+10. Later: broaden the literature review beyond NEP methods into adjacent
+   realization/system-identification and rational Krylov filtering work.
 
 ## Design Constraints
 
