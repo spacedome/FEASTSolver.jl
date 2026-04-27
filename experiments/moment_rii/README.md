@@ -350,6 +350,15 @@ with diagnostics good enough to choose the right chart in ordinary cases.
   full-rank controls Galerkin and dual Petrov-Galerkin extraction both work; the
   expected role of the left basis is conditioning and nonnormal robustness, as
   in linear dual FEAST.
+- A more ill-conditioned polynomial control now shows the first concrete
+  dual/Galerkin separation. The exact target roots are known by construction,
+  but the Vandermonde similarity makes root locations sensitive enough that
+  residuals are the primary validation metric. With matched left/right filtered
+  spaces, dual extraction returns the twelve target roots and no residual-small
+  extras. The same right space used as its own Galerkin test space admits an
+  additional residual-small spurious root. This supports making left/right
+  Petrov-Galerkin extraction and spurious diagnostics first-class rather than
+  treating the left space as an optional conditioning tweak.
 
 ## Linear SS-RII Control Result
 
@@ -478,7 +487,12 @@ stall.
    left/right contour filtering, biorthogonal physical bases, and a
    Petrov-Galerkin reduced NEP extraction. The first determinant/argument
    principle prototype solves the diagonal `sin/cos` radius-20 failure and the
-   reduced polynomial control.
+   reduced polynomial controls. The current missing piece is a compact
+   iteration/update step for the left and right spaces. A scalar Ritz-vector
+   residual update is available conceptually, but it expands the number of
+   right-hand sides to the number of reduced roots and therefore does not solve
+   the low-dimensional many-root case. The desired update must correct the
+   reduced realization or reduced NEP as a whole.
 8. Next: turn reduced-NEP extraction into an algorithmic component. Polynomial
    problems can use reduced companion/QZ solves; generic analytic problems need
    either derivative-based argument-principle extraction, reduced NLFEAST/SS, or

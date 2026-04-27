@@ -1729,6 +1729,19 @@ function moment_block_basis(moments, moment_count; ranktol=1e-10)
     F.U[:, 1:rank], copy(F.S)
 end
 
+function biorthogonalize_bases(Xbasis, Ybasis; ranktol=1e-12)
+    M = Ybasis' * Xbasis
+    F = svd(M)
+    isempty(F.S) && return Xbasis[:, 1:0], Ybasis[:, 1:0], Float64[]
+    rank = count(F.S ./ F.S[1] .> ranktol)
+    rank = min(rank, size(Xbasis, 2), size(Ybasis, 2), length(F.S))
+    rank == 0 && return Xbasis[:, 1:0], Ybasis[:, 1:0], copy(F.S)
+    invsqrtσ = Diagonal(1 ./ sqrt.(F.S[1:rank]))
+    Xb = Xbasis * F.V[:, 1:rank] * invsqrtσ
+    Yb = Ybasis * F.U[:, 1:rank] * invsqrtσ
+    Xb, Yb, copy(F.S)
+end
+
 function initial_adjoint_moments_diagonal_scaled(cases, Wprobe, z_nodes, z_weights, center, radius, moment_count)
     n, m = size(Wprobe)
     moments = [zeros(ComplexF64, n, m) for _ in 1:moment_count]
@@ -1825,6 +1838,33 @@ function reduced_nep_residual(Tred, λ)
     minimum(values) / max(maximum(values), eps(Float64))
 end
 
+function reduced_right_singular_vectors(Tred, values)
+    nred = size(Tred(values[1]), 2)
+    vectors = zeros(ComplexF64, nred, length(values))
+    for j in eachindex(values)
+        F = svd(Tred(values[j]))
+        vectors[:, j] .= F.V[:, end]
+    end
+    vectors
+end
+
+function diagonal_full_residuals(cases, values, vectors)
+    n = length(cases)
+    residuals = zeros(Float64, length(values))
+    for j in eachindex(values)
+        λ = values[j]
+        x = vectors[:, j]
+        xnorm = norm(x)
+        if xnorm <= eps(Float64)
+            residuals[j] = Inf
+            continue
+        end
+        diagonal_values = ComplexF64[cases[i].f(λ) for i in 1:n]
+        residuals[j] = norm(diagonal_values .* x) / (max(norm(diagonal_values), eps(Float64)) * xnorm)
+    end
+    residuals
+end
+
 function diagonal_reduced_operators(cases, Xbasis, Ybasis)
     n = length(cases)
     function Tred(z)
@@ -1865,12 +1905,18 @@ function run_dual_reduced_determinant_diagonal_stress(;
         left_moments = initial_adjoint_moments_diagonal_scaled(cases, Wprobe, z_nodes, z_weights, center, radius, basis_moments)
         Xbasis, right_singulars = moment_block_basis(right_moments, basis_moments; ranktol=basis_ranktol)
         Ybasis, left_singulars = moment_block_basis(left_moments, basis_moments; ranktol=basis_ranktol)
-        for (label, Ytest) in (("dual", Ybasis), ("galerkin", Xbasis))
-            if size(Xbasis, 2) == 0 || size(Ytest, 2) == 0 || size(Xbasis, 2) != size(Ytest, 2)
+        Xbi, Ybi, cross_singulars = biorthogonalize_bases(Xbasis, Ybasis)
+        basis_cases = (
+            ("dual", Xbasis, Ybasis),
+            ("dual_biorth", Xbi, Ybi),
+            ("galerkin", Xbasis, Xbasis),
+        )
+        for (label, Xtest, Ytest) in basis_cases
+            if size(Xtest, 2) == 0 || size(Ytest, 2) == 0 || size(Xtest, 2) != size(Ytest, 2)
                 println("  radius=$radius $label skipped: incompatible reduced basis sizes")
                 continue
             end
-            Tred, Tred_derivative = diagonal_reduced_operators(cases, Xbasis, Ytest)
+            Tred, Tred_derivative = diagonal_reduced_operators(cases, Xtest, Ytest)
             μ_roots, count_estimate, sums = determinant_power_sums(
                 Tred,
                 Tred_derivative;
@@ -1883,29 +1929,33 @@ function run_dual_reduced_determinant_diagonal_stress(;
             λ_roots = refine_determinant_roots(Tred, Tred_derivative, λ_roots; step_limit=0.25 * radius)
             inside = FEASTSolver.in_contour(λ_roots, center, radius)
             residuals = [reduced_nep_residual(Tred, λ) for λ in λ_roots]
-            good = inside .& (residuals .<= residual_tol)
+            reduced_vectors = reduced_right_singular_vectors(Tred, λ_roots)
+            full_vectors = Xtest * reduced_vectors
+            full_residuals = diagonal_full_residuals(cases, λ_roots, full_vectors)
+            good = inside .& (full_residuals .<= residual_tol)
             matched = match_expected_count(λ_roots[good], expected; atol=1e-6)
             count_error = abs(sums[1] - count_estimate)
             @printf(
-                "  radius=%.3g mode=%s expected=%d count=%d count_err=%.3e basis=(%d,%d) good=%d/%d matched=%d max_good=%.3e max_all=%.3e\n",
+                "  radius=%.3g mode=%s expected=%d count=%d count_err=%.3e basis=(%d,%d) good=%d/%d matched=%d red_max=%.3e full_max=%.3e\n",
                 radius,
                 label,
                 length(expected),
                 count_estimate,
                 count_error,
-                size(Xbasis, 2),
+                size(Xtest, 2),
                 size(Ytest, 2),
                 count(good),
                 count(inside),
                 matched,
-                any(good) ? maximum(residuals[good]) : Inf,
                 any(inside) ? maximum(residuals[inside]) : Inf,
+                any(inside) ? maximum(full_residuals[inside]) : Inf,
             )
         end
         @printf(
-            "    basis singular ratios right=%.3e left=%.3e\n",
+            "    basis singular ratios right=%.3e left=%.3e cross=%.3e\n",
             isempty(right_singulars) ? NaN : right_singulars[end] / right_singulars[1],
             isempty(left_singulars) ? NaN : left_singulars[end] / left_singulars[1],
+            isempty(cross_singulars) ? NaN : cross_singulars[end] / cross_singulars[1],
         )
     end
 end
@@ -2971,6 +3021,44 @@ function many_eigenvalue_nonnormal_polynomial_problem()
     coeffs, center, radius, n
 end
 
+function dual_sensitive_polynomial_problem()
+    n = 6
+    degree = 6
+    center = 0.0 + 0.0im
+    radius = 2.0
+    inside_sets = [
+        ComplexF64[-1.5, -0.6, 0.3, 1.2],
+        ComplexF64[-1.2, -0.3, 0.6, 1.5],
+        ComplexF64[-0.9, -0.1, 0.9, 1.7],
+    ]
+    outside_sets = [
+        ComplexF64[4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+        ComplexF64[4.3, 5.3, 6.3, 7.3, 8.3, 9.3],
+        ComplexF64[4.6, 5.6, 6.6, 7.6, 8.6, 9.6],
+    ]
+    roots_by_direction = [
+        vcat(inside_sets[1], ComplexF64[6.0, 8.0]),
+        vcat(inside_sets[2], ComplexF64[6.5, 8.5]),
+        vcat(inside_sets[3], ComplexF64[7.0, 9.0]),
+        outside_sets[1],
+        outside_sets[2],
+        outside_sets[3],
+    ]
+    scalar_coeffs = [polynomial_coefficients_from_roots(roots) for roots in roots_by_direction]
+    # A moderately ill-conditioned Vandermonde similarity keeps the exact roots
+    # known while making one-sided Galerkin extraction admit spurious roots.
+    nodes = 1.0 .+ 0.2 .* (0:n - 1)
+    V = ComplexF64[nodes[i]^(j - 1) for i in 1:n, j in 1:n]
+    V[:, 2] .+= 0.05im .* V[:, 1]
+    Vinv = inv(V)
+    coeffs = Matrix{ComplexF64}[]
+    for j in 1:(degree + 1)
+        push!(coeffs, V * Diagonal([scalar_coeffs[i][j] for i in 1:n]) * Vinv)
+    end
+    expected = sort(vcat(inside_sets...); by=z -> (real(z), imag(z)))
+    coeffs, center, radius, n, expected
+end
+
 function initial_adjoint_moments_polynomial_scaled(coeffs, Wprobe, z_nodes, z_weights, center, radius, moment_count)
     n, m = size(Wprobe)
     moments = [zeros(ComplexF64, n, m) for _ in 1:moment_count]
@@ -3002,14 +3090,17 @@ function polynomial_vector_residuals(coeffs, values, vectors)
 end
 
 function run_dual_reduced_polynomial_control(;
+    name="many_eigenvalue_nonnormal_polynomial",
     make_problem=many_eigenvalue_nonnormal_polynomial_problem,
     basis_moments=5,
     basis_nodes=64,
     basis_ranktol=1e-10,
     residual_tol=1e-7,
+    match_atol=1e-6,
 )
-    coeffs, center, radius, n = make_problem()
-    expected = companion_reference(coeffs, center, radius)
+    problem = make_problem()
+    coeffs, center, radius, n = problem[1], problem[2], problem[3], problem[4]
+    expected = length(problem) >= 5 ? ComplexF64.(problem[5]) : companion_reference(coeffs, center, radius)
     z_nodes, z_weights = circular_rule(center, radius, basis_nodes)
     Random.seed!(9501)
     Xprobe = rand(ComplexF64, n, n)
@@ -3019,39 +3110,44 @@ function run_dual_reduced_polynomial_control(;
     left_moments = initial_adjoint_moments_polynomial_scaled(coeffs, Wprobe, z_nodes, z_weights, center, radius, basis_moments)
     Xbasis, right_singulars = moment_block_basis(right_moments, basis_moments; ranktol=basis_ranktol)
     Ybasis, left_singulars = moment_block_basis(left_moments, basis_moments; ranktol=basis_ranktol)
+    Xbi, Ybi, cross_singulars = biorthogonalize_bases(Xbasis, Ybasis)
 
     println()
-    println("Dual reduced polynomial control: many_eigenvalue_nonnormal_polynomial")
+    println("Dual reduced polynomial control: $name")
     println("  reduced polynomial extraction from left/right moment-filtered physical spaces")
-    for (label, Ytest) in (("dual", Ybasis), ("galerkin", Xbasis))
-        if size(Xbasis, 2) == 0 || size(Ytest, 2) == 0 || size(Xbasis, 2) != size(Ytest, 2)
+    @printf("  root matching tolerance: %.1e\n", match_atol)
+    for (label, Xtest, Ytest) in (("dual", Xbasis, Ybasis), ("dual_biorth", Xbi, Ybi), ("galerkin", Xbasis, Xbasis))
+        if size(Xtest, 2) == 0 || size(Ytest, 2) == 0 || size(Xtest, 2) != size(Ytest, 2)
             println("  mode=$label skipped: incompatible reduced basis sizes")
             continue
         end
-        reduced_coeffs = [Ytest' * A * Xbasis for A in coeffs]
+        reduced_coeffs = [Ytest' * A * Xtest for A in coeffs]
         λ, Vred, reduced_residuals = companion(reduced_coeffs)
         inside = FEASTSolver.in_contour(λ, center, radius)
-        original_vectors = Xbasis * Vred
+        original_vectors = Xtest * Vred
         original_residuals = polynomial_vector_residuals(coeffs, λ, original_vectors)
         good = inside .& (original_residuals .<= residual_tol)
-        matched = match_expected_count(λ[good], expected; atol=1e-6)
+        matched = match_expected_count(λ[good], expected; atol=match_atol)
+        spurious_good = max(count(good) - matched, 0)
         @printf(
-            "  mode=%s expected=%d returned_inside=%d good=%d matched=%d reduced_max=%.3e original_max=%.3e basis=(%d,%d)\n",
+            "  mode=%s expected=%d returned_inside=%d good=%d matched=%d spurious_good=%d reduced_max=%.3e original_max=%.3e basis=(%d,%d)\n",
             label,
             length(expected),
             count(inside),
             count(good),
             matched,
+            spurious_good,
             any(inside) ? maximum(reduced_residuals[inside]) : Inf,
             any(inside) ? maximum(original_residuals[inside]) : Inf,
-            size(Xbasis, 2),
+            size(Xtest, 2),
             size(Ytest, 2),
         )
     end
     @printf(
-        "    basis singular ratios right=%.3e left=%.3e\n",
+        "    basis singular ratios right=%.3e left=%.3e cross=%.3e\n",
         isempty(right_singulars) ? NaN : right_singulars[end] / right_singulars[1],
         isempty(left_singulars) ? NaN : left_singulars[end] / left_singulars[1],
+        isempty(cross_singulars) ? NaN : cross_singulars[end] / cross_singulars[1],
     )
 end
 
@@ -3734,6 +3830,14 @@ function main()
     )
     run_polynomial_projective_chart_control()
     run_dual_reduced_polynomial_control()
+    run_dual_reduced_polynomial_control(;
+        name="dual_sensitive_polynomial",
+        make_problem=dual_sensitive_polynomial_problem,
+        basis_nodes=48,
+        basis_ranktol=1e-10,
+        residual_tol=1e-6,
+        match_atol=1e-3,
+    )
     run_nonlinear_update_comparison("deficient_quadratic", deficient_quadratic_problem; nodes=16, iterations=5, moment_count=2, ranktol=1e-9, residual_tol=1e-8)
     run_nonlinear_update_comparison("butterfly", butterfly_problem; nodes=32, iterations=3, moment_count=2, ranktol=1e-9, residual_tol=1e-8, keep_extra=3)
     run_nonlinear_update_comparison("butterfly_target", butterfly_problem; nodes=32, iterations=3, moment_count=2, ranktol=1e-9, residual_tol=1e-8, target_count=true, modes=(:projected, :shifted, :shifted_gauge_balanced, :projected_newton))
