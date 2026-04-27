@@ -374,6 +374,57 @@ with diagnostics good enough to choose the right chart in ordinary cases.
   right and three left columns while preserving convergence. This is the first
   concrete bridge between scalar Ritz-vector RII and a compact realization
   update.
+- The bridge can be made explicitly moment-based on circular contours. With
+  `z=c+r*zeta` and `lambda=c+r*alpha`, the scalar FEAST weight satisfies
+  `w/(z-lambda) = sum_k alpha^k zeta^(-k)/N`. Therefore the right correction
+  lies in the span of the old right basis plus residual-solve Laurent moments
+  `sum_z zeta^(-k) T(z)^-1 U`; the left correction uses the conjugate moments
+  `sum_z zeta^k T(z)'^-1 U_left`. On the same bad polynomial chart, one
+  residual moment already recovers all twelve target roots to machine
+  precision after Petrov-Galerkin reduced extraction. This is the cleanest
+  connection so far between FEAST RII and the Hankel/SS moment expansion.
+- The same residual-moment update also resolves the low-dimensional
+  many-eigenvalue polynomial control from a deliberately rank-deficient initial
+  basis. The initial reduced solve sees fourteen inside values but no valid
+  target matches; one residual Laurent moment adds the missing physical
+  direction and recovers all twenty target roots. This is the first experiment
+  that directly addresses the motivating case where `n` is small but the
+  contour contains many nonlinear eigenvalues.
+- The residual-moment update is not polynomial-specific. On a nonnormal
+  similarity transform of a diagonal analytic NEP with scalar entries
+  `sin(z)`, `cos(z)`, and `sin(z)-0.3`, a radius-10 chart starts from a
+  deliberately rank-one left/right basis and sees only six determinant roots.
+  One dual residual Laurent moment expands the basis to rank three, the reduced
+  determinant extraction counts twenty roots, and all twenty match the true
+  analytic roots to machine precision.
+- The current reduced determinant extractor is now the weak link for larger
+  analytic charts. It reconstructs roots from monomial power sums of
+  `det(Y' T(lambda) X)`, which is ill-conditioned when the contour contains
+  many roots. For the three-function analytic toy at radius 20 it gets the
+  correct count of 38 with full-rank bases but does not refine all roots
+  accurately. This should be treated as extraction instability, not evidence
+  against the dual residual-moment update.
+- A cleaner reduced extractor now uses the argument principle only for the
+  count and SS/Hankel only for the roots/vectors of the reduced NEP. This
+  counted-SS extractor avoids the unstable monomial power-sum root
+  reconstruction and avoids a hidden Hankel rank threshold. On the
+  three-function analytic toy at radius 20, a rank-one initial chart sees only
+  twelve roots; one dual residual Laurent moment expands the basis to rank
+  three, counted-SS reports 38 roots, and all 38 match the true roots to
+  roundoff.
+- The four-function analytic toy with `exp(z)-1` remains a deliberate chart
+  stress case. At radius 10 the counted-SS extractor recovers the expected
+  roots up to the duplicate zero eigenvalue/multiplicity issue. At radius 20,
+  exponential growth around the circle and the extra shared root make the
+  reduced projection much less reliable. This points to local contours or
+  rational coordinates for stiff analytic functions, not a different RII
+  formula.
+- NEP-PACK's block SS implementation uses the generalized reduced Hankel pencil
+  `U' H_1 V x = theta U' H_0 V x`, whereas the Beyn-style form uses the
+  explicit SVD similarity `U' H_1 V Sigma^-1`. Both forms were tested in the
+  reduced counted-SS extractor. They agree on the successful radius-20
+  three-function control and fail similarly on the stiff `exp(z)-1` mixture, so
+  the remaining issue is not this algebraic extraction choice.
 
 ## Linear SS-RII Control Result
 
@@ -442,6 +493,12 @@ candidate higher-moment NLFEAST update must become the formula above when
   methods, spurious states are part of the next realization and can harm the
   update; a production method needs rank, contour, residual, and possibly trace
   history criteria for pruning or replacing them.
+- Treat residual normalization as part of the chart. The stiff analytic
+  `exp(z)-1` mixture demonstrates that a small `norm(T(lambda)x)/norm(T(lambda))`
+  can be a pseudospectral statement rather than evidence of a true root when
+  unrelated components dominate `norm(T(lambda))`. Reduced determinant count,
+  local chart consistency, and problem-aware backward error must be visible
+  diagnostics.
 - Use block Newton as the local model, but not necessarily as the final
   algorithmic form. Its value is that it tells us the correct tangent space and
   gauge constraints for `(X,S)`. A cleaner solver may look like a
@@ -502,16 +559,20 @@ stall.
    left/right contour filtering, biorthogonal physical bases, and a
    Petrov-Galerkin reduced NEP extraction. The first determinant/argument
    principle prototype solves the diagonal `sin/cos` radius-20 failure and the
-   reduced polynomial controls. A first scalar Ritz-vector RII loop now
-   confirms the two-sided nonlinear correction formula and compresses the
-   corrected columns back to physical left/right bases. The remaining task is
-   to express this as a realization/reduced-NEP update directly, so the
-   algorithm does not require materializing every reduced Ritz vector except as
-   a local diagnostic or fallback.
+   reduced polynomial controls. A first scalar Ritz-vector RII loop confirms
+   the two-sided nonlinear correction formula, and the new residual Laurent
+   moment version expresses the same correction as a compact left/right basis
+   update. A non-polynomial diagonal-similarity control now confirms the same
+   update outside polynomial companion structure. The remaining task is to
+   replace the fragile determinant power-sum extractor with a robust reduced
+   NEP solver, then combine rank/count diagnostics, gauge control, and repeated
+   reduced-NEP extraction into a coherent algorithm rather than an
+   experiment-specific update.
 8. Next: turn reduced-NEP extraction into an algorithmic component. Polynomial
    problems can use reduced companion/QZ solves; generic analytic problems need
-   either derivative-based argument-principle extraction, reduced NLFEAST/SS, or
-   NLEIGS-style reduced solvers.
+   counted reduced SS/Hankel extraction, reduced NLFEAST/SS, or NLEIGS-style
+   reduced solvers. The current best analytic prototype uses argument-principle
+   counting plus SS/Hankel root extraction on the reduced NEP.
 9. Next: formalize the role of local rational coordinates. The companion
    problem suggests why finite polynomial problems behave better: the enlarged
    linear state gives a global finite coordinate system. Analytic NEPs with
