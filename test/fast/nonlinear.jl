@@ -232,3 +232,28 @@ end
     assert_converged(result.residuals[inside]; atol=1e-8)
     @test result.history[end].rank == length(expected)
 end
+
+@testitem "experimental moment RII: local chart support diagnostics retain triangular roots" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_dual_local_chart_sweep_analytic(;
+        outer_radius=4.0,
+        operator_builder=triangular_operator_builder(; coupling=10.0),
+        operator_label="triangular(coupling=10)",
+        radii=(2.4,),
+        iterations=2,
+        basis_ranktol=1e-8,
+        basis_nodes=24,
+        rii_nodes=128,
+        determinant_nodes=256,
+        reduced_nodes=256,
+        residual_normalization=:operator,
+        component_scaling=:contour_max,
+        print_charts=false,
+    )
+
+    @test result.matched == length(result.expected)
+    @test result.support2_matched == length(result.expected)
+    @test length(result.support2_found) <= length(result.found)
+    @test length(result.found) > length(result.expected)
+end

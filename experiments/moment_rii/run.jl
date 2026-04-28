@@ -25,6 +25,8 @@ function circular_rule(center, radius, nodes)
     z, w
 end
 
+include("pipeline.jl")
+
 function polynomial_matrix(coeffs, z)
     M = complex.(coeffs[end])
     for j in (length(coeffs)-1):-1:1
@@ -1902,6 +1904,43 @@ function reduced_left_right_singular_vectors(Tred, values)
     left, right
 end
 
+function refine_reduced_analytic_triplets(
+    Tred,
+    Tred_derivative,
+    values;
+    steps=4,
+    step_limit=Inf,
+    derivative_floor=eps(Float64),
+)
+    refined = ComplexF64.(values)
+    isempty(refined) && return refined, Float64[]
+    corrections = Float64[]
+    for j in eachindex(refined)
+        λ = refined[j]
+        for _ in 1:steps
+            F = svd(Tred(λ))
+            y = F.U[:, end]
+            x = F.V[:, end]
+            value = dot(y, Tred(λ) * x)
+            derivative = dot(y, Tred_derivative(λ) * x)
+            if !isfinite(real(value)) || !isfinite(imag(value)) ||
+                    !isfinite(real(derivative)) || !isfinite(imag(derivative)) ||
+                    abs(derivative) <= derivative_floor
+                break
+            end
+            correction = value / derivative
+            if isfinite(step_limit) && abs(correction) > step_limit
+                correction *= step_limit / abs(correction)
+            end
+            λ -= correction
+            push!(corrections, abs(correction))
+            abs(correction) <= 1e-12 * max(1.0, abs(λ)) && break
+        end
+        refined[j] = λ
+    end
+    refined, corrections
+end
+
 function diagonal_full_residuals(cases, values, vectors)
     n = length(cases)
     residuals = zeros(Float64, length(values))
@@ -2057,6 +2096,8 @@ function reduced_analytic_determinant_extraction(
     determinant_nodes=2048,
     determinant_capacity=64,
     residual_normalization=:operator,
+    refinement=:none,
+    refinement_steps=4,
 )
     size(Xbasis, 2) == size(Ybasis, 2) || error("reduced determinant extraction needs square left/right bases")
     function Tred(z)
@@ -2077,6 +2118,18 @@ function reduced_analytic_determinant_extraction(
     values = refine_determinant_roots(Tred, Tred_derivative, values; step_limit=0.25 * radius)
     finite = finite_eigenvalue_mask(values)
     values = ComplexF64.(values[finite])
+    refinement_corrections = Float64[]
+    if refinement === :scalar_newton
+        values, refinement_corrections = refine_reduced_analytic_triplets(
+            Tred,
+            Tred_derivative,
+            values;
+            steps=refinement_steps,
+            step_limit=0.25 * radius,
+        )
+    elseif refinement !== :none
+        error("unknown reduced analytic refinement: $refinement")
+    end
     left_reduced, right_reduced = reduced_left_right_singular_vectors(Tred, values)
     right_vectors = Xbasis * right_reduced
     left_vectors = Ybasis * left_reduced
@@ -2097,6 +2150,8 @@ function reduced_analytic_determinant_extraction(
         reduced_residuals=reduced_residuals,
         count_estimate=count_estimate,
         count_error=abs(sums[1] - count_estimate),
+        refinement=refinement,
+        refinement_corrections=refinement_corrections,
     )
 end
 
@@ -2115,6 +2170,8 @@ function reduced_analytic_ss_extraction(
     count_error=NaN,
     ss_mode=:similarity,
     residual_normalization=:operator,
+    refinement=:none,
+    refinement_steps=4,
 )
     size(Xbasis, 2) == size(Ybasis, 2) || error("reduced SS extraction needs square left/right bases")
     d = size(Xbasis, 2)
@@ -2155,6 +2212,18 @@ function reduced_analytic_ss_extraction(
     values = refine_determinant_roots(Tred, Tred_derivative, values; step_limit=0.25 * radius)
     finite = finite_eigenvalue_mask(values)
     values = ComplexF64.(values[finite])
+    refinement_corrections = Float64[]
+    if refinement === :scalar_newton
+        values, refinement_corrections = refine_reduced_analytic_triplets(
+            Tred,
+            Tred_derivative,
+            values;
+            steps=refinement_steps,
+            step_limit=0.25 * radius,
+        )
+    elseif refinement !== :none
+        error("unknown reduced analytic refinement: $refinement")
+    end
     left_reduced, right_reduced = reduced_left_right_singular_vectors(Tred, values)
     right_vectors = Xbasis * right_reduced
     left_vectors = Ybasis * left_reduced
@@ -2177,6 +2246,8 @@ function reduced_analytic_ss_extraction(
         count_estimate=reported_count,
         count_error=count_error,
         singular_values=Float64.(F.S),
+        refinement=refinement,
+        refinement_corrections=refinement_corrections,
     )
 end
 
@@ -2232,6 +2303,8 @@ function reduced_analytic_loewner_extraction(
     count_estimate=nothing,
     count_error=NaN,
     residual_normalization=:operator,
+    refinement=:none,
+    refinement_steps=4,
 )
     size(Xbasis, 2) == size(Ybasis, 2) || error("reduced Loewner extraction needs square left/right bases")
     function Tred(z)
@@ -2259,6 +2332,18 @@ function reduced_analytic_loewner_extraction(
     values = refine_determinant_roots(Tred, Tred_derivative, values; step_limit=0.25 * radius)
     finite = finite_eigenvalue_mask(values)
     values = ComplexF64.(values[finite])
+    refinement_corrections = Float64[]
+    if refinement === :scalar_newton
+        values, refinement_corrections = refine_reduced_analytic_triplets(
+            Tred,
+            Tred_derivative,
+            values;
+            steps=refinement_steps,
+            step_limit=0.25 * radius,
+        )
+    elseif refinement !== :none
+        error("unknown reduced analytic refinement: $refinement")
+    end
     left_reduced, right_reduced = reduced_left_right_singular_vectors(Tred, values)
     right_vectors = Xbasis * right_reduced
     left_vectors = Ybasis * left_reduced
@@ -2283,6 +2368,8 @@ function reduced_analytic_loewner_extraction(
         singular_values=Float64.(F.S),
         loewner_left_points=left_points,
         loewner_right_points=right_points,
+        refinement=refinement,
+        refinement_corrections=refinement_corrections,
     )
 end
 
@@ -2305,6 +2392,8 @@ function reduced_analytic_extraction(
     loewner_radius=1.6,
     loewner_phase=0.0,
     residual_normalization=:operator,
+    refinement=:none,
+    refinement_steps=4,
 )
     if extractor === :determinant
         return reduced_analytic_determinant_extraction(
@@ -2317,6 +2406,8 @@ function reduced_analytic_extraction(
             determinant_nodes=determinant_nodes,
             determinant_capacity=determinant_capacity,
             residual_normalization=residual_normalization,
+            refinement=refinement,
+            refinement_steps=refinement_steps,
         )
     elseif extractor === :ss_hankel
         return reduced_analytic_ss_extraction(
@@ -2332,6 +2423,8 @@ function reduced_analytic_extraction(
             maxrank=reduced_maxrank,
             ss_mode=reduced_ss_mode,
             residual_normalization=residual_normalization,
+            refinement=refinement,
+            refinement_steps=refinement_steps,
         )
     elseif extractor === :loewner
         return reduced_analytic_loewner_extraction(
@@ -2348,6 +2441,8 @@ function reduced_analytic_extraction(
             loewner_radius=loewner_radius,
             loewner_phase=loewner_phase,
             residual_normalization=residual_normalization,
+            refinement=refinement,
+            refinement_steps=refinement_steps,
         )
     elseif extractor === :ss_counted
         Tred = z -> Ybasis' * Tmatrix(z) * Xbasis
@@ -2375,6 +2470,8 @@ function reduced_analytic_extraction(
             count_error=abs(sums[1] - count_estimate),
             ss_mode=reduced_ss_mode,
             residual_normalization=residual_normalization,
+            refinement=refinement,
+            refinement_steps=refinement_steps,
         )
     elseif extractor === :loewner_counted
         Tred = z -> Ybasis' * Tmatrix(z) * Xbasis
@@ -2404,6 +2501,8 @@ function reduced_analytic_extraction(
             loewner_radius=loewner_radius,
             loewner_phase=loewner_phase,
             residual_normalization=residual_normalization,
+            refinement=refinement,
+            refinement_steps=refinement_steps,
         )
     end
     error("unknown reduced analytic extractor: $extractor")
@@ -3643,7 +3742,56 @@ function normalize_columns_local!(X)
     X
 end
 
-function reduced_polynomial_extraction(coeffs, Xbasis, Ybasis, center, radius)
+function reduced_polynomial_newton_refine(
+    reduced_coeffs,
+    values,
+    right_reduced,
+    center,
+    radius;
+    steps=1,
+    lift=nothing,
+    selection=:inside,
+)
+    selected = if selection === :inside
+        FEASTSolver.in_contour(values, center, radius)
+    elseif selection === :all
+        trues(length(values))
+    else
+        error("unknown reduced polynomial refinement selection: $selection")
+    end
+    any(selected) || return values, right_reduced, Float64[]
+
+    nred = size(right_reduced, 1)
+    p = count(selected)
+    # The lifted gauge must have enough rows to represent p nonlinear states,
+    # even when the reduced physical dimension is smaller than the root count.
+    effective_lift = lift === nothing ? max(1, ceil(Int, p / max(nred, 1))) : Int(lift)
+    effective_lift = max(effective_lift, ceil(Int, p / max(nred, 1)))
+
+    X = Matrix(right_reduced[:, selected])
+    S = Matrix(Diagonal(ComplexF64.(values[selected])))
+    X, S = normalize_lifted_pair(X, S, effective_lift)
+    X, S, ratios = invariant_pair_newton_refine(reduced_coeffs, X, S; lift=effective_lift, steps=steps)
+    F = eigen(S)
+
+    refined_values = copy(values)
+    refined_vectors = copy(right_reduced)
+    refined_values[selected] .= ComplexF64.(F.values)
+    refined_vectors[:, selected] .= X * F.vectors
+    refined_values, refined_vectors, ratios
+end
+
+function reduced_polynomial_extraction(
+    coeffs,
+    Xbasis,
+    Ybasis,
+    center,
+    radius;
+    refinement=:none,
+    newton_steps=1,
+    newton_lift=nothing,
+    newton_selection=:inside,
+)
     size(Xbasis, 2) == size(Ybasis, 2) || error("reduced extraction needs square left/right bases")
     reduced_coeffs = [Ybasis' * A * Xbasis for A in coeffs]
     values, _, reduced_residuals = companion(reduced_coeffs)
@@ -3654,12 +3802,34 @@ function reduced_polynomial_extraction(coeffs, Xbasis, Ybasis, center, radius)
     k = length(values)
     nred = size(Xbasis, 2)
     Vred = zeros(ComplexF64, nred, k)
+    for j in eachindex(values)
+        Tλ = polynomial_matrix(reduced_coeffs, values[j])
+        F = svd(Tλ)
+        Vred[:, j] .= F.V[:, end]
+    end
+    refinement_ratios = Float64[]
+    if refinement === :block_newton
+        values, Vred, refinement_ratios = reduced_polynomial_newton_refine(
+            reduced_coeffs,
+            values,
+            Vred,
+            center,
+            radius;
+            steps=newton_steps,
+            lift=newton_lift,
+            selection=newton_selection,
+        )
+    elseif refinement !== :none
+        error("unknown reduced polynomial refinement: $refinement")
+    end
+
     Ured = zeros(ComplexF64, nred, k)
+    reduced_residuals = zeros(Float64, k)
     for j in eachindex(values)
         Tλ = polynomial_matrix(reduced_coeffs, values[j])
         F = svd(Tλ)
         Ured[:, j] .= F.U[:, end]
-        Vred[:, j] .= F.V[:, end]
+        reduced_residuals[j] = isempty(F.S) ? Inf : minimum(F.S) / max(maximum(F.S), eps(Float64))
     end
 
     Xfull = Xbasis * Vred
@@ -3679,6 +3849,8 @@ function reduced_polynomial_extraction(coeffs, Xbasis, Ybasis, center, radius)
         right_residuals=right_residuals,
         left_residuals=left_residuals,
         reduced_residuals=reduced_residuals,
+        refinement=refinement,
+        refinement_ratios=refinement_ratios,
     )
 end
 
@@ -4191,6 +4363,8 @@ function run_dual_moment_compressed_rii_analytic_experiment(;
     loewner_radius=1.6,
     loewner_phase=0.0,
     residual_normalization=:operator,
+    reduced_refinement=:none,
+    refinement_steps=4,
     component_scaling=:none,
     component_scaling_nodes=64,
     residual_tol=1e-8,
@@ -4256,6 +4430,8 @@ function run_dual_moment_compressed_rii_analytic_experiment(;
         loewner_radius=loewner_radius,
         loewner_phase=loewner_phase,
         residual_normalization=residual_normalization,
+        refinement=reduced_refinement,
+        refinement_steps=refinement_steps,
     )
     @printf("    reduced_count=%d count_error=%.3e\n", extraction0.count_estimate, extraction0.count_error)
     print_dual_scalar_rii_status("iter=0", extraction0, expected, center, radius; residual_tol=residual_tol, match_atol=match_atol)
@@ -4344,6 +4520,8 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
     loewner_radius=1.6,
     loewner_phase=0.0,
     residual_normalization=:operator,
+    reduced_refinement=:none,
+    refinement_steps=4,
     component_scaling=:none,
     component_scaling_nodes=64,
     residual_tol=1e-8,
@@ -4353,29 +4531,56 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
     verbose=true,
 )
     labels = join((case.name for case in cases), ",")
-    component_scales = analytic_component_scales(cases, center, radius; mode=component_scaling, nodes=component_scaling_nodes)
-    Tmatrix, Tderivative, Tsolve, Tadjoint_solve, expected_roots =
-        operator_builder(cases; component_scales=component_scales)
-    expected = expected_roots(center, radius)
-    n = length(cases)
-    z_nodes, z_weights = circular_rule(center, radius, basis_nodes)
-    rii_z_nodes, rii_z_weights = circular_rule(center, radius, rii_nodes)
-
-    Random.seed!(9801 + round(Int, radius * 10) + 17 * length(cases))
-    Xprobe = rand(ComplexF64, n, n)
-    Wprobe = rand(ComplexF64, n, n)
-    right_moments = initial_moments_generic_scaled(Tsolve, Xprobe, z_nodes, z_weights, center, radius, basis_moments)
-    left_moments = initial_adjoint_moments_generic_scaled(Tadjoint_solve, Wprobe, z_nodes, z_weights, center, radius, basis_moments)
-    Xbasis, right_basis_singulars = moment_block_basis(right_moments, basis_moments; ranktol=basis_ranktol)
-    Ybasis, left_basis_singulars = moment_block_basis(left_moments, basis_moments; ranktol=basis_ranktol)
-    if size(Xbasis, 2) != size(Ybasis, 2)
-        common = min(size(Xbasis, 2), size(Ybasis, 2))
-        Xbasis = Xbasis[:, 1:common]
-        Ybasis = Ybasis[:, 1:common]
-    end
+    chart = ContourChart(
+        center,
+        radius;
+        component_scaling=component_scaling,
+        component_scaling_nodes=component_scaling_nodes,
+    )
+    ctx = analytic_context(cases, chart, operator_builder)
+    expected = ctx.expected
+    extractor_config = ReducedExtractorConfig(
+        extractor=extractor,
+        determinant_nodes=determinant_nodes,
+        determinant_capacity=determinant_capacity,
+        reduced_moments=reduced_moments,
+        reduced_nodes=reduced_nodes,
+        reduced_ranktol=reduced_ranktol,
+        reduced_ss_mode=reduced_ss_mode,
+        loewner_points=loewner_points,
+        loewner_radius=loewner_radius,
+        loewner_phase=loewner_phase,
+        residual_normalization=residual_normalization,
+        refinement=reduced_refinement,
+        refinement_steps=refinement_steps,
+    )
+    update_config = ResidualUpdateConfig(
+        moment_count=update_moment_count,
+        rii_nodes=rii_nodes,
+        residual_ranktol=residual_ranktol,
+        compression_ranktol=compression_ranktol,
+        mode=update_mode,
+        biorthogonalize=biorthogonalize,
+    )
+    trial = initial_dual_trial_spaces(
+        ctx,
+        chart;
+        basis_moments=basis_moments,
+        basis_nodes=basis_nodes,
+        basis_ranktol=basis_ranktol,
+        seed=9801 + round(Int, radius * 10) + 17 * length(cases),
+    )
     if biorthogonalize
-        Xbasis, Ybasis, _ = biorthogonalize_bases(Xbasis, Ybasis)
+        Xbi, Ybi, cross_singulars = biorthogonalize_bases(trial.X, trial.Y)
+        trial = TrialSpaces(
+            X=Xbi,
+            Y=Ybi,
+            right_singulars=Float64.(cross_singulars),
+            left_singulars=Float64.(cross_singulars),
+            source=:biorthogonalized_initial_contour_moments,
+        )
     end
+    initial_summary = trial_space_summary(trial)
 
     if verbose
         println()
@@ -4392,18 +4597,18 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
             update_moment_count,
             string(update_mode),
             string(component_scaling),
-            size(Xbasis, 2),
-            size(Ybasis, 2),
-            isempty(right_basis_singulars) ? NaN : right_basis_singulars[end] / right_basis_singulars[1],
-            isempty(left_basis_singulars) ? NaN : left_basis_singulars[end] / left_basis_singulars[1],
+            initial_summary.right_cols,
+            initial_summary.left_cols,
+            initial_summary.right_sigma,
+            initial_summary.left_sigma,
         )
     end
-    if size(Xbasis, 2) == 0
+    if size(trial.X, 2) == 0
         verbose && println("  skipped: rank truncation removed the whole initial basis")
         return (
             extraction=nothing,
-            Xbasis=Xbasis,
-            Ybasis=Ybasis,
+            Xbasis=trial.X,
+            Ybasis=trial.Y,
             expected=expected,
             summaries=NamedTuple[],
             center=center,
@@ -4412,25 +4617,7 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
     end
 
     summaries = NamedTuple[]
-    extraction = reduced_analytic_extraction(
-        Tmatrix,
-        Tderivative,
-        Xbasis,
-        Ybasis,
-        center,
-        radius;
-        extractor=extractor,
-        determinant_nodes=determinant_nodes,
-        determinant_capacity=determinant_capacity,
-        reduced_moments=reduced_moments,
-        reduced_nodes=reduced_nodes,
-        reduced_ranktol=reduced_ranktol,
-        reduced_ss_mode=reduced_ss_mode,
-        loewner_points=loewner_points,
-        loewner_radius=loewner_radius,
-        loewner_phase=loewner_phase,
-        residual_normalization=residual_normalization,
-    )
+    extraction = extract_reduced_nep(ctx, trial, chart, extractor_config)
     push!(summaries, merge((iteration=0,), dual_scalar_rii_summary(extraction, expected; residual_tol=residual_tol, match_atol=match_atol)))
     if verbose
         @printf("    iter=0 reduced_count=%d count_error=%.3e\n", extraction.count_estimate, extraction.count_error)
@@ -4438,31 +4625,18 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
     end
     for iteration in 1:iterations
         if update_mode === :moment_compressed
-            Xbasis, Ybasis, stats = moment_compressed_dual_rii_bases_generic(
-                Tsolve,
-                Tadjoint_solve,
-                Tmatrix,
-                Xbasis,
-                Ybasis,
-                extraction,
-                rii_z_nodes,
-                rii_z_weights,
-                center,
-                radius;
-                moment_count=update_moment_count,
-                residual_ranktol=residual_ranktol,
-                compression_ranktol=compression_ranktol,
-            )
+            trial, stats = residual_laurent_update(ctx, trial, extraction, chart, update_config)
         elseif update_mode === :scalar_expanded
             selected = extraction.inside
             if !any(selected)
                 verbose && println("  iteration stopped: no Ritz values inside contour")
                 break
             end
+            rii_z_nodes, rii_z_weights = circular_rule(chart, rii_nodes)
             Qright, Qleft, solve_stats = dual_scalar_rii_step_generic(
-                Tsolve,
-                Tadjoint_solve,
-                Tmatrix,
+                ctx.Tsolve,
+                ctx.Tadjoint_solve,
+                ctx.Tmatrix,
                 extraction.values[selected],
                 extraction.right_vectors[:, selected],
                 extraction.left_vectors[:, selected],
@@ -4470,39 +4644,30 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
                 rii_z_weights;
                 residual_ranktol=residual_ranktol,
             )
-            Xbasis, right_singulars = physical_basis_from_columns(Qright; ranktol=compression_ranktol)
-            Ybasis, left_singulars = physical_basis_from_columns(Qleft; ranktol=compression_ranktol)
-            if size(Xbasis, 2) != size(Ybasis, 2)
-                common = min(size(Xbasis, 2), size(Ybasis, 2))
-                Xbasis = Xbasis[:, 1:common]
-                Ybasis = Ybasis[:, 1:common]
+            Xcandidate, right_singulars = physical_basis_from_columns(Qright; ranktol=compression_ranktol)
+            Ycandidate, left_singulars = physical_basis_from_columns(Qleft; ranktol=compression_ranktol)
+            trial = common_square_trial_spaces(TrialSpaces(
+                X=Xcandidate,
+                Y=Ycandidate,
+                right_singulars=Float64.(right_singulars),
+                left_singulars=Float64.(left_singulars),
+                source=:scalar_expanded_rii_update,
+            ))
+            if biorthogonalize
+                Xbi, Ybi, cross_singulars = biorthogonalize_bases(trial.X, trial.Y)
+                trial = TrialSpaces(
+                    X=Xbi,
+                    Y=Ybi,
+                    right_singulars=Float64.(cross_singulars),
+                    left_singulars=Float64.(cross_singulars),
+                    source=:biorthogonalized_scalar_expanded_rii_update,
+                )
             end
             stats = merge(solve_stats, (right_singulars=right_singulars, left_singulars=left_singulars))
         else
             error("unknown analytic RII update_mode: $update_mode")
         end
-        if biorthogonalize
-            Xbasis, Ybasis, _ = biorthogonalize_bases(Xbasis, Ybasis)
-        end
-        extraction = reduced_analytic_extraction(
-            Tmatrix,
-            Tderivative,
-            Xbasis,
-            Ybasis,
-            center,
-            radius;
-            extractor=extractor,
-            determinant_nodes=determinant_nodes,
-            determinant_capacity=determinant_capacity,
-            reduced_moments=reduced_moments,
-            reduced_nodes=reduced_nodes,
-            reduced_ranktol=reduced_ranktol,
-            reduced_ss_mode=reduced_ss_mode,
-            loewner_points=loewner_points,
-            loewner_radius=loewner_radius,
-            loewner_phase=loewner_phase,
-            residual_normalization=residual_normalization,
-        )
+        extraction = extract_reduced_nep(ctx, trial, chart, extractor_config)
         push!(
             summaries,
             merge(
@@ -4513,8 +4678,8 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
                     left_residual_rank=stats.left_residual_rank,
                     right_candidate_cols=stats.right_candidate_cols,
                     left_candidate_cols=stats.left_candidate_cols,
-                    right_basis_cols=size(Xbasis, 2),
-                    left_basis_cols=size(Ybasis, 2),
+                    right_basis_cols=size(trial.X, 2),
+                    left_basis_cols=size(trial.Y, 2),
                 ),
                 dual_scalar_rii_summary(extraction, expected; residual_tol=residual_tol, match_atol=match_atol),
             ),
@@ -4528,8 +4693,8 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
                 stats.left_residual_rank,
                 stats.right_candidate_cols,
                 stats.left_candidate_cols,
-                size(Xbasis, 2),
-                size(Ybasis, 2),
+                size(trial.X, 2),
+                size(trial.Y, 2),
                 isempty(stats.right_singulars) ? NaN : stats.right_singulars[end] / stats.right_singulars[1],
                 isempty(stats.left_singulars) ? NaN : stats.left_singulars[end] / stats.left_singulars[1],
             )
@@ -4546,8 +4711,8 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
     end
     (
         extraction=extraction,
-        Xbasis=Xbasis,
-        Ybasis=Ybasis,
+        Xbasis=trial.X,
+        Ybasis=trial.Y,
         expected=expected,
         summaries=summaries,
         center=center,
@@ -4581,26 +4746,38 @@ function run_reduced_loewner_extractor_comparison(;
     match_atol=1e-6,
 )
     labels = join((case.name for case in cases), ",")
-    component_scales = analytic_component_scales(cases, center, radius; mode=component_scaling, nodes=component_scaling_nodes)
-    Tmatrix, Tderivative, Tsolve, Tadjoint_solve, expected_roots =
-        operator_builder(cases; component_scales=component_scales)
-    expected = expected_roots(center, radius)
-    n = length(cases)
-    z_nodes, z_weights = circular_rule(center, radius, basis_nodes)
-    rii_z_nodes, rii_z_weights = circular_rule(center, radius, rii_nodes)
-
-    Random.seed!(9901 + round(Int, radius * 10) + 19 * length(cases))
-    Xprobe = rand(ComplexF64, n, n)
-    Wprobe = rand(ComplexF64, n, n)
-    right_moments = initial_moments_generic_scaled(Tsolve, Xprobe, z_nodes, z_weights, center, radius, basis_moments)
-    left_moments = initial_adjoint_moments_generic_scaled(Tadjoint_solve, Wprobe, z_nodes, z_weights, center, radius, basis_moments)
-    Xbasis, right_basis_singulars = moment_block_basis(right_moments, basis_moments; ranktol=basis_ranktol)
-    Ybasis, left_basis_singulars = moment_block_basis(left_moments, basis_moments; ranktol=basis_ranktol)
-    if size(Xbasis, 2) != size(Ybasis, 2)
-        common = min(size(Xbasis, 2), size(Ybasis, 2))
-        Xbasis = Xbasis[:, 1:common]
-        Ybasis = Ybasis[:, 1:common]
-    end
+    chart = ContourChart(
+        center,
+        radius;
+        component_scaling=component_scaling,
+        component_scaling_nodes=component_scaling_nodes,
+    )
+    ctx = analytic_context(cases, chart, operator_builder)
+    expected = ctx.expected
+    trial = initial_dual_trial_spaces(
+        ctx,
+        chart;
+        basis_moments=basis_moments,
+        basis_nodes=basis_nodes,
+        basis_ranktol=basis_ranktol,
+        seed=9901 + round(Int, radius * 10) + 19 * length(cases),
+    )
+    ss_config = ReducedExtractorConfig(
+        extractor=:ss_counted,
+        determinant_nodes=determinant_nodes,
+        determinant_capacity=determinant_capacity,
+        reduced_moments=reduced_moments,
+        reduced_nodes=reduced_nodes,
+        reduced_ranktol=reduced_ranktol,
+        residual_normalization=residual_normalization,
+    )
+    update_config = ResidualUpdateConfig(
+        moment_count=update_moment_count,
+        rii_nodes=rii_nodes,
+        residual_ranktol=residual_ranktol,
+        compression_ranktol=compression_ranktol,
+    )
+    initial_summary = trial_space_summary(trial)
 
     println()
     println("Reduced Loewner extractor comparison: [$labels]")
@@ -4611,12 +4788,12 @@ function run_reduced_loewner_extractor_comparison(;
         length(expected),
         basis_nodes,
         rii_nodes,
-        size(Xbasis, 2),
-        size(Ybasis, 2),
-        isempty(right_basis_singulars) ? NaN : right_basis_singulars[end] / right_basis_singulars[1],
-        isempty(left_basis_singulars) ? NaN : left_basis_singulars[end] / left_basis_singulars[1],
+        initial_summary.right_cols,
+        initial_summary.left_cols,
+        initial_summary.right_sigma,
+        initial_summary.left_sigma,
     )
-    if size(Xbasis, 2) == 0
+    if size(trial.X, 2) == 0
         println("  skipped: rank truncation removed the whole initial basis")
         return
     end
@@ -4641,30 +4818,10 @@ function run_reduced_loewner_extractor_comparison(;
         )
     end
 
-    extraction0 = reduced_analytic_extraction(
-        Tmatrix,
-        Tderivative,
-        Xbasis,
-        Ybasis,
-        center,
-        radius;
-        extractor=:ss_counted,
-        determinant_nodes=determinant_nodes,
-        determinant_capacity=determinant_capacity,
-        reduced_moments=reduced_moments,
-        reduced_nodes=reduced_nodes,
-        reduced_ranktol=reduced_ranktol,
-        residual_normalization=residual_normalization,
-    )
+    extraction0 = extract_reduced_nep(ctx, trial, chart, ss_config)
     score("initial ss_counted", extraction0)
     for loewner_radius in loewner_radii
-        extraction = reduced_analytic_extraction(
-            Tmatrix,
-            Tderivative,
-            Xbasis,
-            Ybasis,
-            center,
-            radius;
+        loewner_config = ReducedExtractorConfig(
             extractor=:loewner_counted,
             determinant_nodes=determinant_nodes,
             determinant_capacity=determinant_capacity,
@@ -4673,57 +4830,24 @@ function run_reduced_loewner_extractor_comparison(;
             loewner_radius=loewner_radius,
             residual_normalization=residual_normalization,
         )
+        extraction = extract_reduced_nep(ctx, trial, chart, loewner_config)
         score("initial loewner rho=$loewner_radius", extraction)
     end
 
-    Xnew, Ynew, stats = moment_compressed_dual_rii_bases_generic(
-        Tsolve,
-        Tadjoint_solve,
-        Tmatrix,
-        Xbasis,
-        Ybasis,
-        extraction0,
-        rii_z_nodes,
-        rii_z_weights,
-        center,
-        radius;
-        moment_count=update_moment_count,
-        residual_ranktol=residual_ranktol,
-        compression_ranktol=compression_ranktol,
-    )
+    updated_trial, stats = residual_laurent_update(ctx, trial, extraction0, chart, update_config)
     @printf(
         "  residual update: ranks=(%d,%d) candidate_cols=(%d,%d) basis=(%d,%d)\n",
         stats.right_residual_rank,
         stats.left_residual_rank,
         stats.right_candidate_cols,
         stats.left_candidate_cols,
-        size(Xnew, 2),
-        size(Ynew, 2),
+        size(updated_trial.X, 2),
+        size(updated_trial.Y, 2),
     )
-    extraction = reduced_analytic_extraction(
-        Tmatrix,
-        Tderivative,
-        Xnew,
-        Ynew,
-        center,
-        radius;
-        extractor=:ss_counted,
-        determinant_nodes=determinant_nodes,
-        determinant_capacity=determinant_capacity,
-        reduced_moments=reduced_moments,
-        reduced_nodes=reduced_nodes,
-        reduced_ranktol=reduced_ranktol,
-        residual_normalization=residual_normalization,
-    )
+    extraction = extract_reduced_nep(ctx, updated_trial, chart, ss_config)
     score("updated ss_counted", extraction)
     for loewner_radius in loewner_radii
-        extraction = reduced_analytic_extraction(
-            Tmatrix,
-            Tderivative,
-            Xnew,
-            Ynew,
-            center,
-            radius;
+        loewner_config = ReducedExtractorConfig(
             extractor=:loewner_counted,
             determinant_nodes=determinant_nodes,
             determinant_capacity=determinant_capacity,
@@ -4732,14 +4856,122 @@ function run_reduced_loewner_extractor_comparison(;
             loewner_radius=loewner_radius,
             residual_normalization=residual_normalization,
         )
+        extraction = extract_reduced_nep(ctx, updated_trial, chart, loewner_config)
         score("updated loewner rho=$loewner_radius", extraction)
     end
 end
 
-function good_extraction_values(extraction; residual_tol)
-    extraction === nothing && return ComplexF64[]
-    good = extraction.inside .& (extraction.residuals .<= residual_tol)
-    ComplexF64.(extraction.values[good])
+function run_reduced_analytic_refinement_comparison(;
+    cases=(scalar_sine_case(), scalar_cosine_case(), scalar_shifted_sine_case()),
+    center=0.0 + 0.0im,
+    radius=20.0,
+    operator_builder=similarity_analytic_tools,
+    operator_label="similarity",
+    extractor=:ss_counted,
+    basis_moments=4,
+    basis_nodes=8,
+    rii_nodes=128,
+    basis_ranktol=0.5,
+    compression_ranktol=1e-10,
+    residual_ranktol=1e-10,
+    update_moment_count=1,
+    determinant_nodes=512,
+    determinant_capacity=80,
+    reduced_moments=16,
+    reduced_nodes=512,
+    reduced_ranktol=1e-10,
+    residual_normalization=:operator,
+    component_scaling=:none,
+    component_scaling_nodes=64,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+)
+    labels = join((case.name for case in cases), ",")
+    chart = ContourChart(
+        center,
+        radius;
+        component_scaling=component_scaling,
+        component_scaling_nodes=component_scaling_nodes,
+    )
+    ctx = analytic_context(cases, chart, operator_builder)
+    expected = ctx.expected
+    trial = initial_dual_trial_spaces(
+        ctx,
+        chart;
+        basis_moments=basis_moments,
+        basis_nodes=basis_nodes,
+        basis_ranktol=basis_ranktol,
+        seed=9917 + round(Int, radius * 10) + 23 * length(cases),
+    )
+    update_config = ResidualUpdateConfig(
+        moment_count=update_moment_count,
+        rii_nodes=rii_nodes,
+        residual_ranktol=residual_ranktol,
+        compression_ranktol=compression_ranktol,
+    )
+
+    println()
+    println("Reduced analytic scalar-refinement comparison: [$labels]")
+    println("  operator=$operator_label; compares reduced extraction with/without two-sided scalar Newton cleanup")
+    @printf(
+        "  extractor=%s radius=%.3g expected=%d basis=(%d,%d)\n",
+        string(extractor),
+        radius,
+        length(expected),
+        size(trial.X, 2),
+        size(trial.Y, 2),
+    )
+    size(trial.X, 2) == 0 && return
+
+    function config(refinement)
+        ReducedExtractorConfig(
+            extractor=extractor,
+            determinant_nodes=determinant_nodes,
+            determinant_capacity=determinant_capacity,
+            reduced_moments=reduced_moments,
+            reduced_nodes=reduced_nodes,
+            reduced_ranktol=reduced_ranktol,
+            residual_normalization=residual_normalization,
+            refinement=refinement,
+        )
+    end
+
+    function score(label, extraction)
+        summary = dual_scalar_rii_summary(extraction, expected; residual_tol=residual_tol, match_atol=match_atol)
+        max_correction = hasproperty(extraction, :refinement_corrections) && !isempty(extraction.refinement_corrections) ?
+            maximum(extraction.refinement_corrections) : NaN
+        @printf(
+            "  %-26s count=%d inside=%d good=%d matched=%d spurious=%d max=%.3e max_correction=%.3e\n",
+            label,
+            extraction.count_estimate,
+            summary.inside,
+            summary.good,
+            summary.matched,
+            summary.spurious_good,
+            summary.max_residual,
+            max_correction,
+        )
+    end
+
+    extraction0 = extract_reduced_nep(ctx, trial, chart, config(:none))
+    extraction0_refined = extract_reduced_nep(ctx, trial, chart, config(:scalar_newton))
+    score("initial none", extraction0)
+    score("initial scalar_newton", extraction0_refined)
+
+    updated_trial, stats = residual_laurent_update(ctx, trial, extraction0, chart, update_config)
+    @printf(
+        "  residual update: ranks=(%d,%d) candidate_cols=(%d,%d) basis=(%d,%d)\n",
+        stats.right_residual_rank,
+        stats.left_residual_rank,
+        stats.right_candidate_cols,
+        stats.left_candidate_cols,
+        size(updated_trial.X, 2),
+        size(updated_trial.Y, 2),
+    )
+    extraction1 = extract_reduced_nep(ctx, updated_trial, chart, config(:none))
+    extraction1_refined = extract_reduced_nep(ctx, updated_trial, chart, config(:scalar_newton))
+    score("updated none", extraction1)
+    score("updated scalar_newton", extraction1_refined)
 end
 
 function sorted_unique_values(values; atol=1e-6)
@@ -4782,6 +5014,8 @@ function run_dual_local_chart_sweep_analytic(;
     reduced_ranktol=1e-10,
     reduced_ss_mode=:similarity,
     residual_normalization=:vector,
+    reduced_refinement=:none,
+    refinement_steps=4,
     component_scaling=:contour_max,
     component_scaling_nodes=64,
     residual_tol=1e-8,
@@ -4820,10 +5054,12 @@ function run_dual_local_chart_sweep_analytic(;
     )
 
     found = ComplexF64[]
+    found_entries = NamedTuple[]
     records = NamedTuple[]
     for chart_center in chart_centers
         best_record = nothing
         best_values = ComplexF64[]
+        best_entries = NamedTuple[]
         best_score = (-1, -1, Inf)
         for radius in radii
             local_expected = expected_roots(chart_center, radius)
@@ -4851,6 +5087,8 @@ function run_dual_local_chart_sweep_analytic(;
                     reduced_ranktol=reduced_ranktol,
                     reduced_ss_mode=reduced_ss_mode,
                     residual_normalization=residual_normalization,
+                    reduced_refinement=reduced_refinement,
+                    refinement_steps=refinement_steps,
                     component_scaling=component_scaling,
                     component_scaling_nodes=component_scaling_nodes,
                     residual_tol=residual_tol,
@@ -4891,6 +5129,7 @@ function run_dual_local_chart_sweep_analytic(;
                 continue
             end
             values = good_extraction_values(extraction; residual_tol=residual_tol)
+            entries = good_extraction_entries(extraction, chart_center, radius; residual_tol=residual_tol)
             matched = match_expected_count(values, local_expected; atol=match_atol)
             summary = dual_scalar_rii_summary(extraction, local_expected; residual_tol=residual_tol, match_atol=match_atol)
             record = (
@@ -4916,6 +5155,7 @@ function run_dual_local_chart_sweep_analytic(;
                 best_score = score
                 best_record = record
                 best_values = values
+                best_entries = entries
             end
         end
         if best_record === nothing
@@ -4929,6 +5169,7 @@ function run_dual_local_chart_sweep_analytic(;
             continue
         end
         append!(found, best_values)
+        append!(found_entries, best_entries)
         if print_charts
             @printf(
                 "    center=%+.6g%+.6gi best_r=%.3g local=%d good=%d matched=%d max_res=%.3e\n",
@@ -4945,17 +5186,27 @@ function run_dual_local_chart_sweep_analytic(;
 
     found_unique = sorted_unique_values(found; atol=match_atol)
     matched_global = match_expected_count(found_unique, expected_global; atol=match_atol)
+    support_clusters = chart_entry_clusters(found_entries; atol=match_atol)
+    support2_values = supported_cluster_values(support_clusters; min_support=2)
+    support2_matched = match_expected_count(support2_values, expected_global; atol=match_atol)
     @printf(
-        "  union_good=%d matched_global=%d/%d\n",
+        "  union_good=%d matched_global=%d/%d support2_good=%d support2_matched=%d/%d\n",
         length(found_unique),
         matched_global,
+        length(expected_global),
+        length(support2_values),
+        support2_matched,
         length(expected_global),
     )
     (
         records=records,
         found=found_unique,
+        found_entries=found_entries,
+        support_clusters=support_clusters,
+        support2_found=support2_values,
         expected=expected_global,
         matched=matched_global,
+        support2_matched=support2_matched,
         centers=chart_centers,
     )
 end
@@ -5002,6 +5253,80 @@ function run_dual_grid_chart_cover_triangular_analytic(;
         operator_label="triangular(coupling=$coupling)",
         kwargs...,
     )
+end
+
+function run_local_chart_refinement_comparison(;
+    cases=(scalar_sine_case(), scalar_cosine_case(), scalar_shifted_sine_case(), scalar_expm1_case()),
+    outer_center=0.0 + 0.0im,
+    outer_radius=10.0,
+    operator_builder=triangular_operator_builder(; coupling=10.0),
+    operator_label="triangular(coupling=10.0)",
+    radii=(1.2, 1.8),
+    refinement_modes=(:none, :scalar_newton),
+    iterations=1,
+    basis_ranktol=1e-8,
+    compression_ranktol=1e-10,
+    residual_ranktol=1e-10,
+    basis_nodes=24,
+    rii_nodes=256,
+    determinant_nodes=512,
+    reduced_nodes=512,
+    residual_normalization=:vector,
+    component_scaling=:contour_max,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+)
+    println()
+    println("Local chart reduced-refinement comparison")
+    println("  supervised chart centers; isolates reduced scalar cleanup from chart-cover misses")
+    summaries = NamedTuple[]
+    for refinement in refinement_modes
+        result = run_dual_local_chart_sweep_analytic(;
+            cases=cases,
+            outer_center=outer_center,
+            outer_radius=outer_radius,
+            operator_builder=operator_builder,
+            operator_label=operator_label,
+            radii=radii,
+            iterations=iterations,
+            basis_ranktol=basis_ranktol,
+            compression_ranktol=compression_ranktol,
+            residual_ranktol=residual_ranktol,
+            basis_nodes=basis_nodes,
+            rii_nodes=rii_nodes,
+            determinant_nodes=determinant_nodes,
+            reduced_nodes=reduced_nodes,
+            residual_normalization=residual_normalization,
+            component_scaling=component_scaling,
+            residual_tol=residual_tol,
+            match_atol=match_atol,
+            reduced_refinement=refinement,
+            print_charts=false,
+        )
+        summary = (
+            refinement=refinement,
+            matched=result.matched,
+            expected=length(result.expected),
+            found=length(result.found),
+        )
+        push!(summaries, summary)
+        @printf(
+            "  refinement=%s found=%d matched=%d/%d\n",
+            string(refinement),
+            summary.found,
+            summary.matched,
+            summary.expected,
+        )
+        support_text = join(
+            (
+                @sprintf("s%d=%d/%d", item.support, item.matched, item.count)
+                for item in support_sweep_counts(result; atol=match_atol)
+            ),
+            ", ",
+        )
+        println("    support sweep: $support_text")
+    end
+    summaries
 end
 
 function run_dual_multiple_root_analytic_stress(;
@@ -5085,6 +5410,8 @@ function run_dual_reduced_polynomial_control(;
     basis_ranktol=1e-10,
     residual_tol=1e-7,
     match_atol=1e-6,
+    refinement_modes=(:none, :block_newton),
+    newton_steps=2,
 )
     problem = make_problem()
     coeffs, center, radius, n = problem[1], problem[2], problem[3], problem[4]
@@ -5109,27 +5436,37 @@ function run_dual_reduced_polynomial_control(;
             println("  mode=$label skipped: incompatible reduced basis sizes")
             continue
         end
-        reduced_coeffs = [Ytest' * A * Xtest for A in coeffs]
-        λ, Vred, reduced_residuals = companion(reduced_coeffs)
-        inside = FEASTSolver.in_contour(λ, center, radius)
-        original_vectors = Xtest * Vred
-        original_residuals = polynomial_vector_residuals(coeffs, λ, original_vectors)
-        good = inside .& (original_residuals .<= residual_tol)
-        matched = match_expected_count(λ[good], expected; atol=match_atol)
-        spurious_good = max(count(good) - matched, 0)
-        @printf(
-            "  mode=%s expected=%d returned_inside=%d good=%d matched=%d spurious_good=%d reduced_max=%.3e original_max=%.3e basis=(%d,%d)\n",
-            label,
-            length(expected),
-            count(inside),
-            count(good),
-            matched,
-            spurious_good,
-            any(inside) ? maximum(reduced_residuals[inside]) : Inf,
-            any(inside) ? maximum(original_residuals[inside]) : Inf,
-            size(Xtest, 2),
-            size(Ytest, 2),
-        )
+        for refinement in refinement_modes
+            extraction = reduced_polynomial_extraction(
+                coeffs,
+                Xtest,
+                Ytest,
+                center,
+                radius;
+                refinement=refinement,
+                newton_steps=newton_steps,
+            )
+            inside = extraction.inside
+            good = inside .& (extraction.residuals .<= residual_tol)
+            matched = match_expected_count(extraction.values[good], expected; atol=match_atol)
+            spurious_good = max(count(good) - matched, 0)
+            ratio_text = isempty(extraction.refinement_ratios) ? "n/a" : join((@sprintf("%.2e", r) for r in extraction.refinement_ratios), ",")
+            @printf(
+                "  mode=%s refinement=%s expected=%d returned_inside=%d good=%d matched=%d spurious_good=%d reduced_max=%.3e original_max=%.3e basis=(%d,%d) newton_ratios=%s\n",
+                label,
+                string(refinement),
+                length(expected),
+                count(inside),
+                count(good),
+                matched,
+                spurious_good,
+                any(inside) ? maximum(extraction.reduced_residuals[inside]) : Inf,
+                any(inside) ? maximum(extraction.residuals[inside]) : Inf,
+                size(Xtest, 2),
+                size(Ytest, 2),
+                ratio_text,
+            )
+        end
     end
     @printf(
         "    basis singular ratios right=%.3e left=%.3e cross=%.3e\n",

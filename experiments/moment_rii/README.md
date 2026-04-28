@@ -479,6 +479,35 @@ with diagnostics good enough to choose the right chart in ordinary cases.
   supports the current boundary: use Loewner/Hankel/companion methods as local
   reduced extractors, then use the dual residual Laurent-moment update to
   repair left/right physical spaces when extraction alone is not enough.
+- The reduced polynomial extractor now has an optional invariant-pair
+  block-Newton refinement rung. On the `n=4`, degree-eight, twenty-root
+  nonnormal polynomial control, reduced companion extraction already recovers
+  all target roots, while one block-Newton step improves the reduced residuals
+  from about `1e-13` to `1e-15` without changing the physical trial/test spaces.
+  This is exactly the intended role: a local refinement/check after reduced
+  extraction, not a replacement for the residual Laurent update.
+- The generic analytic reduced extractor now has an optional two-sided scalar
+  Newton cleanup on the small reduced NEP. On the radius-20 three-function
+  analytic control, this is not useful before the residual Laurent update, but
+  after one update it improves the max residual from about `8e-6` to `8e-10`.
+  It also increases residual-small spurious values, so it is a cleanup/refinement
+  rung only; it must be paired with count, contour, matching, and spurious
+  diagnostics rather than treated as convergence by itself.
+- The local-chart triangular analytic comparison reinforces that distinction.
+  On the radius-6 triangular coupling-10 control, supervised local charts with
+  no Laurent updates recover 10 of 11 roots whether or not scalar Newton cleanup
+  is enabled. With two residual Laurent updates, the same chart setup recovers
+  all 11 roots, again with or without scalar cleanup. The missing capability in
+  weak/non-normal charts is therefore trial/test-space repair, not scalar root
+  polishing.
+- Chart-merge support is now tracked as a spurious diagnostic. On the same
+  radius-6 triangular coupling-10 control, unioning all residual-small local
+  chart values gives 15 candidates containing all 11 true roots. Requiring
+  support from at least two chart centers reduces this to 12 candidates while
+  retaining all 11 true roots. Requiring support from three centers gives 10
+  candidates and drops one true root. Support is therefore useful evidence, but
+  not a standalone pruning law; it should be combined with local counts,
+  residuals, and chart geometry.
 
 ## Linear SS-RII Control Result
 
@@ -585,6 +614,22 @@ stable gauge, small pair residuals can hide unusable scalar Ritz values. Stage 6
 should not become ad-hoc scalar pruning unless the natural realization tools
 stall.
 
+The first implementation pass of this boundary is now factored into
+`pipeline.jl` for the analytic experiments. The code has explicit
+experiment-layer objects for:
+
+- `ContourChart`: contour center/radius plus chart-local scaling policy.
+- `TrialSpaces`: left/right physical spaces and their singular diagnostics.
+- `ReducedExtractorConfig`: counted SS, Loewner, determinant, and reduced
+  solver knobs.
+- `ResidualUpdateConfig`: residual Laurent moment update knobs.
+
+This is deliberately still an experiment API. `run.jl` remains the demo and
+stress-test driver, while `pipeline.jl` owns the stable chart/trial-space/update
+wrappers and chart-merge diagnostics. The purpose is to make the algorithm
+stages visible enough to compare extractors, chart policies, and update rules
+without prematurely committing to a public solver interface.
+
 ## Nonlinear Experiment Plan
 
 1. Done: use the projected two-sided Hankel extraction as the default nonlinear
@@ -629,10 +674,14 @@ stall.
    counting plus SS/Hankel root extraction on the reduced NEP. A Loewner
    reduced extractor has been prototyped and should be tested as a chart
    alternative, especially where high-order Hankel moments have poor rank gaps.
-9. Next: add the invariant-pair/block-Newton refinement rung explicitly for
+9. In progress: add the invariant-pair/block-Newton refinement rung explicitly for
    reduced polynomial and small dense analytic problems. This should be treated
    as a local refinement/check on a reduced NEP, not as a replacement for the
-   FEAST-style residual Laurent update.
+   FEAST-style residual Laurent update. The polynomial reduced-companion path
+   now has an invariant-pair Newton rung. The generic analytic path has a
+   two-sided scalar Newton cleanup; a true analytic block/invariant-pair
+   refinement still needs divided differences or Fréchet derivatives of
+   `Tred(S)`.
 10. Next: formalize the role of local rational coordinates. The companion
    problem suggests why finite polynomial problems behave better: the enlarged
    linear state gives a global finite coordinate system. Analytic NEPs with
