@@ -472,6 +472,13 @@ with diagnostics good enough to choose the right chart in ordinary cases.
   On the harder rank-deficient analytic reduced-basis cases it does not yet
   beat counted SS; interpolation-point placement and rank visibility are now
   explicit diagnostics rather than hidden moment-order choices.
+- A focused literature pass on the missing iteration step did not turn up an
+  existing method that is simply "Loewner FEAST" or "SS RII". The nearest
+  established machinery is invariant-pair/block Newton refinement, polynomial
+  invariant-pair extraction/refinement, and SS-RR reduced extraction. This
+  supports the current boundary: use Loewner/Hankel/companion methods as local
+  reduced extractors, then use the dual residual Laurent-moment update to
+  repair left/right physical spaces when extraction alone is not enough.
 
 ## Linear SS-RII Control Result
 
@@ -615,22 +622,26 @@ stall.
    NEP solver, then combine rank/count diagnostics, gauge control, and repeated
    reduced-NEP extraction into a coherent algorithm rather than an
    experiment-specific update.
-8. Next: turn reduced-NEP extraction into an algorithmic component. Polynomial
+8. In progress: turn reduced-NEP extraction into an algorithmic component. Polynomial
    problems can use reduced companion/QZ solves; generic analytic problems need
    counted reduced SS/Hankel extraction, reduced NLFEAST/SS, or NLEIGS-style
    reduced solvers. The current best analytic prototype uses argument-principle
    counting plus SS/Hankel root extraction on the reduced NEP. A Loewner
    reduced extractor has been prototyped and should be tested as a chart
    alternative, especially where high-order Hankel moments have poor rank gaps.
-9. Next: formalize the role of local rational coordinates. The companion
+9. Next: add the invariant-pair/block-Newton refinement rung explicitly for
+   reduced polynomial and small dense analytic problems. This should be treated
+   as a local refinement/check on a reduced NEP, not as a replacement for the
+   FEAST-style residual Laurent update.
+10. Next: formalize the role of local rational coordinates. The companion
    problem suggests why finite polynomial problems behave better: the enlarged
    linear state gives a global finite coordinate system. Analytic NEPs with
    infinitely many roots need local finite realizations, so nested contours or
    rational bases may be the natural replacement for one global companion.
-10. Later: if natural gauge and realization methods stall, inspect NEP-PACK and
-   adjacent NEP/SS/Beyn literature for deflation strategies. Treat scalar
-   residual-based deflation as a fallback, not the main method.
-11. Later: broaden the literature review beyond NEP methods into adjacent
+11. Later: add invariant-pair deflation after roots or clusters are reliable
+   enough that reconvergence is the actual problem. Treat scalar residual-based
+   deflation as a fallback, not the main method.
+12. Later: broaden the literature review beyond NEP methods into adjacent
    realization/system-identification and rational Krylov filtering work.
 
 ## Design Constraints

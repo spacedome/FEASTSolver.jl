@@ -125,6 +125,172 @@ Its implementation points to several concepts we should reuse deliberately.
   dual-FEAST analogy, or is our left/right reduced-NEP correction genuinely a
   new synthesis?
 
+## Focused Pass: Iterating Realizations
+
+The targeted follow-up was to look for the missing iteration theory: not
+"another contour extractor", but a principled way to refine a finite
+realization or reduced nonlinear subspace after moment extraction.
+
+### What NEP-PACK Implements Locally
+
+NEP-PACK has three nearby pieces, but none of them is exactly our higher-moment
+FEAST iteration.
+
+- `method_block_SS.jl` is extraction only. It computes moments, compresses a
+  two-sided Hankel pencil, and returns Ritz values/vectors. This validates our
+  counted-SS extractor, but it does not define an RII-like residual update.
+- `method_rfi.jl` implements two-sided Rayleigh functional iteration for a
+  single eigentriplet. This is the scalar local correction analogue of
+  nonlinear RII: it alternates right/left inverse solves and updates the scalar
+  root through `y' T(lambda) x = 0`. It is useful language, but it is not enough
+  for many roots in a compact realization.
+- `method_blocknewton.jl` implements Kressner's block Newton method for
+  invariant pairs `(S, X)`. This is the closest local model for the tangent
+  space of moment-NLFEAST. It explicitly normalizes the lifted block
+  `[X; X*S; ...]`, transforms `S` to Schur form, solves a coupled correction
+  system, then regauges the pair. This matches our gauge/chart observations.
+- `nep_deflation.jl` uses invariant-pair deflation to prevent reconvergence.
+  This supports deflation as a useful escalation rung, but not as the primary
+  geometry of the moment update.
+
+The local code therefore reinforces a clean separation:
+
+```text
+contour moments -> reduced realization/extraction -> residual update/refinement
+```
+
+SS/Beyn/Loewner live in the first two stages. Block Newton/RFI/deflation live
+in the third stage or in diagnostics.
+
+### Invariant-Pair Refinement Is The Closest Match
+
+Kressner's block Newton paper is the main reference for local refinement of a
+nonlinear invariant pair. The core reason it matters here is that it treats
+several nonlinear eigenvalues as one object `(X, S)` instead of as unrelated
+scalar Ritz pairs. That is exactly what higher moments require.
+
+Source: D. Kressner, "A block Newton method for nonlinear eigenvalue problems",
+Numerische Mathematik 114(2), 2009, 355--372.
+DOI: https://doi.org/10.1007/s00211-009-0259-x.
+Open ETH record: https://doi.org/10.3929/ethz-b-000019530.
+
+Betcke and Kressner's invariant-pair refinement paper is the polynomial layer
+we need below the fully analytic case. It studies perturbation, extraction from
+linearizations, and refinement procedures directly on the polynomial
+formulation. This is the right reference for comparing our polynomial-native
+moment method against companion-pencil FEAST.
+
+Source: T. Betcke and D. Kressner, "Perturbation, extraction and refinement of
+invariant pairs for matrix polynomials", Linear Algebra and its Applications
+435(3), 2011, 514--536.
+DOI: https://doi.org/10.1016/j.laa.2010.06.029.
+Preprint page: https://eprints.maths.manchester.ac.uk/1291/.
+
+Szyld and Xue provide the broader nonlinear invariant-pair theory:
+multiplicity, Jordan structure, conditioning, and two-sided block Rayleigh
+functionals. This is the theoretical vocabulary for our gauges and for the
+cases where scalar residuals and pair residuals disagree.
+
+Source: D. B. Szyld and F. Xue, "Several properties of invariant pairs of
+nonlinear algebraic eigenvalue problems", IMA Journal of Numerical Analysis
+34(3), 2014, 921--954.
+DOI: https://doi.org/10.1093/imanum/drt026.
+
+### Contour Integral Invariant Pairs Connect SS To Newton
+
+The contour-integral invariant-pair paper is unusually close to our exact
+question. It adapts Sakurai-Sugiura moments to compute invariant pairs,
+including some multiple-eigenvalue cases, and studies Newton-type refinement.
+This is evidence that the natural continuation of SS moments is not scalar
+deflation but invariant-pair refinement.
+
+Source: M. Barkatou, P. Boito, and E. Segura Ugalde, "A contour integral
+approach to the computation of invariant pairs", Theoretical Computer Science
+681, 2017, 3--26.
+DOI: https://doi.org/10.1016/j.tcs.2017.03.024.
+
+This still does not appear to contain the specific FEAST-style residual
+Laurent-moment update we have prototyped. The paper supports the same
+mathematical state `(X, S)`, but our update is more FEAST-like: it repairs
+left/right physical spaces through residual inverse contour moments before
+resolving the reduced NEP.
+
+### SS-RR Is Extraction, Not Iteration
+
+Yokota and Sakurai extend SS with Rayleigh-Ritz projection to NEPs by reducing
+the contour region to a smaller problem. This is exactly aligned with our
+reduced NEP extraction layer. It does not answer how to iterate a bad
+left/right physical basis, which is the role of our residual Laurent update.
+
+Source: S. Yokota and T. Sakurai, "A projection method for nonlinear
+eigenvalue problems using contour integrals", JSIAM Letters 5, 2013, 41--44.
+DOI: https://doi.org/10.14495/jsiaml.5.41.
+
+### Loewner/IRKA Is A Chart And Realization Tool
+
+The Brennan-Embree-Gugercin review makes Loewner methods relevant, but not as
+a direct FEAST iteration. Loewner pencils improve the realization/extraction
+stage by changing interpolation points and rank visibility. IRKA-style ideas
+suggest how interpolation points could be adapted. Neither is a residual
+inverse update on left/right physical trial spaces.
+
+The actionable conclusion is to keep Loewner as:
+
+- an alternate reduced extractor when monomial Hankel/SS has poor singular
+  value separation;
+- a chart diagnostic for rank visibility;
+- a future adaptive interpolation-point policy.
+
+It should not replace the dual residual Laurent update as the core iteration
+unless experiments show that Loewner-refined reduced spaces can repair bad
+physical trial/test spaces without residual inverse solves.
+
+### Deflation Is An Escalation Rung
+
+Effenberger's successive-computation paper and NEP-PACK's deflation machinery
+show that invariant-pair deflation is the established way to avoid
+reconvergence in Newton/Jacobi-Davidson style solvers. That is useful once
+individual roots or small clusters have converged. It is not the clean answer
+to moment-NLFEAST's rank/observability failures, because those failures happen
+before we have trustworthy scalar Ritz values to deflate.
+
+Source: C. Effenberger, "Robust Successive Computation of Eigenpairs for
+Nonlinear Eigenvalue Problems", SIAM Journal on Matrix Analysis and
+Applications 34(3), 2013, 1231--1256.
+DOI: https://doi.org/10.1137/120885644.
+
+## Actionable Design After Focused Pass
+
+The literature pass supports the direction of the current experiment rather
+than replacing it. The most defensible algorithmic boundary is:
+
+1. Build local right and left trial spaces from contour moments.
+2. Solve a reduced Petrov-Galerkin NEP `Y' * T(lambda) * X`.
+3. Use counted SS/Hankel, polynomial companion/QZ, or Loewner as interchangeable
+   reduced extractors depending on the chart.
+4. Apply the FEAST-style residual Laurent-moment update to expand/repair
+   `X` and `Y` when the reduced extraction misses roots or returns spurious
+   residual-small values.
+5. Treat invariant-pair/block Newton as the local refinement model and possible
+   refinement rung, especially for polynomial problems or small dense reduced
+   NEPs.
+6. Use invariant-pair deflation only after roots/clusters are reliable enough
+   that reconvergence is the actual problem.
+
+This clarifies the likely "generalized NLFEAST iteration" answer:
+
+```text
+generalized moment-NLFEAST = local dual contour realization
+                           + reduced NEP extraction
+                           + residual Laurent correction of left/right spaces
+                           + chart/rank/gauge diagnostics
+```
+
+For `K=1` and diagonal states this reduces toward ordinary NLFEAST/RFI. For
+linear problems it reduces to FEAST/dual-FEAST on the Petrov-Galerkin reduced
+problem. For higher moments it avoids forcing a large Hankel realization back
+into a diagonal scalar-RII form.
+
 ## Detailed Read: Brennan, Embree, Gugercin 2023
 
 Reference: Michael C. Brennan, Mark Embree, Serkan Gugercin,
