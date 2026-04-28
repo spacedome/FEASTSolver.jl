@@ -464,6 +464,14 @@ with diagnostics good enough to choose the right chart in ordinary cases.
   suggests the lower rung is "good local moment realization plus reduced
   extraction"; the FEAST residual update is the next rung for repairing weak or
   nonnormal physical trial/test spaces, not a mandatory cost for every chart.
+- A first Loewner reduced extractor is now available in the experiment. It
+  reuses the same reduced contour solves as counted SS, samples the contour
+  pole transfer function at interpolation points outside the chart, and forms
+  Loewner/shifted-Loewner pencils. On the scalar `sin(z)` radius-20 validation,
+  counted Loewner recovers the same thirteen roots as counted SS to roundoff.
+  On the harder rank-deficient analytic reduced-basis cases it does not yet
+  beat counted SS; interpolation-point placement and rank visibility are now
+  explicit diagnostics rather than hidden moment-order choices.
 
 ## Linear SS-RII Control Result
 
@@ -611,7 +619,9 @@ stall.
    problems can use reduced companion/QZ solves; generic analytic problems need
    counted reduced SS/Hankel extraction, reduced NLFEAST/SS, or NLEIGS-style
    reduced solvers. The current best analytic prototype uses argument-principle
-   counting plus SS/Hankel root extraction on the reduced NEP.
+   counting plus SS/Hankel root extraction on the reduced NEP. A Loewner
+   reduced extractor has been prototyped and should be tested as a chart
+   alternative, especially where high-order Hankel moments have poor rank gaps.
 9. Next: formalize the role of local rational coordinates. The companion
    problem suggests why finite polynomial problems behave better: the enlarged
    linear state gives a global finite coordinate system. Analytic NEPs with
@@ -643,6 +653,8 @@ stall.
 - `src/nlfeast.jl` has the canonical diagonal-state NLFEAST-Beyn implementation
   and older `nlfeast_moments!` prototype.
 - `src/nlfeast_experimental.jl` has additional moment/SS variants.
+- `experiments/moment_rii/LITERATURE.md` records the local NEP-PACK and
+  external literature review that should guide API decisions.
 - NEP-PACK's local `method_block_SS.jl` shows the standard SS-Hankel extraction.
 - NEP-PACK's `compute_MM(nep, S, V)` interface confirms that invariant-pair
   residuals are the right abstraction for nonlinear block states.

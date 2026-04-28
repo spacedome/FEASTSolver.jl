@@ -2180,6 +2180,112 @@ function reduced_analytic_ss_extraction(
     )
 end
 
+function loewner_interpolation_points(count; radius=1.6, phase=0.0)
+    ComplexF64[radius * exp(im * (phase + 2pi * (j - 1) / count)) for j in 1:count]
+end
+
+function contour_transfer_samples(Tred, alpha_points, center, radius; nodes=256)
+    z_nodes, z_weights = circular_rule(center, radius, nodes)
+    d = size(Tred(z_nodes[1]), 1)
+    samples = [zeros(ComplexF64, d, d) for _ in alpha_points]
+    identity = Matrix{ComplexF64}(I, d, d)
+    for (z, weight) in zip(z_nodes, z_weights)
+        ζ = (z - center) / radius
+        solved = Tred(z) \ identity
+        for (j, α) in pairs(alpha_points)
+            samples[j] .+= (weight / (α - ζ)) .* solved
+        end
+    end
+    samples
+end
+
+function block_loewner_pencil(left_points, left_samples, right_points, right_samples)
+    length(left_points) == length(left_samples) || error("left point/sample count mismatch")
+    length(right_points) == length(right_samples) || error("right point/sample count mismatch")
+    d = size(first(left_samples), 1)
+    L = zeros(ComplexF64, length(left_points) * d, length(right_points) * d)
+    Ls = similar(L)
+    for (i, μ) in pairs(left_points), (j, λ) in pairs(right_points)
+        abs(μ - λ) > eps(Float64) || error("Loewner left/right interpolation points must be distinct")
+        rows = (i - 1) * d + 1:i * d
+        cols = (j - 1) * d + 1:j * d
+        denominator = μ - λ
+        L[rows, cols] .= (left_samples[i] .- right_samples[j]) ./ denominator
+        Ls[rows, cols] .= (μ .* left_samples[i] .- λ .* right_samples[j]) ./ denominator
+    end
+    L, Ls
+end
+
+function reduced_analytic_loewner_extraction(
+    Tmatrix,
+    Tderivative,
+    Xbasis,
+    Ybasis,
+    center,
+    radius;
+    reduced_nodes=256,
+    ranktol=1e-10,
+    maxrank=typemax(Int),
+    loewner_points=4,
+    loewner_radius=1.6,
+    loewner_phase=0.0,
+    count_estimate=nothing,
+    count_error=NaN,
+    residual_normalization=:operator,
+)
+    size(Xbasis, 2) == size(Ybasis, 2) || error("reduced Loewner extraction needs square left/right bases")
+    function Tred(z)
+        Ybasis' * Tmatrix(z) * Xbasis
+    end
+    function Tred_derivative(z)
+        Ybasis' * Tderivative(z) * Xbasis
+    end
+
+    left_points = loewner_interpolation_points(loewner_points; radius=loewner_radius, phase=loewner_phase)
+    right_points = loewner_interpolation_points(loewner_points; radius=loewner_radius, phase=loewner_phase + pi / loewner_points)
+    left_samples = contour_transfer_samples(Tred, left_points, center, radius; nodes=reduced_nodes)
+    right_samples = contour_transfer_samples(Tred, right_points, center, radius; nodes=reduced_nodes)
+    L, Ls = block_loewner_pencil(left_points, left_samples, right_points, right_samples)
+
+    F = svd(L)
+    isempty(F.S) && error("empty reduced Loewner SVD")
+    rank = count(F.S ./ F.S[1] .> ranktol)
+    rank = min(rank, maxrank, length(F.S))
+    rank > 0 || error("reduced Loewner rank is zero")
+    U = F.U[:, 1:rank]
+    V = F.V[:, 1:rank]
+    Sμ = U' * Ls * V * Diagonal(1 ./ F.S[1:rank])
+    values = center .+ radius .* ComplexF64.(eigvals(Sμ))
+    values = refine_determinant_roots(Tred, Tred_derivative, values; step_limit=0.25 * radius)
+    finite = finite_eigenvalue_mask(values)
+    values = ComplexF64.(values[finite])
+    left_reduced, right_reduced = reduced_left_right_singular_vectors(Tred, values)
+    right_vectors = Xbasis * right_reduced
+    left_vectors = Ybasis * left_reduced
+    normalize_columns_local!(right_vectors)
+    normalize_columns_local!(left_vectors)
+    right_residuals = matrix_vector_residuals(Tmatrix, values, right_vectors; normalization=residual_normalization)
+    left_residuals = matrix_vector_residuals(Tmatrix, values, left_vectors; adjoint=true, normalization=residual_normalization)
+    reduced_residuals = [reduced_nep_residual(Tred, value) for value in values]
+    inside = FEASTSolver.in_contour(values, center, radius)
+    reported_count = count_estimate === nothing ? rank : Int(count_estimate)
+    (
+        values=values,
+        right_vectors=right_vectors,
+        left_vectors=left_vectors,
+        inside=inside,
+        residuals=max.(right_residuals, left_residuals),
+        right_residuals=right_residuals,
+        left_residuals=left_residuals,
+        reduced_residuals=reduced_residuals,
+        count_estimate=reported_count,
+        count_error=count_error,
+        singular_values=Float64.(F.S),
+        loewner_left_points=left_points,
+        loewner_right_points=right_points,
+    )
+end
+
 function reduced_analytic_extraction(
     Tmatrix,
     Tderivative,
@@ -2195,6 +2301,9 @@ function reduced_analytic_extraction(
     reduced_ranktol=1e-10,
     reduced_maxrank=typemax(Int),
     reduced_ss_mode=:similarity,
+    loewner_points=4,
+    loewner_radius=1.6,
+    loewner_phase=0.0,
     residual_normalization=:operator,
 )
     if extractor === :determinant
@@ -2224,13 +2333,25 @@ function reduced_analytic_extraction(
             ss_mode=reduced_ss_mode,
             residual_normalization=residual_normalization,
         )
+    elseif extractor === :loewner
+        return reduced_analytic_loewner_extraction(
+            Tmatrix,
+            Tderivative,
+            Xbasis,
+            Ybasis,
+            center,
+            radius;
+            reduced_nodes=reduced_nodes,
+            ranktol=reduced_ranktol,
+            maxrank=reduced_maxrank,
+            loewner_points=loewner_points,
+            loewner_radius=loewner_radius,
+            loewner_phase=loewner_phase,
+            residual_normalization=residual_normalization,
+        )
     elseif extractor === :ss_counted
-        function Tred(z)
-            Ybasis' * Tmatrix(z) * Xbasis
-        end
-        function Tred_derivative(z)
-            Ybasis' * Tderivative(z) * Xbasis
-        end
+        Tred = z -> Ybasis' * Tmatrix(z) * Xbasis
+        Tred_derivative = z -> Ybasis' * Tderivative(z) * Xbasis
         _, count_estimate, sums = determinant_power_sums(
             Tred,
             Tred_derivative;
@@ -2253,6 +2374,35 @@ function reduced_analytic_extraction(
             count_estimate=count_estimate,
             count_error=abs(sums[1] - count_estimate),
             ss_mode=reduced_ss_mode,
+            residual_normalization=residual_normalization,
+        )
+    elseif extractor === :loewner_counted
+        Tred = z -> Ybasis' * Tmatrix(z) * Xbasis
+        Tred_derivative = z -> Ybasis' * Tderivative(z) * Xbasis
+        _, count_estimate, sums = determinant_power_sums(
+            Tred,
+            Tred_derivative;
+            center=center,
+            radius=radius,
+            nodes=determinant_nodes,
+            capacity=determinant_capacity,
+        )
+        effective_loewner_points = max(loewner_points, ceil(Int, count_estimate / max(size(Xbasis, 2), 1)))
+        return reduced_analytic_loewner_extraction(
+            Tmatrix,
+            Tderivative,
+            Xbasis,
+            Ybasis,
+            center,
+            radius;
+            reduced_nodes=reduced_nodes,
+            ranktol=0.0,
+            maxrank=count_estimate,
+            count_estimate=count_estimate,
+            count_error=abs(sums[1] - count_estimate),
+            loewner_points=effective_loewner_points,
+            loewner_radius=loewner_radius,
+            loewner_phase=loewner_phase,
             residual_normalization=residual_normalization,
         )
     end
@@ -4037,6 +4187,9 @@ function run_dual_moment_compressed_rii_analytic_experiment(;
     reduced_nodes=256,
     reduced_ranktol=1e-10,
     reduced_ss_mode=:similarity,
+    loewner_points=4,
+    loewner_radius=1.6,
+    loewner_phase=0.0,
     residual_normalization=:operator,
     component_scaling=:none,
     component_scaling_nodes=64,
@@ -4099,6 +4252,9 @@ function run_dual_moment_compressed_rii_analytic_experiment(;
         reduced_nodes=reduced_nodes,
         reduced_ranktol=reduced_ranktol,
         reduced_ss_mode=reduced_ss_mode,
+        loewner_points=loewner_points,
+        loewner_radius=loewner_radius,
+        loewner_phase=loewner_phase,
         residual_normalization=residual_normalization,
     )
     @printf("    reduced_count=%d count_error=%.3e\n", extraction0.count_estimate, extraction0.count_error)
@@ -4133,6 +4289,9 @@ function run_dual_moment_compressed_rii_analytic_experiment(;
             reduced_nodes=reduced_nodes,
             reduced_ranktol=reduced_ranktol,
             reduced_ss_mode=reduced_ss_mode,
+            loewner_points=loewner_points,
+            loewner_radius=loewner_radius,
+            loewner_phase=loewner_phase,
             residual_normalization=residual_normalization,
         )
         @printf(
@@ -4181,6 +4340,9 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
     reduced_nodes=256,
     reduced_ranktol=1e-10,
     reduced_ss_mode=:similarity,
+    loewner_points=4,
+    loewner_radius=1.6,
+    loewner_phase=0.0,
     residual_normalization=:operator,
     component_scaling=:none,
     component_scaling_nodes=64,
@@ -4264,6 +4426,9 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
         reduced_nodes=reduced_nodes,
         reduced_ranktol=reduced_ranktol,
         reduced_ss_mode=reduced_ss_mode,
+        loewner_points=loewner_points,
+        loewner_radius=loewner_radius,
+        loewner_phase=loewner_phase,
         residual_normalization=residual_normalization,
     )
     push!(summaries, merge((iteration=0,), dual_scalar_rii_summary(extraction, expected; residual_tol=residual_tol, match_atol=match_atol)))
@@ -4333,6 +4498,9 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
             reduced_nodes=reduced_nodes,
             reduced_ranktol=reduced_ranktol,
             reduced_ss_mode=reduced_ss_mode,
+            loewner_points=loewner_points,
+            loewner_radius=loewner_radius,
+            loewner_phase=loewner_phase,
             residual_normalization=residual_normalization,
         )
         push!(
@@ -4385,6 +4553,187 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
         center=center,
         radius=radius,
     )
+end
+
+function run_reduced_loewner_extractor_comparison(;
+    cases=(scalar_sine_case(), scalar_cosine_case(), scalar_shifted_sine_case()),
+    center=0.0 + 0.0im,
+    radius=20.0,
+    operator_builder=similarity_analytic_tools,
+    operator_label="similarity",
+    basis_moments=4,
+    basis_nodes=8,
+    rii_nodes=128,
+    basis_ranktol=0.5,
+    compression_ranktol=1e-10,
+    residual_ranktol=1e-10,
+    update_moment_count=1,
+    determinant_nodes=512,
+    determinant_capacity=80,
+    reduced_moments=16,
+    reduced_nodes=512,
+    reduced_ranktol=1e-10,
+    loewner_radii=(1.3, 1.6, 2.0),
+    residual_normalization=:operator,
+    component_scaling=:none,
+    component_scaling_nodes=64,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+)
+    labels = join((case.name for case in cases), ",")
+    component_scales = analytic_component_scales(cases, center, radius; mode=component_scaling, nodes=component_scaling_nodes)
+    Tmatrix, Tderivative, Tsolve, Tadjoint_solve, expected_roots =
+        operator_builder(cases; component_scales=component_scales)
+    expected = expected_roots(center, radius)
+    n = length(cases)
+    z_nodes, z_weights = circular_rule(center, radius, basis_nodes)
+    rii_z_nodes, rii_z_weights = circular_rule(center, radius, rii_nodes)
+
+    Random.seed!(9901 + round(Int, radius * 10) + 19 * length(cases))
+    Xprobe = rand(ComplexF64, n, n)
+    Wprobe = rand(ComplexF64, n, n)
+    right_moments = initial_moments_generic_scaled(Tsolve, Xprobe, z_nodes, z_weights, center, radius, basis_moments)
+    left_moments = initial_adjoint_moments_generic_scaled(Tadjoint_solve, Wprobe, z_nodes, z_weights, center, radius, basis_moments)
+    Xbasis, right_basis_singulars = moment_block_basis(right_moments, basis_moments; ranktol=basis_ranktol)
+    Ybasis, left_basis_singulars = moment_block_basis(left_moments, basis_moments; ranktol=basis_ranktol)
+    if size(Xbasis, 2) != size(Ybasis, 2)
+        common = min(size(Xbasis, 2), size(Ybasis, 2))
+        Xbasis = Xbasis[:, 1:common]
+        Ybasis = Ybasis[:, 1:common]
+    end
+
+    println()
+    println("Reduced Loewner extractor comparison: [$labels]")
+    println("  operator=$operator_label; compares Hankel/SS and Loewner assembly using the same reduced contour solve data")
+    @printf(
+        "  radius=%.3g expected=%d basis_nodes=%d rii_nodes=%d initial_basis=(%d,%d) basis_sigma=(%.3e, %.3e)\n",
+        radius,
+        length(expected),
+        basis_nodes,
+        rii_nodes,
+        size(Xbasis, 2),
+        size(Ybasis, 2),
+        isempty(right_basis_singulars) ? NaN : right_basis_singulars[end] / right_basis_singulars[1],
+        isempty(left_basis_singulars) ? NaN : left_basis_singulars[end] / left_basis_singulars[1],
+    )
+    if size(Xbasis, 2) == 0
+        println("  skipped: rank truncation removed the whole initial basis")
+        return
+    end
+
+    function score(label, extraction)
+        summary = dual_scalar_rii_summary(extraction, expected; residual_tol=residual_tol, match_atol=match_atol)
+        sigma_ratio = if hasproperty(extraction, :singular_values) && !isempty(extraction.singular_values)
+            extraction.singular_values[min(length(extraction.singular_values), max(extraction.count_estimate, 1))] / extraction.singular_values[1]
+        else
+            NaN
+        end
+        @printf(
+            "  %-28s count=%d inside=%d good=%d matched=%d spurious=%d max=%.3e sigma_at_count=%.3e\n",
+            label,
+            extraction.count_estimate,
+            summary.inside,
+            summary.good,
+            summary.matched,
+            summary.spurious_good,
+            summary.max_residual,
+            sigma_ratio,
+        )
+    end
+
+    extraction0 = reduced_analytic_extraction(
+        Tmatrix,
+        Tderivative,
+        Xbasis,
+        Ybasis,
+        center,
+        radius;
+        extractor=:ss_counted,
+        determinant_nodes=determinant_nodes,
+        determinant_capacity=determinant_capacity,
+        reduced_moments=reduced_moments,
+        reduced_nodes=reduced_nodes,
+        reduced_ranktol=reduced_ranktol,
+        residual_normalization=residual_normalization,
+    )
+    score("initial ss_counted", extraction0)
+    for loewner_radius in loewner_radii
+        extraction = reduced_analytic_extraction(
+            Tmatrix,
+            Tderivative,
+            Xbasis,
+            Ybasis,
+            center,
+            radius;
+            extractor=:loewner_counted,
+            determinant_nodes=determinant_nodes,
+            determinant_capacity=determinant_capacity,
+            reduced_nodes=reduced_nodes,
+            reduced_ranktol=reduced_ranktol,
+            loewner_radius=loewner_radius,
+            residual_normalization=residual_normalization,
+        )
+        score("initial loewner rho=$loewner_radius", extraction)
+    end
+
+    Xnew, Ynew, stats = moment_compressed_dual_rii_bases_generic(
+        Tsolve,
+        Tadjoint_solve,
+        Tmatrix,
+        Xbasis,
+        Ybasis,
+        extraction0,
+        rii_z_nodes,
+        rii_z_weights,
+        center,
+        radius;
+        moment_count=update_moment_count,
+        residual_ranktol=residual_ranktol,
+        compression_ranktol=compression_ranktol,
+    )
+    @printf(
+        "  residual update: ranks=(%d,%d) candidate_cols=(%d,%d) basis=(%d,%d)\n",
+        stats.right_residual_rank,
+        stats.left_residual_rank,
+        stats.right_candidate_cols,
+        stats.left_candidate_cols,
+        size(Xnew, 2),
+        size(Ynew, 2),
+    )
+    extraction = reduced_analytic_extraction(
+        Tmatrix,
+        Tderivative,
+        Xnew,
+        Ynew,
+        center,
+        radius;
+        extractor=:ss_counted,
+        determinant_nodes=determinant_nodes,
+        determinant_capacity=determinant_capacity,
+        reduced_moments=reduced_moments,
+        reduced_nodes=reduced_nodes,
+        reduced_ranktol=reduced_ranktol,
+        residual_normalization=residual_normalization,
+    )
+    score("updated ss_counted", extraction)
+    for loewner_radius in loewner_radii
+        extraction = reduced_analytic_extraction(
+            Tmatrix,
+            Tderivative,
+            Xnew,
+            Ynew,
+            center,
+            radius;
+            extractor=:loewner_counted,
+            determinant_nodes=determinant_nodes,
+            determinant_capacity=determinant_capacity,
+            reduced_nodes=reduced_nodes,
+            reduced_ranktol=reduced_ranktol,
+            loewner_radius=loewner_radius,
+            residual_normalization=residual_normalization,
+        )
+        score("updated loewner rho=$loewner_radius", extraction)
+    end
 end
 
 function good_extraction_values(extraction; residual_tol)
@@ -5550,6 +5899,7 @@ function main()
         residual_tol=1e-8,
         match_atol=1e-6,
     )
+    run_reduced_loewner_extractor_comparison()
     run_dual_grid_chart_cover_analytic(;
         spacing=2.4,
         chart_radius=1.8,
