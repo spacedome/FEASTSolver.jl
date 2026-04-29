@@ -630,6 +630,72 @@ wrappers and chart-merge diagnostics. The purpose is to make the algorithm
 stages visible enough to compare extractors, chart policies, and update rules
 without prematurely committing to a public solver interface.
 
+`experiment_matrix.jl` is the next layer of separation. It keeps the
+cross-problem comparison harness out of the historical prototype file and
+returns structured rows for:
+
+- Regular polynomial controls.
+- Deficient polynomial controls.
+- Many-root low-dimensional polynomial controls.
+- Clustered near-multiple polynomial controls.
+- Rational NEPs with nearby poles.
+- Exponential many-root NEPs.
+- Many-root scalar analytic controls.
+- Multiple-root analytic diagnostics.
+- Nonnormal triangular local-chart support diagnostics.
+
+Current first-pass matrix result:
+
+- The matrix now spans physical dimensions `n=1,3,4,5,6,8,15`. This is
+  intentional: small low-dimensional many-root cases test the moment geometry,
+  while the larger polynomial controls catch ordinary matrix-size issues.
+- The regular `n=8` quadratic, deficient `n=15` quadratic, many-root `n=4`
+  nonnormal polynomial, and clustered `n=6` near-multiple polynomial controls
+  are solved by two-sided reduced extraction already. The residual Laurent
+  update improves the deficient quadratic residual from about `6e-13` to
+  `8e-16`; block Newton improves some reduced cleanup but is not essential for
+  root recovery on these cases.
+- The `n=5` rational nearby-pole control is also solved cleanly. This is an
+  important sanity check because nearby non-eigenvalue singular structure is a
+  natural failure mode for contour extraction.
+- The global many-root analytic control remains a deliberate failure case:
+  one global low-dimensional chart recovers only 26 of 38 roots after one
+  Laurent update and leaves residual-small spurious values. This reinforces
+  that analytic many-root problems need local charts or a better realization,
+  not just scalar cleanup.
+- The `n=6` exponential many-root control exposed two separate sensitivities.
+  With the Loewner reduced extractor and no component scaling, it recovers all
+  18 known roots with nearest-root error below `1e-6`. With counted SS on the
+  same unscaled problem, it misses several lattice roots. With the Loewner
+  extractor but `component_scaling=:contour_max`, it returns 18 residual-small
+  values displaced by about `2e-2` from the known root lattice. This is a useful
+  warning: residual-small reduced roots are not enough in high dynamic-range
+  analytic NEPs, and naive contour-max component scaling can change the
+  numerical extraction geometry even though it leaves the exact roots invariant.
+- The focused exponential Hankel chart/gauge sweep clarifies the failure.
+  Plain Hankel, balanced Hankel, and multi-offset Hankel can recover all 18
+  true exponential roots on the global chart, but they also produce
+  residual-small spurious candidates. Scalar Newton cleanup polishes those
+  spurious candidates rather than removing them, and count-capping the Hankel
+  rank drops true roots before it cleanly removes extras. Shifted, balanced
+  shifted, and Chebyshev shifted realizations recover only a small subset of the
+  roots on this global chart. Loewner is the only clean global realization in
+  the current sweep.
+- Local charts change the picture. Supervised root-centered local charts with
+  radii `1.2` and `2.0` recover all 18 exponential roots with both counted SS
+  and Loewner; requiring support from at least two chart centers prunes the
+  merged candidates down to exactly the 18 true roots. The same local SS run
+  succeeds with and without `component_scaling=:contour_max`. This means the
+  scaling/extractor failure is primarily an oversized-chart realization problem,
+  not evidence that Hankel moments are unusable for exponential NEPs.
+- The multiple-root `sin^2` diagnostic matches all unique roots but returns
+  algebraic duplicates as residual-small values. This is useful evidence for
+  the escalation ladder, but not something to overfit into the lower-rung
+  default algorithm yet.
+- The triangular local-chart support run recovers all true roots with
+  support>=2 while retaining a small number of extra candidates. Support is
+  therefore a retention diagnostic before it is a pruning rule.
+
 ## Nonlinear Experiment Plan
 
 1. Done: use the projected two-sided Hankel extraction as the default nonlinear
