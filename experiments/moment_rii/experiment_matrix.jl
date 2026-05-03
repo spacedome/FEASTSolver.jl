@@ -1299,107 +1299,13 @@ function run_sparse_remote_stored_factor_context_smoke(
         serial_trial, serial_stats = residual_laurent_update(ctx, trial, extraction0, chart, update)
         serial_elapsed_ns = time_ns() - serial_start
 
-        z_nodes, z_weights = circular_rule(chart, update.rii_nodes)
-        assignments = [Int[] for _ in worker_ids]
-        for (index, _) in enumerate(z_nodes)
-            push!(assignments[mod1(index, length(worker_ids))], index)
-        end
-        key = gensym(:moment_rii_sparse_remote)
-        run_path = joinpath(@__DIR__, "run.jl")
-        for pid in worker_ids
-            Distributed.remotecall_wait(Main.include, pid, run_path)
-        end
-        for (pid, local_indices) in zip(worker_ids, assignments)
-            Distributed.remotecall_wait(
-                init_sparse_factor_residual_laurent_remote_worker!,
-                pid,
-                key,
-                ctx.Tmatrix,
-                z_nodes[local_indices],
-                z_weights[local_indices],
-                chart.center,
-                chart.radius,
-                update.moment_count,
-            )
-        end
+        plan = SparseFactorRemoteResidualLaurentUpdatePlan(ctx, chart, update; worker_ids=worker_ids)
         setup_elapsed_ns = time_ns() - setup_start
 
-        function remote_cached_step()
-            step_start = time_ns()
-            Rright_basis, Rleft_basis, right_residual_singulars, left_residual_singulars =
-                residual_blocks_from_matrix_extraction(ctx.Tmatrix, extraction0; residual_ranktol=update.residual_ranktol)
-            right_moments = [zeros(ComplexF64, ctx.n, size(Rright_basis, 2)) for _ in 1:update.moment_count]
-            left_moments = [zeros(ComplexF64, ctx.n, size(Rleft_basis, 2)) for _ in 1:update.moment_count]
-            futures = [
-                Distributed.remotecall(
-                    residual_laurent_sparse_factor_remote_worker_step,
-                    pid,
-                    key,
-                    Rright_basis,
-                    Rleft_basis,
-                )
-                for pid in worker_ids
-            ]
-            worker_reports = NamedTuple[]
-            for future in futures
-                report = fetch(future)
-                for k in 1:update.moment_count
-                    right_moments[k] .+= report.right_moments[k]
-                    left_moments[k] .+= report.left_moments[k]
-                end
-                push!(
-                    worker_reports,
-                    (
-                        pid=report.pid,
-                        nodes=report.nodes,
-                        elapsed_ns=report.elapsed_ns,
-                        right_cols=size(Rright_basis, 2),
-                        left_cols=size(Rleft_basis, 2),
-                        right_factorizations=report.right_factorizations,
-                        left_factorizations=report.left_factorizations,
-                        right_solution_buffers=report.right_solution_buffers,
-                        left_solution_buffers=report.left_solution_buffers,
-                        right_solves=report.right_solves,
-                        left_solves=report.left_solves,
-                    ),
-                )
-            end
-            Xnew, Ynew, Xcandidate, Ycandidate, right_singulars, left_singulars =
-                compress_residual_laurent_candidates(
-                    trial.X,
-                    trial.Y,
-                    right_moments,
-                    left_moments;
-                    compression_ranktol=update.compression_ranktol,
-                )
-            updated = common_square_trial_spaces(TrialSpaces(
-                X=Xnew,
-                Y=Ynew,
-                right_singulars=Float64.(right_singulars),
-                left_singulars=Float64.(left_singulars),
-                source=:sparse_factor_remote_residual_laurent_update,
-            ))
-            stats = (
-                right_residual_rank=size(Rright_basis, 2),
-                left_residual_rank=size(Rleft_basis, 2),
-                right_residual_singulars=right_residual_singulars,
-                left_residual_singulars=left_residual_singulars,
-                right_candidate_cols=size(Xcandidate, 2),
-                left_candidate_cols=size(Ycandidate, 2),
-                right_singulars=right_singulars,
-                left_singulars=left_singulars,
-                workers=worker_reports,
-                elapsed_ns=time_ns() - step_start,
-            )
-            updated, stats
-        end
-
         remote_result = try
-            Tuple(remote_cached_step() for _ in 1:update_repeats)
+            Tuple(remote_residual_laurent_update(ctx, trial, extraction0, plan) for _ in 1:update_repeats)
         finally
-            for pid in worker_ids
-                Distributed.remotecall_wait(cleanup_residual_laurent_remote_worker!, pid, key)
-            end
+            close_remote_residual_laurent_plan!(plan)
         end
         remote_trial1, remote_stats1 = remote_result[1]
         remote_trial2, remote_stats2 = remote_result[2]
@@ -1417,7 +1323,7 @@ function run_sparse_remote_stored_factor_context_smoke(
             expected=length(expected),
             sparse_matrix=ctx.Tmatrix(chart.center + chart.radius * im) isa AbstractSparseMatrix,
             workers=worker_ids,
-            assignments=assignments,
+            assignments=plan.assignments,
             serial=serial_summary,
             remote=remote_summary,
             x_projection_gap=opnorm(Px),
@@ -4954,6 +4860,62 @@ function close_remote_residual_laurent_plan!(plan::RemoteResidualLaurentUpdatePl
     nothing
 end
 
+struct SparseFactorRemoteResidualLaurentUpdatePlan
+    key::Symbol
+    worker_ids::Vector{Int}
+    assignments::Vector{Vector{Int}}
+    chart::ContourChart
+    config::ResidualUpdateConfig
+end
+
+function SparseFactorRemoteResidualLaurentUpdatePlan(
+    ctx,
+    chart::ContourChart,
+    config::ResidualUpdateConfig;
+    worker_ids,
+    prepare_workers=true,
+)
+    worker_ids = collect(Int, worker_ids)
+    isempty(worker_ids) && error("sparse remote residual-Laurent plan requires worker_ids")
+    if prepare_workers
+        run_path = joinpath(@__DIR__, "run.jl")
+        for pid in worker_ids
+            Distributed.remotecall_wait(Main.include, pid, run_path)
+        end
+    end
+    z_nodes, z_weights = circular_rule(chart, config.rii_nodes)
+    assignments = [Int[] for _ in worker_ids]
+    for (index, _) in enumerate(z_nodes)
+        push!(assignments[mod1(index, length(worker_ids))], index)
+    end
+    key = gensym(:moment_rii_sparse_remote)
+    for (pid, local_indices) in zip(worker_ids, assignments)
+        Distributed.remotecall_wait(
+            init_sparse_factor_residual_laurent_remote_worker!,
+            pid,
+            key,
+            ctx.Tmatrix,
+            z_nodes[local_indices],
+            z_weights[local_indices],
+            chart.center,
+            chart.radius,
+            config.moment_count,
+        )
+    end
+    SparseFactorRemoteResidualLaurentUpdatePlan(key, worker_ids, assignments, chart, config)
+end
+
+function close_remote_residual_laurent_plan!(plan::SparseFactorRemoteResidualLaurentUpdatePlan)
+    for pid in plan.worker_ids
+        try
+            Distributed.remotecall_wait(cleanup_residual_laurent_remote_worker!, pid, plan.key)
+        catch err
+            @warn "failed to clean up sparse moment-RII remote worker state" pid exception=(err, catch_backtrace())
+        end
+    end
+    nothing
+end
+
 function remote_residual_laurent_update(
     ctx,
     trial::TrialSpaces,
@@ -5024,6 +4986,85 @@ function remote_residual_laurent_update(
         right_singulars=right_singulars,
         left_singulars=left_singulars,
         workers=worker_reports,
+    )
+    updated, stats
+end
+
+function remote_residual_laurent_update(
+    ctx,
+    trial::TrialSpaces,
+    extraction,
+    plan::SparseFactorRemoteResidualLaurentUpdatePlan,
+)
+    start_ns = time_ns()
+    config = plan.config
+    Rright_basis, Rleft_basis, right_residual_singulars, left_residual_singulars =
+        residual_blocks_from_matrix_extraction(ctx.Tmatrix, extraction; residual_ranktol=config.residual_ranktol)
+    n = size(trial.X, 1)
+    right_moments = [zeros(ComplexF64, n, size(Rright_basis, 2)) for _ in 1:config.moment_count]
+    left_moments = [zeros(ComplexF64, n, size(Rleft_basis, 2)) for _ in 1:config.moment_count]
+    futures = [
+        Distributed.remotecall(
+            residual_laurent_sparse_factor_remote_worker_step,
+            pid,
+            plan.key,
+            Rright_basis,
+            Rleft_basis,
+        )
+        for pid in plan.worker_ids
+    ]
+
+    worker_reports = NamedTuple[]
+    for future in futures
+        report = fetch(future)
+        for k in 1:config.moment_count
+            right_moments[k] .+= report.right_moments[k]
+            left_moments[k] .+= report.left_moments[k]
+        end
+        push!(
+            worker_reports,
+            (
+                pid=report.pid,
+                nodes=report.nodes,
+                elapsed_ns=report.elapsed_ns,
+                right_cols=size(Rright_basis, 2),
+                left_cols=size(Rleft_basis, 2),
+                right_factorizations=report.right_factorizations,
+                left_factorizations=report.left_factorizations,
+                right_solution_buffers=report.right_solution_buffers,
+                left_solution_buffers=report.left_solution_buffers,
+                right_solves=report.right_solves,
+                left_solves=report.left_solves,
+            ),
+        )
+    end
+
+    Xnew, Ynew, Xcandidate, Ycandidate, right_singulars, left_singulars =
+        compress_residual_laurent_candidates(
+            trial.X,
+            trial.Y,
+            right_moments,
+            left_moments;
+            compression_ranktol=config.compression_ranktol,
+        )
+    updated = common_square_trial_spaces(TrialSpaces(
+        X=Xnew,
+        Y=Ynew,
+        right_singulars=Float64.(right_singulars),
+        left_singulars=Float64.(left_singulars),
+        source=:sparse_factor_remote_residual_laurent_update,
+    ))
+    stats = (
+        right_residual_rank=size(Rright_basis, 2),
+        left_residual_rank=size(Rleft_basis, 2),
+        right_residual_singulars=right_residual_singulars,
+        left_residual_singulars=left_residual_singulars,
+        right_candidate_cols=size(Xcandidate, 2),
+        left_candidate_cols=size(Ycandidate, 2),
+        right_singulars=right_singulars,
+        left_singulars=left_singulars,
+        workers=worker_reports,
+        elapsed_ns=time_ns() - start_ns,
     )
     updated, stats
 end

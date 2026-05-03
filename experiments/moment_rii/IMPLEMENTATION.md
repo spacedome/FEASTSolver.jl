@@ -105,6 +105,10 @@ same compression step. The diagnostic now reports lightweight setup, serial
 update, remote update, and worker-local elapsed times so we can see where the
 prototype spends time without treating this small control as a benchmark. This
 is still an experiment diagnostic, not a public or optimized sparse plan.
+The sparse stored-factor path now has the same explicit plan boundary through
+`SparseFactorRemoteResidualLaurentUpdatePlan`: persistent workers own fixed
+contour-node subsets, sparse factors, and solve buffers, while the master owns
+residual compression and reduced extraction.
 
 ## What Not To Do
 
