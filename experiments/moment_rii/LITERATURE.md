@@ -1244,3 +1244,51 @@ Updated interpretation:
   must be validated with physical residuals and why the two-sided diagnostic is
   important. It does not weaken the current candidate; it clarifies the
   acceptance/refinement layer around it.
+
+## Targeted Extraction-Versus-Update Recheck, 2026-05-03
+
+Search scope: `"nonlinear eigenvalue contour integral residual inverse
+iteration FEAST moments"`, `"Sakurai Sugiura nonlinear eigenvalue moment method
+Rayleigh Ritz iteration residual"`, `"Beyn nonlinear eigenvalue contour
+integral method iteration residual correction"`, and `"resolvent sampling
+Rayleigh Ritz nonlinear eigenvalue contour moments"`.
+
+Additional adjacent items:
+
+- The nonlinear FEAST paper remains the direct scalar-correction reference:
+  the Cauchy integral is described as a multi-shift generalization of residual
+  inverse iteration. This supports the canonical `K=1` bridge but still leaves
+  the higher-moment state/update problem open. DOI:
+  <https://doi.org/10.1016/j.jocs.2018.05.006>.
+- Yokota--Sakurai's nonlinear contour projection method and related SS
+  extensions build moment subspaces and extract a reduced NEP with
+  Rayleigh--Ritz. This is exactly the lower extractor rung of the current
+  story; it does not provide a FEAST-style residual update for the finite
+  realization. DOI: <https://doi.org/10.14495/jsiaml.5.41>.
+- Beyn/tensor variants reinterpret contour moments through Keldysh structure
+  and filter placement. These are useful for chart/filter diagnostics and for
+  understanding why monomial moments can become ill-conditioned, but they
+  remain extraction/realization methods. DOI:
+  <https://doi.org/10.1016/j.cam.2015.07.012>.
+- RSRR deliberately constructs the approximate eigenspace from resolvent
+  samples rather than high-order moments to improve robustness. This supports
+  the experiment's use of Loewner/local chart alternatives when Hankel moments
+  are ill-conditioned, but it is not a residual inverse update loop. DOI:
+  <https://doi.org/10.1016/j.cma.2016.06.018>.
+- Recent refined Rayleigh--Ritz theory for analytic NEPs is relevant to the
+  reduced extraction acceptance layer: reduced Ritz values/vectors require
+  physical residual validation, and refined vectors can be preferable. It does
+  not change the residual-Laurent update formula. DOI:
+  <https://doi.org/10.1137/23M161392X>.
+
+Conclusion for the experiment:
+
+- The best-supported taxonomy is still a ladder: contour realization/extraction
+  (SS/Beyn/Loewner/RSRR) below scalar residual-inverse FEAST/NLFEAST, with
+  invariant-pair or refined-Rayleigh--Ritz cleanup as an optional refinement
+  rung.
+- I did not find a publication-level neighbor that closes the higher-moment
+  FEAST iteration problem by updating both physical spaces with compressed
+  residual Laurent moments. This remains a plausible novel mechanism, but the
+  novelty claim should remain qualified until a formal publication review is
+  done.
