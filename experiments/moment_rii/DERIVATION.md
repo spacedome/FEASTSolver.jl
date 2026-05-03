@@ -214,6 +214,68 @@ heuristic: it identifies the invariant object being updated, the exact lower
 reductions it must satisfy, and the approximation introduced by finite
 Laurent order.
 
+## Two Different Moment Roles
+
+The experiment now needs to keep two moment roles separate.
+
+1. **Realization/extraction moments** are the usual positive contour moments
+
+   ```text
+   M_k = integral_Gamma mu(z)^k T(z)^(-1) V dz.
+   ```
+
+   Under Keldysh, these are Markov parameters of the pole transfer function.
+   In a semisimple chart they factor as
+
+   ```text
+   M_k = X * S_mu^k * C,
+   ```
+
+   so block Hankel/Loewner extraction is a finite-realization problem. This is
+   where rank, recurrence, gauge, observability, and Loewner interpolation
+   live. Once the realized rank is captured, additional positive moments change
+   the realization coordinates or improve conditioning; they are not the
+   nonlinear iterative state.
+
+2. **Residual inverse-Laurent moments** are enrichment directions
+
+   ```text
+   Q_X,k = integral_Gamma zeta^(-k) T(z)^(-1) U_X dz,
+   Q_Y,k = integral_Gamma zeta^( k) T(z)^(-H) U_Y dz.
+   ```
+
+   These are not a replacement Hankel extractor and should not be justified as
+   a naive finite expansion of the full RII denominator. They are FEAST-style
+   inverse-resolvent images of the physical residual subspaces. After these
+   directions repair `X,Y`, the algorithm returns to the first layer and
+   re-extracts a reduced Petrov-Galerkin realization.
+
+This separation explains the negative scalar truncation diagnostic. The
+denominator expansion
+
+```text
+1/(z - lambda) = (1/r) * sum_k alpha^k zeta^(-k-1)
+```
+
+is the local language connecting the enrichment to scalar RII, but finite
+`K_update` is not a quadrature proof for the whole product
+`T(z)^(-1) T(lambda)x /(z-lambda)`. The poles of `T(z)^(-1)` also lie inside
+the contour. The reliable finite-dimensional object is the realized pole
+transfer function exposed after the enriched physical spaces are re-extracted.
+
+Thus the current algorithm is best viewed as an alternating loop:
+
+```text
+realize/extract local transfer data in X,Y
+  -> form physical residual subspaces
+  -> enrich X,Y by inverse-Laurent residual images
+  -> realize/extract again
+```
+
+This is closer to FEAST subspace iteration than to one-shot Beyn/SS. It also
+explains why `K_update` is an enrichment parameter, while basis/extractor
+moment order is a realization parameter.
+
 ## Candidate Proof Obligations
 
 A publication-quality version should prove or explicitly assume the following
@@ -227,8 +289,11 @@ local statements.
   the rank and recurrence of the captured contour realization, not only by the
   scalar denominator expansion. A negative diagnostic now verifies why: even
   with small `|alpha_j|`, denominator-only truncation can fail when
-  `T(z)^(-1)` has interior poles. The proof needs constants involving the
-  realized pole geometry, rank decisions, and quadrature error.
+  `T(z)^(-1)` has interior poles. The proof should treat `K_update` as a
+  residual-enrichment parameter and treat basis/extractor moments as the layer
+  where realization rank and recurrence are measured. It needs constants
+  involving the realized pole geometry, rank decisions, quadrature error, and
+  the angle between the enriched physical spaces and the target residue spaces.
 - **Realization closure:** if the current `X,Y` exactly contain the right and
   left spectral residue spaces for all roots inside the chart, then the
   residual blocks vanish and the update adds no physical directions. If the

@@ -89,6 +89,31 @@ The central implementation path is currently `ContourChart`, `TrialSpaces`,
 `run_count_driven_policy_diagnostic`. These are experiment objects, not public
 `FEASTSolver` API.
 
+## Moment Roles
+
+The algorithm uses two moment families with different jobs.
+
+- Basis/extractor moments are positive contour moments of `T(z)^(-1)`. They
+  build a finite transfer realization in the local chart. Hankel/SS, Loewner,
+  companion/QZ, and related reduced extractors live here.
+- Residual inverse-Laurent moments are FEAST-style enrichment directions for
+  physical residual subspaces. They repair `X,Y`; they are not themselves the
+  persistent Hankel state and are not justified by a naive scalar denominator
+  truncation.
+
+The loop is therefore:
+
+```text
+extract a local realization in X,Y
+  -> compress physical residuals
+  -> enrich X,Y by inverse-Laurent residual images
+  -> extract a new local realization
+```
+
+This is the cleanest current answer to the "moment update" question. It
+preserves the FEAST iteration idea while avoiding scalar RII on expanded
+moment columns.
+
 ## Core Update Formula
 
 Work in a local circular chart
