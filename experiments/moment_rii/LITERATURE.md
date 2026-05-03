@@ -837,3 +837,71 @@ Initial behavior:
   chart-local argument-principle counts, Loewner/Hankel rank gaps, residual
   magnitudes, chart overlap geometry, and agreement across interpolation
   layouts.
+
+## Targeted Residual-Update Literature Check, 2026-05-03
+
+Search scope: `nonlinear eigenvalue contour integral residual inverse
+iteration moment method FEAST Beyn Sakurai`, `nonlinear FEAST residual inverse
+iteration moment nonlinear eigenvalue problem`, `contour integral methods
+nonlinear eigenvalue problem moment residual correction`, and `Beyn Sakurai
+Sugiura residual inverse iteration nonlinear eigenvalue`.
+
+The search reinforces the current decomposition but did not reveal a published
+method that matches the exact loop used here:
+
+```text
+local two-sided finite contour realization
+  -> reduced Petrov-Galerkin NEP extraction
+  -> low-rank residual Laurent update of the physical left/right spaces
+  -> chart/count/support/agreement policy
+```
+
+Relevant adjacent results:
+
+- Neumaier's residual inverse iteration paper remains the scalar local
+  root-correction ancestor. It defines nonlinear residual inverse iteration at
+  a fixed shift and proves local linear convergence controlled by shift
+  proximity, but it does not introduce contour moments or finite contour
+  realizations. DOI: <https://doi.org/10.1137/0722055>.
+- The NLFEAST paper explicitly identifies nonlinear FEAST as a contour-based
+  multi-shift generalization of residual inverse iteration and emphasizes fixed
+  subspace dimension/factorization count. This is the closest published
+  FEAST-side ancestor, but the method still uses the scalar NLFEAST RII state
+  rather than a higher-moment finite realization repaired by residual Laurent
+  moments. DOI: <https://doi.org/10.1016/j.jocs.2018.05.006>.
+- Brennan--Embree--Gugercin give the systems/Loewner interpretation of contour
+  integral NEP methods and show that Hankel and Loewner pencils are realization
+  coordinates for the same contour data. This supports treating Beyn/SS/Loewner
+  as the reduced extraction stage. It does not provide a FEAST-style iterative
+  residual repair of physical trial/test spaces. DOI:
+  <https://doi.org/10.1137/20M1389303>.
+- Asakura--Sakurai--Tadano--Ikegami--Kimura reduce analytic NEPs inside a
+  contour to a smaller linear eigenproblem through contour integrals. This is
+  the SS/Beyn extraction lineage and supports the `iterations=0` lower rung,
+  but not the residual-update rung. DOI:
+  <https://doi.org/10.14495/jsiaml.1.52>.
+- Beyn's integral method uses Keldysh theory and resolvent integrals to recover
+  all eigenvalues/eigenvectors inside a contour without initial guesses. This
+  is again extraction/realization, not iterative residual repair of the
+  physical spaces. DOI: <https://doi.org/10.1016/j.laa.2011.03.030>.
+- Riesz-projection and weighted contour methods also process contour
+  information by solving smaller nonlinear/algebraic systems, sometimes with
+  application-driven weighting. They are relevant to future extraction and
+  filtering policies, but they do not appear to be the residual Laurent update
+  loop. Example: <https://doi.org/10.1016/j.jcp.2020.109678>.
+
+Current interpretation after this pass:
+
+- The reduced extractor is well-covered by the literature: SS/Beyn/Hankel and
+  Loewner are realization coordinates for contour samples.
+- The scalar FEAST/NLFEAST residual update is also well-covered: it is residual
+  inverse iteration integrated over multiple shifts.
+- The experimental contribution remains the geometric bridge between these two
+  pieces: do not iterate expanded Hankel columns; instead keep a local
+  two-sided realization and repair only the physical trial/test spaces using
+  low-rank residual Laurent moments.
+- The new nonnormal update-ladder diagnostic is therefore important evidence:
+  on the same chart cover, `iterations=0` is a Beyn/SS-style extraction rung
+  (`34/44`), one residual Laurent update repairs part of the weak nonnormal
+  physical space (`42/44`), and two updates complete the FEAST-style iteration
+  (`44/44`).
