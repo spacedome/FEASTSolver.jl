@@ -255,6 +255,94 @@ fallback path, but it should not be the final efficient moment-NLFEAST design.
 The final design should make this collapsed one-contour-sample realization the
 default.
 
+## Next Research Steps: Fused Realization And RII Charts
+
+The fused contour-sample view changes the next research target. The important
+question is no longer "how do we solve the projected nonlinear problem
+`Y^H T(lambda) X` well?" The projected nonlinear problem should mostly be a
+validation/refinement object. The main question is:
+
+```text
+how much of Beyn/SS/Loewner extraction can be built directly from the same
+contour samples that FEAST already computed?
+```
+
+The next concrete steps are:
+
+1. **Define the sample cache algebra.** For one chart, make the node-local data
+   explicit:
+
+   ```text
+   R_j(P) = T(z_j)^(-1) P,
+   L_j(Q) = T(z_j)^(-H) Q,
+   G_j(Q,P) = Q^H T(z_j)^(-1) P.
+   ```
+
+   From this, define all physical moments, small two-sided moments, and
+   residual-update moments by weighted reductions over the same node cache.
+
+2. **Reproduce Beyn/SS without inner solves.** Add a diagnostic that compares:
+
+   ```text
+   old path: build X,Y -> form Tred(z) -> run Beyn/SS on Tred
+   fused path: use G_j and physical moments from the original contour samples
+   ```
+
+   on the same chart and contour nodes. The target is not just matching roots;
+   it should also match reconstructed physical Ritz vectors/residuals up to
+   the expected basis/gauge transformations. This directly tests the original
+   motivation: the inner reduced contour solve is wasted information.
+
+3. **Make extraction linear by construction.** The extractor should consume a
+   small moment/Loewner sequence and return a small linear pencil or equivalent
+   finite realization. Direct solution of `Y^H T(lambda) X` should be a
+   cleanup or validation option, not the default route.
+
+4. **Fuse residual-Laurent repair into the same cache.** After computing
+   compressed residual bases `U_X,U_Y`, the node responses
+
+   ```text
+   T(z_j)^(-1) U_X,
+   T(z_j)^(-H) U_Y
+   ```
+
+   should extend the same chart cache. The next realization should be formed
+   by augmenting the active probe blocks and reducing the retained node data,
+   not by building a new projected NEP and sampling it from scratch.
+
+5. **Study RII as a realization-coordinate chart.** In the linear case, scalar
+   RII is a coordinate chart where the residual correction is exactly the
+   FEAST rational filter. In canonical NLFEAST, Keldysh makes that scalar chart
+   locally valid near a simple pole. In higher-moment NLFEAST, the scalar Ritz
+   chart is generally not valid because the local object is a finite
+   realization with gauge freedom. The research task is to show that
+   residual-Laurent repair is the coordinate-free version of the same FEAST
+   correction:
+
+   ```text
+   scalar RII chart            -> one pole / one Ritz coordinate
+   SS/Beyn/Loewner chart       -> finite realization coordinates
+   residual-Laurent repair     -> physical-space correction invariant to
+                                   realization-coordinate changes
+   ```
+
+6. **Use hard analytic cases as extractor tests, not update tests.** Problems
+   like sine or delay equations should stress whether the fused moment data
+   admits a usable finite local realization. If it does, the algorithm should
+   reduce to a small linear pencil. If it does not, the failure belongs to the
+   chart/extractor layer rather than the FEAST residual update.
+
+This is the likely final form of the algorithmic story:
+
+```text
+one contour sample cache
+  -> physical left/right spaces
+  -> small two-sided linear realization
+  -> physical residual certification
+  -> compressed residual-Laurent cache augmentation
+  -> repeat
+```
+
 ## Moment Roles
 
 The algorithm uses two moment families with different jobs.
