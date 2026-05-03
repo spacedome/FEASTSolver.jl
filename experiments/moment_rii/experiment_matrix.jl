@@ -3969,24 +3969,17 @@ function partitioned_residual_laurent_update(
     partition_reports = NamedTuple[]
     for part in 1:partitions
         local_indices = part:partitions:length(z_nodes)
-        local_right = [zeros(ComplexF64, n, size(Rright_basis, 2)) for _ in 1:config.moment_count]
-        local_left = [zeros(ComplexF64, n, size(Rleft_basis, 2)) for _ in 1:config.moment_count]
-        for index in local_indices
-            z = z_nodes[index]
-            weight = z_weights[index]
-            ζ = (z - chart.center) / chart.radius
-            base = weight / (z - chart.center)
-            solved_right = size(Rright_basis, 2) == 0 ? zeros(ComplexF64, n, 0) : ctx.Tsolve(z, Rright_basis)
-            solved_left = size(Rleft_basis, 2) == 0 ? zeros(ComplexF64, n, 0) : ctx.Tadjoint_solve(z, Rleft_basis)
-            right_power = one(ComplexF64)
-            left_power = one(ComplexF64)
-            for k in 1:config.moment_count
-                local_right[k] .+= (base * right_power) .* solved_right
-                local_left[k] .+= (conj(base) * left_power) .* solved_left
-                right_power /= ζ
-                left_power *= ζ
-            end
-        end
+        local_right, local_left = residual_laurent_moment_blocks_generic(
+            ctx.Tsolve,
+            ctx.Tadjoint_solve,
+            Rright_basis,
+            Rleft_basis,
+            view(z_nodes, local_indices),
+            view(z_weights, local_indices),
+            chart.center,
+            chart.radius;
+            moment_count=config.moment_count,
+        )
         for k in 1:config.moment_count
             right_moments[k] .+= local_right[k]
             left_moments[k] .+= local_left[k]
@@ -4001,15 +3994,14 @@ function partitioned_residual_laurent_update(
             ),
         )
     end
-    Xcandidate = reduce(hcat, vcat(Matrix{ComplexF64}[Matrix(trial.X)], right_moments))
-    Ycandidate = reduce(hcat, vcat(Matrix{ComplexF64}[Matrix(trial.Y)], left_moments))
-    Xnew, right_singulars = physical_basis_from_columns(Xcandidate; ranktol=config.compression_ranktol)
-    Ynew, left_singulars = physical_basis_from_columns(Ycandidate; ranktol=config.compression_ranktol)
-    if size(Xnew, 2) != size(Ynew, 2)
-        common = min(size(Xnew, 2), size(Ynew, 2))
-        Xnew = Xnew[:, 1:common]
-        Ynew = Ynew[:, 1:common]
-    end
+    Xnew, Ynew, Xcandidate, Ycandidate, right_singulars, left_singulars =
+        compress_residual_laurent_candidates(
+            trial.X,
+            trial.Y,
+            right_moments,
+            left_moments;
+            compression_ranktol=config.compression_ranktol,
+        )
     updated = common_square_trial_spaces(TrialSpaces(
         X=Xnew,
         Y=Ynew,

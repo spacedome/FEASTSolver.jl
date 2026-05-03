@@ -72,6 +72,10 @@ four disjoint contour-node partitions return partial residual-Laurent blocks
 whose sum reproduces the serial update to roundoff-level projection gaps and
 the same recovered target roots. That makes the remaining distributed work an
 ownership/workspace implementation problem, not a new numerical update.
+The serial update and partition diagnostic now call the same
+`residual_laurent_moment_blocks_generic` kernel and the same candidate-space
+compression helper, so the experiment has one node-local accumulation boundary
+to map onto workers.
 
 ## What Not To Do
 

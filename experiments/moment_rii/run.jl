@@ -4543,24 +4543,18 @@ function residual_blocks_from_matrix_extraction(Tmatrix, extraction; residual_ra
     Rright_basis, Rleft_basis, right_singulars, left_singulars
 end
 
-function moment_compressed_dual_rii_bases_generic(
+function residual_laurent_moment_blocks_generic(
     Tsolve,
     Tadjoint_solve,
-    Tmatrix,
-    Xbasis,
-    Ybasis,
-    extraction,
+    Rright_basis,
+    Rleft_basis,
     z_nodes,
     z_weights,
     center,
     radius;
-    moment_count=2,
-    residual_ranktol=1e-10,
-    compression_ranktol=1e-10,
+    moment_count,
 )
-    Rright_basis, Rleft_basis, right_residual_singulars, left_residual_singulars =
-        residual_blocks_from_matrix_extraction(Tmatrix, extraction; residual_ranktol=residual_ranktol)
-    n = size(Xbasis, 1)
+    n = size(Rright_basis, 1)
     right_moments = [zeros(ComplexF64, n, size(Rright_basis, 2)) for _ in 1:moment_count]
     left_moments = [zeros(ComplexF64, n, size(Rleft_basis, 2)) for _ in 1:moment_count]
 
@@ -4578,7 +4572,16 @@ function moment_compressed_dual_rii_bases_generic(
             left_power *= ζ
         end
     end
+    right_moments, left_moments
+end
 
+function compress_residual_laurent_candidates(
+    Xbasis,
+    Ybasis,
+    right_moments,
+    left_moments;
+    compression_ranktol,
+)
     right_blocks = Matrix{ComplexF64}[Matrix(Xbasis)]
     left_blocks = Matrix{ComplexF64}[Matrix(Ybasis)]
     append!(right_blocks, right_moments)
@@ -4592,6 +4595,45 @@ function moment_compressed_dual_rii_bases_generic(
         Xnew = Xnew[:, 1:common]
         Ynew = Ynew[:, 1:common]
     end
+    Xnew, Ynew, Xcandidate, Ycandidate, right_singulars, left_singulars
+end
+
+function moment_compressed_dual_rii_bases_generic(
+    Tsolve,
+    Tadjoint_solve,
+    Tmatrix,
+    Xbasis,
+    Ybasis,
+    extraction,
+    z_nodes,
+    z_weights,
+    center,
+    radius;
+    moment_count=2,
+    residual_ranktol=1e-10,
+    compression_ranktol=1e-10,
+)
+    Rright_basis, Rleft_basis, right_residual_singulars, left_residual_singulars =
+        residual_blocks_from_matrix_extraction(Tmatrix, extraction; residual_ranktol=residual_ranktol)
+    right_moments, left_moments = residual_laurent_moment_blocks_generic(
+        Tsolve,
+        Tadjoint_solve,
+        Rright_basis,
+        Rleft_basis,
+        z_nodes,
+        z_weights,
+        center,
+        radius;
+        moment_count=moment_count,
+    )
+    Xnew, Ynew, Xcandidate, Ycandidate, right_singulars, left_singulars =
+        compress_residual_laurent_candidates(
+            Xbasis,
+            Ybasis,
+            right_moments,
+            left_moments;
+            compression_ranktol=compression_ranktol,
+        )
     stats = (
         right_residual_rank=size(Rright_basis, 2),
         left_residual_rank=size(Rleft_basis, 2),

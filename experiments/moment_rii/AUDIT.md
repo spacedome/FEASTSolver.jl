@@ -84,7 +84,10 @@ global block Newton, or rational-coordinate-only fixes.
   `Tmatrix`/`Tsolve` compatibility, but it deliberately does not provide
   reusable sparse factorizations, symbolic reuse, distributed workers, or
   performance claims. It also has a partition diagnostic proving that
-  residual-Laurent contour-node sums can be distributed algebraically.
+  residual-Laurent contour-node sums can be distributed algebraically. Serial
+  and partitioned residual-Laurent updates now share the same node-local
+  accumulation and candidate-compression helpers, so the remaining worker
+  prototype has a concrete kernel boundary.
   `IMPLEMENTATION.md` records the sparse and distributed rungs needed to turn
   the experiment boundary into a real implementation.
 - Split/shrink chart policy is now a reproducible local refinement rung, not a
