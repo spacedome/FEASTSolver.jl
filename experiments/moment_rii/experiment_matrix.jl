@@ -1097,6 +1097,7 @@ function run_sparse_schrodinger_moment_gallery_smoke(;
     radius=4.2,
     residual_tol=1e-5,
     count_error_tol=1e-4,
+    update_repeats=2,
     print_rows=true,
 )
     problem = sparse_schrodinger_movebc_moment_context(n, center, radius)
@@ -1186,6 +1187,7 @@ function run_sparse_schrodinger_remote_stored_factor_worker_smoke(;
     residual_tol=1e-5,
     match_atol=1e-4,
     count_error_tol=1e-4,
+    update_repeats=2,
     print_rows=true,
 )
     problem = sparse_schrodinger_movebc_moment_context(n, center, radius)
@@ -1226,6 +1228,7 @@ function run_sparse_schrodinger_remote_stored_factor_worker_smoke(;
         basis=basis,
         extractor=extractor,
         update=update,
+        update_repeats=update_repeats,
         residual_tol=residual_tol,
         match_atol=match_atol,
     )
@@ -1247,7 +1250,7 @@ function run_sparse_schrodinger_remote_stored_factor_worker_smoke(;
         println("Sparse Schrodinger remote stored-factor worker smoke")
         println("  realistic sparse Schrodinger gallery operator with persistent worker-owned contour factors")
         @printf(
-            "  workers=%s n=%d count=%d err=%.3e serial=%d/%d remote=%d/%d projection_gap=(%.3e, %.3e) factors=%d->%d solves=%d->%d setup=%.3fs serial_update=%.3fs remote_updates=(%.3fs, %.3fs)\n",
+            "  workers=%s n=%d count=%d err=%.3e serial=%d/%d remote=%d/%d projection_gap=(%.3e, %.3e) factors=%d->%d solves=%d->%d setup=%.3fs serial_update=%.3fs remote_updates=(%.3fs, %.3fs) steady_min=%.3fs steady_mean=%.3fs repeats=%d\n",
             string(result.workers),
             result.n,
             result.target_count,
@@ -1266,6 +1269,9 @@ function run_sparse_schrodinger_remote_stored_factor_worker_smoke(;
             result.serial_update_elapsed_ns / 1e9,
             result.remote_first_elapsed_ns / 1e9,
             result.remote_second_elapsed_ns / 1e9,
+            result.remote_steady_min_elapsed_ns / 1e9,
+            result.remote_steady_mean_elapsed_ns / 1e9,
+            result.remote_repeats,
         )
     end
     result
@@ -1279,9 +1285,11 @@ function run_sparse_remote_stored_factor_context_smoke(
     basis::MomentBasisConfig,
     extractor::ReducedExtractorConfig,
     update::ResidualUpdateConfig,
+    update_repeats=2,
     residual_tol=1e-10,
     match_atol=1e-8,
 )
+    update_repeats >= 2 || error("update_repeats must be at least 2")
     setup_start = time_ns()
     worker_ids, added = ensure_moment_remote_workers(worker_count)
     try
@@ -1387,16 +1395,16 @@ function run_sparse_remote_stored_factor_context_smoke(
         end
 
         remote_result = try
-            first_step = remote_cached_step()
-            second_step = remote_cached_step()
-            (first_step=first_step, second_step=second_step)
+            Tuple(remote_cached_step() for _ in 1:update_repeats)
         finally
             for pid in worker_ids
                 Distributed.remotecall_wait(cleanup_residual_laurent_remote_worker!, pid, key)
             end
         end
-        remote_trial1, remote_stats1 = remote_result.first_step
-        remote_trial2, remote_stats2 = remote_result.second_step
+        remote_trial1, remote_stats1 = remote_result[1]
+        remote_trial2, remote_stats2 = remote_result[2]
+        remote_elapsed_ns = [step[2].elapsed_ns for step in remote_result]
+        steady_elapsed_ns = remote_elapsed_ns[2:end]
         remote_extraction = extract_reduced_nep(ctx, remote_trial1, chart, extractor)
         serial_extraction = extract_reduced_nep(ctx, serial_trial, chart, extractor)
         serial_summary = dual_scalar_rii_summary(serial_extraction, expected; residual_tol=residual_tol, match_atol=match_atol)
@@ -1423,6 +1431,10 @@ function run_sparse_remote_stored_factor_context_smoke(
             serial_update_elapsed_ns=serial_elapsed_ns,
             remote_first_elapsed_ns=remote_stats1.elapsed_ns,
             remote_second_elapsed_ns=remote_stats2.elapsed_ns,
+            remote_elapsed_ns=remote_elapsed_ns,
+            remote_repeats=update_repeats,
+            remote_steady_min_elapsed_ns=minimum(steady_elapsed_ns),
+            remote_steady_mean_elapsed_ns=sum(steady_elapsed_ns) / length(steady_elapsed_ns),
             first_worker_factorizations=sum(report.right_factorizations + report.left_factorizations for report in remote_stats1.workers; init=0),
             second_worker_factorizations=sum(report.right_factorizations + report.left_factorizations for report in remote_stats2.workers; init=0),
             first_worker_solution_buffers=sum(report.right_solution_buffers + report.left_solution_buffers for report in remote_stats1.workers; init=0),
@@ -1442,6 +1454,7 @@ function run_sparse_nonlinear_remote_stored_factor_worker_smoke(;
     radius=2.6,
     residual_tol=1e-10,
     match_atol=1e-8,
+    update_repeats=2,
     print_rows=true,
 )
     problem = sparse_quadratic_gallery_moment_context(n, center, radius)
@@ -1473,6 +1486,7 @@ function run_sparse_nonlinear_remote_stored_factor_worker_smoke(;
         basis=basis,
         extractor=extractor,
         update=update,
+        update_repeats=update_repeats,
         residual_tol=residual_tol,
         match_atol=match_atol,
     )
@@ -1488,7 +1502,7 @@ function run_sparse_nonlinear_remote_stored_factor_worker_smoke(;
         println("Sparse nonlinear remote stored-factor worker smoke")
         println("  sparse quadratic polynomial gallery operator with persistent worker-owned contour factors")
         @printf(
-            "  workers=%s expected=%d serial=%d/%d remote=%d/%d projection_gap=(%.3e, %.3e) factors=%d->%d solves=%d->%d setup=%.3fs serial_update=%.3fs remote_updates=(%.3fs, %.3fs)\n",
+            "  workers=%s expected=%d serial=%d/%d remote=%d/%d projection_gap=(%.3e, %.3e) factors=%d->%d solves=%d->%d setup=%.3fs serial_update=%.3fs remote_updates=(%.3fs, %.3fs) steady_min=%.3fs steady_mean=%.3fs repeats=%d\n",
             string(result.workers),
             result.expected,
             result.serial.matched,
@@ -1505,6 +1519,9 @@ function run_sparse_nonlinear_remote_stored_factor_worker_smoke(;
             result.serial_update_elapsed_ns / 1e9,
             result.remote_first_elapsed_ns / 1e9,
             result.remote_second_elapsed_ns / 1e9,
+            result.remote_steady_min_elapsed_ns / 1e9,
+            result.remote_steady_mean_elapsed_ns / 1e9,
+            result.remote_repeats,
         )
     end
     result

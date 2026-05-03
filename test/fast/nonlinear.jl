@@ -557,6 +557,10 @@ end
     @test result.serial_update_elapsed_ns > 0
     @test result.remote_first_elapsed_ns > 0
     @test result.remote_second_elapsed_ns > 0
+    @test result.remote_repeats == 2
+    @test length(result.remote_elapsed_ns) == result.remote_repeats
+    @test result.remote_steady_min_elapsed_ns > 0
+    @test result.remote_steady_mean_elapsed_ns > 0
 end
 
 @testitem "nonlinear FEAST: custom contour on linear pencil" setup=[FEASTTestSetup] begin

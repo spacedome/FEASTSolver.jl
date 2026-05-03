@@ -112,15 +112,17 @@ global block Newton, or rational-coordinate-only fixes.
   local BenchmarkTools harness for that Schrodinger serial/remote rung and
   prints timing, allocation, correctness, and reuse counters after warmup. It
   was most recently run on the small default Schrodinger case with two workers
-  after adding setup/update timing splits: serial took `0.498s` with three
+  after adding setup/update timing splits and five remote update repeats:
+  serial took `0.485s` with three
   matched roots and max residual `3.40e-11`, while the coarse
-  persistent-worker stored-factor path took `15.38s`. The split shows
-  `13.52s` setup/JIT/factor initialization, `3.99s` for the first remote
-  update, and `0.009s` for the second update with the same 96 worker-owned
-  factors and solve buffers. The remote spaces match the serial spaces to
-  projection gaps near `1e-14`. This confirms correctness/reuse and shows that
-  setup and first-use costs dominate this small benchmark, while the steady
-  repeated-update path is the relevant performance signal.
+  persistent-worker stored-factor path took `15.74s`. The split shows
+  `13.30s` setup/JIT/factor initialization, `2.92s` for the first remote
+  update, and a reused-update steady-state minimum/mean of
+  `0.0012s`/`0.0088s` over the remaining four updates with the same 96
+  worker-owned factors and solve buffers. The remote spaces match the serial
+  spaces to projection gaps near `1e-14`. This confirms correctness/reuse and
+  shows that setup and first-use costs dominate this small benchmark, while the
+  steady repeated-update path is the relevant performance signal.
   deliberately does not yet provide full reusable sparse workspaces, broad
   realistic sparse gallery coverage, or publication-level scaling claims.
   `IMPLEMENTATION.md` records the sparse and distributed rungs needed to turn

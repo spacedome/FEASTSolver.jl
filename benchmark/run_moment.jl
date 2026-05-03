@@ -7,6 +7,7 @@ include(joinpath(REPO_ROOT, "experiments", "moment_rii", "run.jl"))
 const ENV_DEFAULTS = Dict(
     "FEAST_MOMENT_BENCH_PROBLEM" => "schrodinger",
     "FEAST_MOMENT_BENCH_WORKERS" => "2",
+    "FEAST_MOMENT_BENCH_REPEATS" => "5",
     "FEAST_MOMENT_BENCH_SAMPLES" => "1",
     "FEAST_MOMENT_BENCH_SECONDS" => "3600",
 )
@@ -54,6 +55,9 @@ function print_remote_stats(label, result)
         ",serial_update_s=", result.serial_update_elapsed_ns / 1e9,
         ",remote_first_s=", result.remote_first_elapsed_ns / 1e9,
         ",remote_second_s=", result.remote_second_elapsed_ns / 1e9,
+        ",remote_repeats=", result.remote_repeats,
+        ",remote_steady_min_s=", result.remote_steady_min_elapsed_ns / 1e9,
+        ",remote_steady_mean_s=", result.remote_steady_mean_elapsed_ns / 1e9,
         ",x_projection_gap=", result.x_projection_gap,
         ",y_projection_gap=", result.y_projection_gap,
     )
@@ -63,22 +67,27 @@ function run_schrodinger_serial()
     run_sparse_schrodinger_moment_gallery_smoke(; print_rows=false)
 end
 
-function run_schrodinger_remote(worker_count)
-    run_sparse_schrodinger_remote_stored_factor_worker_smoke(; worker_count=worker_count, print_rows=false)
+function run_schrodinger_remote(worker_count, update_repeats)
+    run_sparse_schrodinger_remote_stored_factor_worker_smoke(;
+        worker_count=worker_count,
+        update_repeats=update_repeats,
+        print_rows=false,
+    )
 end
 
 function main()
     problem = env("FEAST_MOMENT_BENCH_PROBLEM")
     workers = parse(Int, env("FEAST_MOMENT_BENCH_WORKERS"))
+    update_repeats = parse(Int, env("FEAST_MOMENT_BENCH_REPEATS"))
     samples = parse(Int, env("FEAST_MOMENT_BENCH_SAMPLES"))
     seconds_limit = parse(Float64, env("FEAST_MOMENT_BENCH_SECONDS"))
 
     problem == "schrodinger" || error("unsupported FEAST_MOMENT_BENCH_PROBLEM=$problem")
-    println("config,problem=$problem,workers=$workers,samples=$samples,seconds=$seconds_limit")
+    println("config,problem=$problem,workers=$workers,repeats=$update_repeats,samples=$samples,seconds=$seconds_limit")
 
     # Warm package, experiment, and worker code paths before timing.
     serial_result = run_schrodinger_serial()
-    remote_result = run_schrodinger_remote(workers)
+    remote_result = run_schrodinger_remote(workers, update_repeats)
 
     serial_trial = run(@benchmarkable run_schrodinger_serial() samples=samples evals=1 seconds=seconds_limit)
     print_trial("moment,schrodinger_serial", serial_trial)
@@ -92,7 +101,7 @@ function main()
         ",left_residual_rank=", serial_result.updated.left_residual_rank,
     )
 
-    remote_trial = run(@benchmarkable run_schrodinger_remote($workers) samples=samples evals=1 seconds=seconds_limit)
+    remote_trial = run(@benchmarkable run_schrodinger_remote($workers, $update_repeats) samples=samples evals=1 seconds=seconds_limit)
     print_trial("moment,schrodinger_remote_stored", remote_trial)
     print_remote_stats("stats,schrodinger_remote_stored", remote_result)
 end
