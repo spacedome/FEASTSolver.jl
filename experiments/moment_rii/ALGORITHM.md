@@ -168,6 +168,16 @@ Representative tests:
   some residual-small values exist. The coupled two-delay radius-12 control
   with spacing `4.0` retains only 10 of 12 counted roots after refinement and
   correctly stops as an unresolved defect.
+- Blind geometric fill-in is not a principled fix for that boundary. Adding
+  supplemental half-grid centers to the sparse coupled cover increases the
+  number of chart solves but still plateaus at 10 of 12 retained roots. Missing
+  count with no weak residual candidate needs a better chart/probe diagnostic,
+  not arbitrary cover densification.
+- Enlarging the local chart radius is a principled repair for that specific
+  boundary: using radii `(1.2, 3.0)` on the same sparse coupled cover exposes
+  an additional weak candidate, adds one center, and then retains all 12 counted
+  roots. The likely policy rung is adaptive overlap/radius selection when
+  count deficits occur near the outer contour, not unconditional grid fill-in.
 - Scalar residuals alone are not acceptance evidence in high dynamic-range
   analytic NEPs. Local count, support, target membership, and extractor/layout
   agreement are needed.
@@ -253,7 +263,9 @@ Representative tests:
   roots. With spacing `4.0` and small local radii, the policy sees only 10
   supported roots after adding weak centers and stops with
   `:count_multiplicity_or_unresolved_defect` instead of silently accepting an
-  incomplete solve.
+  incomplete solve. The missing roots lie near the outer target contour and are
+  repaired by allowing a larger local radius `3.0`, which gives enough overlap
+  to generate the needed weak center.
 - A near-pole rational triangular control exercises the same no-oracle path
   with meromorphic components whose poles lie just outside the target contour.
   With pole gap `0.01`, the full-operator count is reliable, support retention

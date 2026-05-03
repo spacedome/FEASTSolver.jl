@@ -87,7 +87,12 @@ global block Newton, or rational-coordinate-only fixes.
   requires preserving the parent radius; the aggressive shrink radii that work
   for count deficits fail there. The sparse coupled two-delay radius-12 cover
   is now pinned as an unresolved-defect diagnostic: the policy retains 10 of 12
-  counted roots and does not over-accept the incomplete cover.
+  counted roots and does not over-accept the incomplete cover. A blind
+  supplemental half-grid fill-in was tried and rejected: it adds chart centers
+  but still plateaus at 10 of 12 retained roots. Adding a larger local chart
+  radius `3.0` repairs the same case with one weak-center refinement, so the
+  useful next policy rung is adaptive radius/overlap selection, not blind
+  densification.
 - Oracle-free target completion and stopping are now covered by the radius-20
   three-function policy path, scalar delay, scalar two-delay, nonnormal
   multi-delay, dense coupled two-delay, near-pole rational, and

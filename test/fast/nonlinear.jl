@@ -614,6 +614,29 @@ end
     @test !isempty(result.added_centers)
 end
 
+@testitem "experimental moment RII: count-driven refinement repairs sparse coupled cover with larger charts" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_coupled_two_delay_count_driven_adaptive_refinement(;
+        coupling=1.0,
+        outer_radius=12.0,
+        base_spacing=4.0,
+        chart_radii=(1.2, 3.0),
+        max_refinement_rounds=4,
+        print_rows=false,
+    )
+    final = result.rows[end]
+
+    @test result.count.expected == 0
+    @test result.count.count_estimate == 12
+    @test result.stop_reason == :target_count_complete
+    @test result.algebraic_retained_count == result.count.count_estimate
+    @test final.count_complete
+    @test final.retained == result.count.count_estimate
+    @test length(result.rows) == 2
+    @test length(result.added_centers) == 1
+end
+
 @testitem "experimental moment RII: count-driven refinement handles oracle-free multiplicity" tags=[:slow] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 
