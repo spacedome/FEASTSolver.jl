@@ -905,3 +905,57 @@ Current interpretation after this pass:
   (`34/44`), one residual Laurent update repairs part of the weak nonnormal
   physical space (`42/44`), and two updates complete the FEAST-style iteration
   (`44/44`).
+
+## Targeted Dual-Extraction Literature Check, 2026-05-03
+
+Search scope: `nonlinear eigenvalue contour integral method residual inverse
+iteration moments FEAST Sakurai Beyn 2024`, `finite realization residual
+correction contour integral nonlinear eigenvalue problem moment Hankel`,
+`nonlinear FEAST moment contour integral residual inverse iteration higher
+moments`, and `Beyn Sakurai Sugiura contour integral nonlinear eigenvalue moment
+residual iteration`.
+
+The search did not turn up a published method that combines the exact pieces of
+the current experiment: local two-sided contour realization, Petrov-Galerkin
+reduced NEP extraction, and iterative residual Laurent repair of both physical
+trial and test spaces. It did reinforce why the left/right side should be
+treated as structural:
+
+- The systems-theoretic SIAM Review paper frames Hankel and Loewner contour
+  constructions as realization problems, which is naturally a two-sided
+  interpolation setting once eigenvectors are recovered. DOI:
+  <https://doi.org/10.1137/20M1389303>.
+- The SS lineage reduces analytic NEPs in a contour to smaller eigenvalue
+  problems via moments. Yokota--Sakurai explicitly extend SS with
+  Rayleigh--Ritz projection to NEPs, but this remains an extraction method
+  rather than an iterative residual-space repair. DOI:
+  <https://doi.org/10.14495/jsiaml.5.41>.
+- The 2009 Asakura--Sakurai--Tadano--Ikegami--Kimura paper supplies the
+  contour-moment reduced problem lineage for analytic matrix functions; again,
+  the method extracts a smaller linear problem and does not iterate repaired
+  physical spaces. DOI: <https://doi.org/10.14495/jsiaml.1.52>.
+- NLFEAST remains the closest FEAST-side ancestor because it identifies the
+  contour integral with a multi-shift residual inverse iteration. Its state is
+  the scalar FEAST/NLFEAST subspace state, not a higher-moment realization with
+  independent left/right residual Laurent updates. DOI:
+  <https://doi.org/10.1016/j.jocs.2018.05.006>.
+
+New numerical evidence added after this search:
+
+- `run_dual_reduced_polynomial_control` now returns rows for true dual,
+  biorthogonal dual, and one-sided Galerkin extraction.
+- On `dual_sensitive_polynomial_problem`, true dual and biorthogonal dual
+  extraction recover all 12 target roots. Galerkin one-sided extraction returns
+  13 inside reduced Ritz values with reduced residual near `1e-15`, but zero
+  values satisfy the original residual tolerance. This is a useful warning:
+  reduced residuals alone can be false evidence when the test space is
+  geometrically wrong.
+
+Interpretation:
+
+- The experiment's "dual" qualifier is not just an analogy to linear dual
+  FEAST. It is the Petrov-Galerkin condition that prevents reduced-realization
+  artifacts from masquerading as physical NEP eigenpairs.
+- The residual Laurent update should therefore continue to repair both `X` and
+  `Y`. A one-sided moment update may be useful as a negative diagnostic, but it
+  should not be promoted as the general algorithmic rung.
