@@ -279,6 +279,93 @@ residual-Laurent enrichment estimate
 
 Only the first line remains genuinely missing.
 
+## Lemma Decomposition
+
+The local theorem can be decomposed into five lemmas. Four are already covered
+by derivation, literature, or diagnostics; one is the unresolved mathematical
+core.
+
+### Lemma 1: Contour Moments Give A Finite Realization
+
+For a semisimple target spectrum inside a safe chart, positive contour moments
+computed from right/left probes factor as Markov parameters of a finite pole
+realization:
+
+```text
+M_k = X_* S^k C + E_k,
+N_k = B S^k Y_*' + F_k,
+```
+
+with `E_k,F_k` controlled by quadrature and rank truncation. This is the
+standard Keldysh/SS/Beyn/Loewner layer. It is not novel.
+
+Status: established by literature and pinned in the experiment by
+`run_positive_moment_realization_recurrence_diagnostic`.
+
+### Lemma 2: Residual Compression Is Coordinate-Invariant
+
+Let `R_X` and `R_Y` be physical residual blocks from reduced Ritz data. If the
+same residual subspaces are represented by `R_X C_X` and `R_Y C_Y` for
+nonsingular `C_X,C_Y`, then after rank-revealing compression the
+residual-Laurent enrichment spans are unchanged up to the compression
+tolerance.
+
+Status: elementary linear algebra; pinned numerically by
+`run_residual_laurent_residual_coordinate_invariance_diagnostic`.
+
+### Lemma 3: Exact Realizations Are Fixed Points
+
+If `X,Y` contain the exact target right/left residue spaces and the reduced
+Ritz data is exact, then `R_X=R_Y=0`, the compressed residual ranks are zero,
+and residual-Laurent enrichment adds no new physical directions.
+
+Status: elementary from the NEP residual equations; pinned by
+`run_residual_laurent_realization_closure_diagnostic`.
+
+### Lemma 4: The Linear Rung Reduces To FEAST
+
+For `T(z)=zI-A`, the residual-inverse expression is algebraically identical to
+the FEAST rational filter:
+
+```text
+x - (zI-A)^(-1)(lambda I-A)x = (z-lambda)(zI-A)^(-1)x.
+```
+
+Thus the contour-averaged correction is ordinary FEAST/RII on both right and
+left Ritz vectors.
+
+Status: exact identity; pinned by `run_linear_dual_rii_reduction_diagnostic`.
+
+### Lemma 5: Local Analytic Enrichment Estimate
+
+This is the missing lemma.
+
+Assume a chart has captured the correct finite two-sided realization rank and
+the reduced Petrov-Galerkin NEP produces Ritz data whose physical residual
+blocks are nonzero but compressible. A desired estimate would show that one
+residual-Laurent enrichment and re-extraction improves the physical Ritz
+residuals under explicit local constants:
+
+```text
+residual_after <= C_chart * (realization_error + quadrature_error
+                            + compression_error + higher_order_terms),
+```
+
+or at least that the enriched spaces contain the leading correction directions
+needed by a reduced Ritz/refined-Ritz perturbation theorem.
+
+The constants must depend on:
+
+- separation of the target pole realization from exterior poles/singularities;
+- conditioning of the two-sided reduced Petrov-Galerkin realization;
+- quadrature accuracy for the contour-node solves;
+- rank truncation and residual compression tolerances;
+- nonnormal left/right eigenvector conditioning.
+
+Status: not proved. The sparse diagonal and rank-deficient analytic diagnostics
+show exactly the behavior the lemma should explain, but they are not proof.
+This lemma is the current theorem gap.
+
 ## Formal Obstruction
 
 The remaining proof is not blocked by implementation details. It is blocked at

@@ -223,6 +223,9 @@ productive steps are:
    residual quality inside a captured realization. A naive scalar denominator
    truncation proof, a pure subspace-angle proof, and a "just block Newton"
    interpretation have all been explicitly rejected by diagnostics.
+   `THEOREM_SKETCH.md` now decomposes the proof into five lemmas; the first
+   four are established or diagnostic-pinned, and Lemma 5, the local analytic
+   enrichment estimate, is the open mathematical core.
 2. Continue tightening the experiment interface around a small set of stable
    objects: chart, pipeline, basis, extractor, update, policy, and diagnostic.
    `pipeline.jl` now holds the chart/pipeline/basis/extractor/update objects, while
