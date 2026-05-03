@@ -25,6 +25,65 @@ Base.@kwdef struct TrialSpaces
     source::Symbol = :unknown
 end
 
+Base.@kwdef struct ContourSampleCache
+    chart::ContourChart
+    nodes::Vector{ComplexF64}
+    weights::Vector{ComplexF64}
+    right_probe::Matrix{ComplexF64}
+    left_probe::Matrix{ComplexF64}
+    right_samples::Vector{Matrix{ComplexF64}}
+    left_samples::Vector{Matrix{ComplexF64}}
+    source::Symbol = :unknown
+end
+
+function build_contour_sample_cache(Tsolve, Tadjoint_solve, right_probe, left_probe, chart::ContourChart, nodes; source=:contour_samples)
+    z_nodes, z_weights = circular_rule(chart, nodes)
+    right_samples = [Matrix{ComplexF64}(Tsolve(z, right_probe)) for z in z_nodes]
+    left_samples = [Matrix{ComplexF64}(Tadjoint_solve(z, left_probe)) for z in z_nodes]
+    ContourSampleCache(
+        chart=chart,
+        nodes=z_nodes,
+        weights=z_weights,
+        right_probe=Matrix{ComplexF64}(right_probe),
+        left_probe=Matrix{ComplexF64}(left_probe),
+        right_samples=right_samples,
+        left_samples=left_samples,
+        source=source,
+    )
+end
+
+function right_moments(cache::ContourSampleCache, moment_count)
+    n, m = size(cache.right_probe)
+    moments = [zeros(ComplexF64, n, m) for _ in 1:(2 * moment_count)]
+    for (z, weight, sample) in zip(cache.nodes, cache.weights, cache.right_samples)
+        μ = (z - cache.chart.center) / cache.chart.radius
+        μpower = one(ComplexF64)
+        for p in eachindex(moments)
+            moments[p] .+= (weight * μpower) .* sample
+            μpower *= μ
+        end
+    end
+    moments
+end
+
+function left_moments(cache::ContourSampleCache, moment_count)
+    n, m = size(cache.left_probe)
+    moments = [zeros(ComplexF64, n, m) for _ in 1:moment_count]
+    for (z, weight, sample) in zip(cache.nodes, cache.weights, cache.left_samples)
+        μ = conj((z - cache.chart.center) / cache.chart.radius)
+        μpower = one(ComplexF64)
+        for p in eachindex(moments)
+            moments[p] .+= (conj(weight) * μpower) .* sample
+            μpower *= μ
+        end
+    end
+    moments
+end
+
+function projected_transfer_moments(cache::ContourSampleCache, moment_count)
+    [cache.left_probe' * M for M in right_moments(cache, moment_count)]
+end
+
 Base.@kwdef struct MomentBasisConfig
     moments::Int = 4
     nodes::Int = 8

@@ -362,6 +362,13 @@ one contour sample cache
   -> repeat
 ```
 
+Current implementation status: `ContourSampleCache` in `pipeline.jl` is the
+first explicit experiment object for this boundary. The fused analytic and
+polynomial diagnostics now build their physical moments and projected transfer
+moments from that cache, rather than assembling one-off local moment arrays.
+This is still an experiment layer object, but it pins the direction for the
+final implementation: chart-owned contour samples first, extractors second.
+
 ## Moment Roles
 
 The algorithm uses two moment families with different jobs.

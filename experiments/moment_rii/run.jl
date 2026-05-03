@@ -2554,31 +2554,24 @@ function run_fused_contour_sample_realization_diagnostic(;
     Random.seed!(seed)
     Xprobe = rand(ComplexF64, n, n)
     Wprobe = rand(ComplexF64, n, n)
-    z_nodes, z_weights = circular_rule(center, radius, basis_nodes)
+    chart = ContourChart(center, radius)
+    cache = build_contour_sample_cache(
+        Tsolve,
+        Tadjoint_solve,
+        Xprobe,
+        Wprobe,
+        chart,
+        basis_nodes;
+        source=:fused_analytic_diagnostic,
+    )
 
     # One original contour-sample set supplies both the physical moments and
     # the small projected transfer moments W' T(z)^(-1) Xprobe.
-    right_moments = initial_moments_generic_scaled(
-        Tsolve,
-        Xprobe,
-        z_nodes,
-        z_weights,
-        center,
-        radius,
-        moment_count,
-    )
-    left_moments = initial_adjoint_moments_generic_scaled(
-        Tadjoint_solve,
-        Wprobe,
-        z_nodes,
-        z_weights,
-        center,
-        radius,
-        moment_count,
-    )
+    right_moment_blocks = right_moments(cache, moment_count)
+    left_moment_blocks = left_moments(cache, moment_count)
 
     Xfused, Sfused, fused_rank, fused_singulars = projected_hankel_pair_identity(
-        right_moments,
+        right_moment_blocks,
         Wprobe,
         moment_count;
         ranktol=ranktol,
@@ -2595,8 +2588,8 @@ function run_fused_contour_sample_realization_diagnostic(;
 
     # Redundant path: build physical trial/test spaces, then resample and solve
     # the projected nonlinear problem with an inner SS contour extraction.
-    Xbasis, right_singulars = moment_block_basis(right_moments, moment_count; ranktol=basis_ranktol)
-    Ybasis, left_singulars = moment_block_basis(left_moments, moment_count; ranktol=basis_ranktol)
+    Xbasis, right_singulars = moment_block_basis(right_moment_blocks, moment_count; ranktol=basis_ranktol)
+    Ybasis, left_singulars = moment_block_basis(left_moment_blocks, moment_count; ranktol=basis_ranktol)
     d = min(size(Xbasis, 2), size(Ybasis, 2))
     old = reduced_analytic_ss_extraction(
         Tmatrix,
@@ -2688,29 +2681,23 @@ function run_fused_polynomial_contour_sample_realization_diagnostic(;
     Random.seed!(seed)
     Xprobe = rand(ComplexF64, n, max(probe_cols, length(expected)))
     Wprobe = rand(ComplexF64, n, max(probe_cols, length(expected)))
-    z_nodes, z_weights = circular_rule(center, radius, basis_nodes)
-
-    right_moments = initial_polynomial_moments_scaled(
-        coeffs,
+    Tsolve = (z, B) -> polynomial_matrix(coeffs, z) \ B
+    Tadjoint_solve = (z, B) -> polynomial_matrix(coeffs, z)' \ B
+    chart = ContourChart(center, radius)
+    cache = build_contour_sample_cache(
+        Tsolve,
+        Tadjoint_solve,
         Xprobe,
-        z_nodes,
-        z_weights,
-        center,
-        radius,
-        moment_count,
-    )
-    left_moments = initial_adjoint_moments_polynomial_scaled(
-        coeffs,
         Wprobe,
-        z_nodes,
-        z_weights,
-        center,
-        radius,
-        moment_count,
+        chart,
+        basis_nodes;
+        source=:fused_polynomial_diagnostic,
     )
+    right_moment_blocks = right_moments(cache, moment_count)
+    left_moment_blocks = left_moments(cache, moment_count)
 
     Xfused, Sfused, fused_rank, fused_singulars = projected_hankel_pair_identity(
-        right_moments,
+        right_moment_blocks,
         Wprobe,
         moment_count;
         ranktol=ranktol,
@@ -2725,8 +2712,8 @@ function run_fused_polynomial_contour_sample_realization_diagnostic(;
     fused_good = fused_inside .& (fused_residuals .<= residual_tol)
     fused_matched = match_expected_count(fused_values[fused_good], expected; atol=match_atol)
 
-    Xbasis, right_singulars = moment_block_basis(right_moments, moment_count; ranktol=basis_ranktol)
-    Ybasis, left_singulars = moment_block_basis(left_moments, moment_count; ranktol=basis_ranktol)
+    Xbasis, right_singulars = moment_block_basis(right_moment_blocks, moment_count; ranktol=basis_ranktol)
+    Ybasis, left_singulars = moment_block_basis(left_moment_blocks, moment_count; ranktol=basis_ranktol)
     d = min(size(Xbasis, 2), size(Ybasis, 2))
     old = reduced_analytic_ss_extraction(
         Tmatrix,
