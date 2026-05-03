@@ -27,7 +27,10 @@ The sparse linear smoke confirms that generic sparse `Tmatrix` and sparse
 `Tsolve` can pass through this pipeline. The stored-factor sparse smoke adds
 the next rung: contour-node sparse factorizations can be cached and reused
 across residual-Laurent updates while reproducing the generic sparse update.
-This is still a small control problem, not a sparse benchmark.
+The sparse remote stored-factor smoke pins the same idea across persistent
+Julia workers: each worker owns a fixed contour-node subset and reuses its
+node-local sparse factors across repeated updates. These are still small
+control problems, not sparse benchmarks.
 
 ## Sparse Rung
 
@@ -130,10 +133,15 @@ buffers and sparse/factorization storage, then benchmark against the serial and
 one-shot remote paths.
 `run_sparse_stored_factor_residual_laurent_smoke` verifies cached contour-node
 sparse factorizations reproduce the generic sparse residual-Laurent update and
-that a repeated update reuses the same node factors. `run_sparse_remote_residual_laurent_worker_smoke`
-also verifies that sparse linear operator closures pass through the same
-persistent worker boundary and records the same lightweight timing shape. It
-does not yet combine remote workers with node-local sparse factor caches, reuse
-symbolic sparse factorizations, or keep sparse work buffers node-local.
+that a repeated update reuses the same node factors.
+`run_sparse_remote_residual_laurent_worker_smoke` also verifies that sparse
+linear operator closures pass through the same persistent worker boundary and
+records the same lightweight timing shape.
+`run_sparse_remote_stored_factor_worker_smoke` combines those two rungs: a
+sparse linear control runs through persistent worker-owned contour partitions,
+the first update creates the expected node-local sparse factors, and the second
+update reuses those factors while matching the serial residual-Laurent update.
+It does not yet provide symbolic sparse factor reuse, reusable sparse work
+buffers, nonlinear sparse gallery coverage, or benchmark-level performance.
 
 Only after that should the prototype move to nonlinear sparse gallery problems.

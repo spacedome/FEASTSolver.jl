@@ -4622,6 +4622,212 @@ function run_sparse_remote_residual_laurent_worker_smoke(;
     end
 end
 
+function run_sparse_remote_stored_factor_worker_smoke(;
+    worker_count=2,
+    n=24,
+    center=4.5 + 0.0im,
+    radius=4.1,
+    residual_tol=1e-10,
+    match_atol=1e-8,
+    print_rows=true,
+)
+    worker_ids, added = ensure_moment_remote_workers(worker_count)
+    try
+        A = spdiagm(0 => ComplexF64.(1:n))
+        Isp = sparse(I, n, n)
+        Tmatrix(z) = z * Isp - A
+        Tderivative(z) = Isp
+        Tsolve(z, B) = Tmatrix(z) \ B
+        Tadjoint_solve(z, B) = Tmatrix(z)' \ B
+        expected = ComplexF64[λ for λ in 1:n if abs(λ - center) <= radius]
+        chart = ContourChart(center, radius)
+        ctx = (
+            Tmatrix=Tmatrix,
+            Tderivative=Tderivative,
+            Tsolve=Tsolve,
+            Tadjoint_solve=Tadjoint_solve,
+            expected=expected,
+            n=n,
+            component_scales=ones(Float64, n),
+        )
+        basis = MomentBasisConfig(;
+            moments=2,
+            nodes=24,
+            ranktol=1e-10,
+            seed=44001,
+        )
+        extractor = ReducedExtractorConfig(;
+            extractor=:ss_counted,
+            determinant_nodes=256,
+            determinant_capacity=n,
+            reduced_moments=8,
+            reduced_nodes=256,
+            residual_normalization=:vector,
+        )
+        update = ResidualUpdateConfig(;
+            moment_count=1,
+            rii_nodes=64,
+            residual_ranktol=1e-10,
+            compression_ranktol=1e-10,
+        )
+        trial = initial_dual_trial_spaces(ctx, chart, basis)
+        extraction0 = extract_reduced_nep(ctx, trial, chart, extractor)
+        serial_trial, serial_stats = residual_laurent_update(ctx, trial, extraction0, chart, update)
+
+        z_nodes, z_weights = circular_rule(chart, update.rii_nodes)
+        assignments = [Int[] for _ in worker_ids]
+        for (index, _) in enumerate(z_nodes)
+            push!(assignments[mod1(index, length(worker_ids))], index)
+        end
+        key = gensym(:moment_rii_sparse_remote)
+        run_path = joinpath(@__DIR__, "run.jl")
+        for pid in worker_ids
+            Distributed.remotecall_wait(Main.include, pid, run_path)
+        end
+        for (pid, local_indices) in zip(worker_ids, assignments)
+            Distributed.remotecall_wait(
+                init_sparse_factor_residual_laurent_remote_worker!,
+                pid,
+                key,
+                Tmatrix,
+                z_nodes[local_indices],
+                z_weights[local_indices],
+                chart.center,
+                chart.radius,
+                update.moment_count,
+            )
+        end
+
+        function remote_cached_step()
+            Rright_basis, Rleft_basis, right_residual_singulars, left_residual_singulars =
+                residual_blocks_from_matrix_extraction(ctx.Tmatrix, extraction0; residual_ranktol=update.residual_ranktol)
+            right_moments = [zeros(ComplexF64, n, size(Rright_basis, 2)) for _ in 1:update.moment_count]
+            left_moments = [zeros(ComplexF64, n, size(Rleft_basis, 2)) for _ in 1:update.moment_count]
+            futures = [
+                Distributed.remotecall(
+                    residual_laurent_sparse_factor_remote_worker_step,
+                    pid,
+                    key,
+                    Rright_basis,
+                    Rleft_basis,
+                )
+                for pid in worker_ids
+            ]
+            worker_reports = NamedTuple[]
+            for future in futures
+                report = fetch(future)
+                for k in 1:update.moment_count
+                    right_moments[k] .+= report.right_moments[k]
+                    left_moments[k] .+= report.left_moments[k]
+                end
+                push!(
+                    worker_reports,
+                    (
+                        pid=report.pid,
+                        nodes=report.nodes,
+                        elapsed_ns=report.elapsed_ns,
+                        right_cols=size(Rright_basis, 2),
+                        left_cols=size(Rleft_basis, 2),
+                        right_factorizations=report.right_factorizations,
+                        left_factorizations=report.left_factorizations,
+                        right_solves=report.right_solves,
+                        left_solves=report.left_solves,
+                    ),
+                )
+            end
+            Xnew, Ynew, Xcandidate, Ycandidate, right_singulars, left_singulars =
+                compress_residual_laurent_candidates(
+                    trial.X,
+                    trial.Y,
+                    right_moments,
+                    left_moments;
+                    compression_ranktol=update.compression_ranktol,
+                )
+            updated = common_square_trial_spaces(TrialSpaces(
+                X=Xnew,
+                Y=Ynew,
+                right_singulars=Float64.(right_singulars),
+                left_singulars=Float64.(left_singulars),
+                source=:sparse_factor_remote_residual_laurent_update,
+            ))
+            stats = (
+                right_residual_rank=size(Rright_basis, 2),
+                left_residual_rank=size(Rleft_basis, 2),
+                right_residual_singulars=right_residual_singulars,
+                left_residual_singulars=left_residual_singulars,
+                right_candidate_cols=size(Xcandidate, 2),
+                left_candidate_cols=size(Ycandidate, 2),
+                right_singulars=right_singulars,
+                left_singulars=left_singulars,
+                workers=worker_reports,
+            )
+            updated, stats
+        end
+
+        remote_result = try
+            first_step = remote_cached_step()
+            second_step = remote_cached_step()
+            (first_step=first_step, second_step=second_step)
+        finally
+            for pid in worker_ids
+                Distributed.remotecall_wait(cleanup_residual_laurent_remote_worker!, pid, key)
+            end
+        end
+        remote_trial1, remote_stats1 = remote_result.first_step
+        remote_trial2, remote_stats2 = remote_result.second_step
+        remote_extraction = extract_reduced_nep(ctx, remote_trial1, chart, extractor)
+        serial_extraction = extract_reduced_nep(ctx, serial_trial, chart, extractor)
+        serial_summary = dual_scalar_rii_summary(serial_extraction, expected; residual_tol=residual_tol, match_atol=match_atol)
+        remote_summary = dual_scalar_rii_summary(remote_extraction, expected; residual_tol=residual_tol, match_atol=match_atol)
+        Px = serial_trial.X * serial_trial.X' - remote_trial1.X * remote_trial1.X'
+        Py = serial_trial.Y * serial_trial.Y' - remote_trial1.Y * remote_trial1.Y'
+        Px2 = remote_trial1.X * remote_trial1.X' - remote_trial2.X * remote_trial2.X'
+        Py2 = remote_trial1.Y * remote_trial1.Y' - remote_trial2.Y * remote_trial2.Y'
+        result = (
+            expected=length(expected),
+            sparse_matrix=Tmatrix(center + radius * im) isa AbstractSparseMatrix,
+            workers=worker_ids,
+            assignments=assignments,
+            serial=serial_summary,
+            remote=remote_summary,
+            x_projection_gap=opnorm(Px),
+            y_projection_gap=opnorm(Py),
+            repeat_x_projection_gap=opnorm(Px2),
+            repeat_y_projection_gap=opnorm(Py2),
+            serial_stats=serial_stats,
+            remote_stats=remote_stats1,
+            remote_stats_second=remote_stats2,
+            first_worker_factorizations=sum(report.right_factorizations + report.left_factorizations for report in remote_stats1.workers; init=0),
+            second_worker_factorizations=sum(report.right_factorizations + report.left_factorizations for report in remote_stats2.workers; init=0),
+            first_worker_solves=sum(report.right_solves + report.left_solves for report in remote_stats1.workers; init=0),
+            second_worker_solves=sum(report.right_solves + report.left_solves for report in remote_stats2.workers; init=0),
+        )
+        if print_rows
+            println()
+            println("Sparse remote stored-factor worker smoke")
+            println("  verifies sparse contour-node factors live on persistent workers and are reused across updates")
+            @printf(
+                "  workers=%s expected=%d serial=%d/%d remote=%d/%d projection_gap=(%.3e, %.3e) factors=%d->%d solves=%d->%d\n",
+                string(worker_ids),
+                result.expected,
+                result.serial.matched,
+                result.expected,
+                result.remote.matched,
+                result.expected,
+                result.x_projection_gap,
+                result.y_projection_gap,
+                result.first_worker_factorizations,
+                result.second_worker_factorizations,
+                result.first_worker_solves,
+                result.second_worker_solves,
+            )
+        end
+        result
+    finally
+        !isempty(added) && Distributed.rmprocs(added)
+    end
+end
+
 function run_residual_laurent_update_ladder_diagnostic(;
     coupling=10.0,
     outer_radius=20.0,

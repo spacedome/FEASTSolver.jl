@@ -1195,6 +1195,32 @@ end
     @test 0 < result.timing.remote_worker_max_ns <= result.timing.remote_worker_sum_ns
 end
 
+@testitem "experimental moment RII: sparse remote workers reuse stored contour factors" tags=[:slow, :distributed] begin
+    if !isdefined(Main, :run_sparse_remote_stored_factor_worker_smoke)
+        Base.include(Main, joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+    end
+
+    result = Main.run_sparse_remote_stored_factor_worker_smoke(; worker_count=2, print_rows=false)
+
+    @test result.sparse_matrix
+    @test length(result.workers) == 2
+    @test result.expected == 8
+    @test result.serial.matched == result.expected
+    @test result.remote.matched == result.expected
+    @test result.remote.spurious_good == 0
+    @test result.x_projection_gap <= 1e-12
+    @test result.y_projection_gap <= 1e-12
+    @test result.repeat_x_projection_gap <= 1e-12
+    @test result.repeat_y_projection_gap <= 1e-12
+    @test sum(length, result.assignments) == 64
+    @test result.first_worker_factorizations == 128
+    @test result.second_worker_factorizations == result.first_worker_factorizations
+    @test result.first_worker_solves == 128
+    @test result.second_worker_solves == 2 * result.first_worker_solves
+    @test result.remote_stats.right_candidate_cols == result.serial_stats.right_candidate_cols
+    @test result.remote_stats.left_candidate_cols == result.serial_stats.left_candidate_cols
+end
+
 @testitem "experimental moment RII: residual Laurent update repairs nonnormal chart cover" tags=[:slow, :moment_heavy] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 

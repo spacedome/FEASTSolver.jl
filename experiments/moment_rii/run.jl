@@ -4667,6 +4667,87 @@ function cleanup_residual_laurent_remote_worker!(key::Symbol)
     existed
 end
 
+function init_sparse_factor_residual_laurent_remote_worker!(
+    key::Symbol,
+    Tmatrix,
+    z_nodes,
+    z_weights,
+    center,
+    radius,
+    moment_count,
+)
+    _MOMENT_RII_REMOTE_WORKSPACES[key] = (
+        Tmatrix=Tmatrix,
+        z_nodes=ComplexF64.(z_nodes),
+        z_weights=ComplexF64.(z_weights),
+        center=ComplexF64(center),
+        radius=Float64(radius),
+        moment_count=Int(moment_count),
+        right_factors=Dict{ComplexF64, Any}(),
+        left_factors=Dict{ComplexF64, Any}(),
+        right_solves=Ref(0),
+        left_solves=Ref(0),
+    )
+    (
+        pid=myid(),
+        nodes=length(z_nodes),
+        key=key,
+    )
+end
+
+function sparse_factor_workspace_solve!(ws, z, B; adjoint=false)
+    key = ComplexF64(z)
+    factors = adjoint ? ws.left_factors : ws.right_factors
+    if !haskey(factors, key)
+        factors[key] = lu(adjoint ? ws.Tmatrix(z)' : ws.Tmatrix(z))
+    end
+    if adjoint
+        ws.left_solves[] += 1
+    else
+        ws.right_solves[] += 1
+    end
+    factors[key] \ B
+end
+
+function residual_laurent_sparse_factor_remote_worker_step(key::Symbol, Rright_basis, Rleft_basis)
+    ws = _MOMENT_RII_REMOTE_WORKSPACES[key]
+    start_ns = time_ns()
+    n = size(Rright_basis, 1)
+    right_moments = [zeros(ComplexF64, n, size(Rright_basis, 2)) for _ in 1:ws.moment_count]
+    left_moments = [zeros(ComplexF64, n, size(Rleft_basis, 2)) for _ in 1:ws.moment_count]
+
+    for (z, weight) in zip(ws.z_nodes, ws.z_weights)
+        ζ = (z - ws.center) / ws.radius
+        base = weight / (z - ws.center)
+        solved_right = size(Rright_basis, 2) == 0 ?
+            zeros(ComplexF64, n, 0) :
+            sparse_factor_workspace_solve!(ws, z, Rright_basis; adjoint=false)
+        solved_left = size(Rleft_basis, 2) == 0 ?
+            zeros(ComplexF64, n, 0) :
+            sparse_factor_workspace_solve!(ws, z, Rleft_basis; adjoint=true)
+        right_power = one(ComplexF64)
+        left_power = one(ComplexF64)
+        for k in 1:ws.moment_count
+            right_moments[k] .+= (base * right_power) .* solved_right
+            left_moments[k] .+= (conj(base) * left_power) .* solved_left
+            right_power /= ζ
+            left_power *= ζ
+        end
+    end
+
+    (
+        right_moments=right_moments,
+        left_moments=left_moments,
+        nodes=length(ws.z_nodes),
+        elapsed_ns=time_ns() - start_ns,
+        pid=myid(),
+        right_factorizations=length(ws.right_factors),
+        left_factorizations=length(ws.left_factors),
+        right_solves=ws.right_solves[],
+        left_solves=ws.left_solves[],
+    )
+end
+
 function compress_residual_laurent_candidates(
     Xbasis,
     Ybasis,

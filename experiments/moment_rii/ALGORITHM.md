@@ -220,6 +220,13 @@ per scalar Ritz value.
   serial residual-Laurent update on the sparse linear control while preserving
   the same lightweight timing shape. This is generic sparse compatibility
   evidence, not sparse factorization reuse.
+- Sparse remote stored-factor worker smoke: persistent Julia workers own
+  node-local sparse factors for fixed contour subsets. The first update creates
+  the expected right/left node factors, the repeated update reuses those same
+  factors, and both remote updates match the serial residual-Laurent physical
+  spaces to roundoff projection gaps. This pins fixed-node sparse factor
+  ownership across the process boundary without claiming symbolic sparse reuse
+  or benchmark-level performance.
 - Adjacent implementation recheck: RSRR, SLEPc CISS, and Riesz-projection
   methods all support the current separation between contour-node solves,
   reduced extraction, and selection/observability policy. They do not appear to
@@ -311,6 +318,7 @@ Representative tests:
 - `just test --slow 'low-rank compression preserves update'`
 - `just test --tags distributed 'remote contour workers'`
 - `just test --tags distributed 'sparse residual Laurent update runs on remote contour workers'`
+- `just test --tags distributed 'sparse remote workers reuse'`
 - `just test --preset moment-heavy 'residual Laurent update'`
 - `just test --preset moment-count`
 - `just test --slow 'analytic block Newton'`
