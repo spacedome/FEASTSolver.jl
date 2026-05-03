@@ -150,7 +150,13 @@ update reuses those factors while matching the serial residual-Laurent update.
 `run_sparse_nonlinear_remote_stored_factor_worker_smoke` repeats that
 stored-factor worker path on the nonlinear sparse quadratic gallery control.
 It does not yet provide symbolic sparse factor reuse, reusable sparse work
-buffers, realistic sparse gallery coverage, or benchmark-level performance.
+buffers, broad realistic sparse gallery coverage, or benchmark-level
+performance.
 
-The next sparse prototype should move from this diagonal known-root nonlinear
-control to realistic sparse gallery problems.
+The first realistic sparse gallery smoke is now
+`run_sparse_schrodinger_moment_gallery_smoke`: it uses the moving-boundary
+Schrodinger sparse gallery operator, verifies the target count by the
+full-operator argument-principle estimator, and checks residual-Laurent repair
+on the small `n=128` instance. This is still a correctness/diagnostic rung, not
+a sparse performance benchmark. The next prototype should broaden this to
+larger and less benign sparse gallery problems.

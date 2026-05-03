@@ -245,6 +245,24 @@ end
     @test result.updated.left_residual_rank <= 2 * result.expected
 end
 
+@testitem "experimental moment RII: sparse Schrodinger gallery count and residual repair" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_sparse_schrodinger_moment_gallery_smoke(; print_rows=false)
+
+    @test result.sparse_matrix
+    @test result.prototype_sparse
+    @test result.target_count == 3
+    @test result.target_count_reliable
+    @test result.initial.inside == result.target_count
+    @test result.updated.inside == result.target_count
+    @test result.updated.good == result.target_count
+    @test result.updated.max_inside_residual <= 1e-7
+    @test result.updated.max_inside_residual < result.initial.max_inside_residual
+    @test result.updated.right_residual_rank == result.target_count
+    @test result.updated.left_residual_rank == result.target_count
+end
+
 @testitem "experimental moment RII: sparse nonlinear remote workers reuse stored contour factors" tags=[:slow, :distributed] begin
     if !isdefined(Main, :run_sparse_nonlinear_remote_stored_factor_worker_smoke)
         Base.include(Main, joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))

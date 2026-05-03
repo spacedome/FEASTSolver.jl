@@ -733,6 +733,55 @@ function sparse_quadratic_gallery_moment_context(n, center, radius)
     )
 end
 
+function sparse_schrodinger_movebc_derivative(op, z)
+    root = sqrt(z + op.V0)
+    span = op.L1 - op.L0
+    dg = span * sinh(span * root) / (2root)
+    df = (span * root * cosh(span * root) - sinh(span * root)) / (2root^3)
+    -op.I0 + dg * op.G + df * op.F
+end
+
+function sparse_schrodinger_movebc_moment_context(n, center, radius)
+    T = feast_gallery("schrodinger_movebc", n)
+    prototype = operator_prototype(T)
+    T_update = matrix_materializer(T)
+
+    function Tmatrix(z)
+        M = similar(prototype)
+        T_update(M, z)
+        M
+    end
+
+    chart = ContourChart(center, radius)
+    (
+        operator=T,
+        prototype=prototype,
+        T_update=T_update,
+        chart=chart,
+        ctx=(
+            Tmatrix=Tmatrix,
+            Tderivative=z -> sparse_schrodinger_movebc_derivative(T, z),
+            Tsolve=(z, B) -> Tmatrix(z) \ B,
+            Tadjoint_solve=(z, B) -> adjoint(Tmatrix(z)) \ B,
+            expected=ComplexF64[],
+            n=n,
+            component_scales=ones(Float64, n),
+        ),
+    )
+end
+
+function extraction_count_summary(extraction; residual_tol)
+    inside = extraction.inside
+    good = inside .& (extraction.residuals .<= residual_tol)
+    (
+        inside=count(inside),
+        good=count(good),
+        max_inside_residual=any(inside) ? maximum(extraction.residuals[inside]) : Inf,
+        values=ComplexF64.(extraction.values[inside]),
+        residuals=Float64.(extraction.residuals[inside]),
+    )
+end
+
 function run_sparse_nonlinear_gallery_moment_pipeline_smoke(;
     n=16,
     center=3.5 + 0.0im,
@@ -804,6 +853,92 @@ function run_sparse_nonlinear_gallery_moment_pipeline_smoke(;
             result.expected,
             result.updated.right_residual_rank,
             result.updated.left_residual_rank,
+            result.updated.right_basis_cols,
+            result.updated.left_basis_cols,
+        )
+    end
+    result
+end
+
+function run_sparse_schrodinger_moment_gallery_smoke(;
+    n=128,
+    center=-35.0 + 0.0im,
+    radius=4.2,
+    residual_tol=1e-5,
+    count_error_tol=1e-4,
+    print_rows=true,
+)
+    problem = sparse_schrodinger_movebc_moment_context(n, center, radius)
+    count_roots, count_estimate, count_sums = determinant_power_sums(
+        problem.ctx.Tmatrix,
+        z -> Matrix(problem.ctx.Tderivative(z));
+        center=center,
+        radius=radius,
+        nodes=512,
+        capacity=16,
+    )
+    basis = MomentBasisConfig(;
+        moments=2,
+        nodes=24,
+        ranktol=1e-10,
+        seed=44031,
+    )
+    extractor = ReducedExtractorConfig(;
+        extractor=:ss_counted,
+        determinant_nodes=512,
+        determinant_capacity=16,
+        reduced_moments=8,
+        reduced_nodes=512,
+        residual_normalization=:vector,
+    )
+    update = ResidualUpdateConfig(;
+        moment_count=1,
+        rii_nodes=48,
+        residual_ranktol=1e-10,
+        compression_ranktol=1e-10,
+    )
+    trial0 = initial_dual_trial_spaces(problem.ctx, problem.chart, basis)
+    extraction0 = extract_reduced_nep(problem.ctx, trial0, problem.chart, extractor)
+    initial = extraction_count_summary(extraction0; residual_tol=residual_tol)
+    trial1, stats = residual_laurent_update(problem.ctx, trial0, extraction0, problem.chart, update)
+    extraction1 = extract_reduced_nep(problem.ctx, trial1, problem.chart, extractor)
+    updated = extraction_count_summary(extraction1; residual_tol=residual_tol)
+    result = (
+        n=n,
+        sparse_matrix=problem.ctx.Tmatrix(center + radius * im) isa AbstractSparseMatrix,
+        prototype_sparse=problem.prototype isa AbstractSparseMatrix,
+        target_count=count_estimate,
+        target_count_error=abs(count_sums[1] - count_estimate),
+        target_count_reliable=abs(count_sums[1] - count_estimate) <= count_error_tol,
+        count_roots=center .+ radius .* count_roots,
+        initial=initial,
+        updated=merge(
+            (
+                right_residual_rank=stats.right_residual_rank,
+                left_residual_rank=stats.left_residual_rank,
+                right_candidate_cols=stats.right_candidate_cols,
+                left_candidate_cols=stats.left_candidate_cols,
+                right_basis_cols=size(trial1.X, 2),
+                left_basis_cols=size(trial1.Y, 2),
+            ),
+            updated,
+        ),
+    )
+    if print_rows
+        println()
+        println("Sparse Schrodinger gallery moment smoke")
+        println("  realistic sparse moving-boundary Schrodinger gallery operator; validates count and residual repair")
+        @printf(
+            "  n=%d count=%d err=%.3e initial_good=%d/%d max=%.3e updated_good=%d/%d max=%.3e basis=(%d,%d)\n",
+            result.n,
+            result.target_count,
+            result.target_count_error,
+            result.initial.good,
+            result.target_count,
+            result.initial.max_inside_residual,
+            result.updated.good,
+            result.target_count,
+            result.updated.max_inside_residual,
             result.updated.right_basis_cols,
             result.updated.left_basis_cols,
         )

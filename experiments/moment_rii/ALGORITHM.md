@@ -238,6 +238,12 @@ per scalar Ritz value.
   This verifies that nonlinear sparse gallery materialization, residual
   Laurent repair, and persistent worker-owned contour factors compose correctly
   on a known-root NEP.
+- Sparse Schrodinger gallery smoke: the FEAST-native moving-boundary
+  Schrodinger sparse gallery operator is exercised on the established
+  `center=-35`, `radius=4.2` region at small size. A full-operator contour
+  count estimates three target eigenvalues, and the residual-Laurent update
+  improves all three action residuals to the strict threshold. This is
+  realistic sparse NEP evidence, not a scaling benchmark.
 - Adjacent implementation recheck: RSRR, SLEPc CISS, and Riesz-projection
   methods all support the current separation between contour-node solves,
   reduced extraction, and selection/observability policy. They do not appear to
@@ -328,6 +334,7 @@ Representative tests:
 - `just test --slow 'dual linear RII'`
 - `just test --slow 'low-rank compression preserves update'`
 - `just test --slow 'sparse nonlinear gallery operator'`
+- `just test --slow 'sparse Schrodinger gallery'`
 - `just test --tags distributed 'remote contour workers'`
 - `just test --tags distributed 'sparse residual Laurent update runs on remote contour workers'`
 - `just test --tags distributed 'sparse remote workers reuse'`
