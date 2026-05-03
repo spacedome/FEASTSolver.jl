@@ -293,7 +293,11 @@ local statements.
   residual-enrichment parameter and treat basis/extractor moments as the layer
   where realization rank and recurrence are measured. It needs constants
   involving the realized pole geometry, rank decisions, quadrature error, and
-  the angle between the enriched physical spaces and the target residue spaces.
+  the quality of the reduced Ritz/eigenvector data inside the realized
+  subspace. A sparse linear diagnostic shows why this cannot be reduced to
+  subspace angle alone: the extracted right/left subspaces can already have
+  projection gaps near roundoff while the physical residuals remain too large
+  until the residual-Laurent update is applied.
 - **Realization closure:** if the current `X,Y` exactly contain the right and
   left spectral residue spaces for all roots inside the chart, then the
   residual blocks vanish and the update adds no physical directions. If the

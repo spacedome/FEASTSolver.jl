@@ -290,6 +290,12 @@ that setting.
   all eight with residuals near machine precision. This is implementation
   evidence for the generic operator boundary, not a sparse-optimized moment
   solver.
+- Sparse linear subspace/residual boundary: the same sparse diagonal control
+  now records that the extracted right/left subspaces can already have
+  projection gaps near roundoff before the residual-Laurent update, while the
+  physical residuals are still too large. The update repairs residual quality
+  and retained eigenpairs, not merely subspace angle. This rejects a pure
+  angle-improvement theorem as insufficient.
 - Sparse nonlinear gallery smoke: a FEAST-native sparse quadratic polynomial
   gallery operator `T(z)=z^2I-D^2` flows through the same moment pipeline using
   a sparse prototype and in-place gallery materializer. The target positive

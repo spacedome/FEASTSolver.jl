@@ -605,16 +605,44 @@ function run_sparse_linear_moment_pipeline_smoke(;
         residual_ranktol=1e-10,
         compression_ranktol=1e-10,
     )
+    target_indices = Int.(round.(real.(expected)))
+    target_basis = Matrix{ComplexF64}(I, n, n)[:, target_indices]
+    target_projector = target_basis * target_basis'
     trial0 = initial_dual_trial_spaces(ctx, chart, basis)
     extraction0 = extract_reduced_nep(ctx, trial0, chart, extractor)
     summary0 = dual_scalar_rii_summary(extraction0, expected; residual_tol=residual_tol, match_atol=match_atol)
     trial1, stats = residual_laurent_update(ctx, trial0, extraction0, chart, update)
     extraction1 = extract_reduced_nep(ctx, trial1, chart, extractor)
     summary1 = dual_scalar_rii_summary(extraction1, expected; residual_tol=residual_tol, match_atol=match_atol)
+    function extracted_projection_gap(extraction, side)
+        selected = extraction.inside
+        vectors = side === :right ? extraction.right_vectors[:, selected] : extraction.left_vectors[:, selected]
+        basis_vectors, _ = physical_basis_from_columns(Matrix(vectors); ranktol=1e-10)
+        size(basis_vectors, 2) == 0 && return Inf
+        opnorm(target_projector - basis_vectors * basis_vectors')
+    end
+    initial_right_gap = opnorm(target_projector - trial0.X * trial0.X')
+    initial_left_gap = opnorm(target_projector - trial0.Y * trial0.Y')
+    updated_right_gap = opnorm(target_projector - trial1.X * trial1.X')
+    updated_left_gap = opnorm(target_projector - trial1.Y * trial1.Y')
+    initial_extracted_right_gap = extracted_projection_gap(extraction0, :right)
+    initial_extracted_left_gap = extracted_projection_gap(extraction0, :left)
+    updated_extracted_right_gap = extracted_projection_gap(extraction1, :right)
+    updated_extracted_left_gap = extracted_projection_gap(extraction1, :left)
     result = (
         expected=length(expected),
         sparse_matrix=Tmatrix(center + radius * im) isa AbstractSparseMatrix,
-        initial=summary0,
+        initial=merge(
+            (
+                right_projection_gap=initial_right_gap,
+                left_projection_gap=initial_left_gap,
+                right_extracted_projection_gap=initial_extracted_right_gap,
+                left_extracted_projection_gap=initial_extracted_left_gap,
+                right_basis_cols=size(trial0.X, 2),
+                left_basis_cols=size(trial0.Y, 2),
+            ),
+            summary0,
+        ),
         updated=merge(
             (
                 right_residual_rank=stats.right_residual_rank,
@@ -623,6 +651,10 @@ function run_sparse_linear_moment_pipeline_smoke(;
                 left_candidate_cols=stats.left_candidate_cols,
                 right_basis_cols=size(trial1.X, 2),
                 left_basis_cols=size(trial1.Y, 2),
+                right_projection_gap=updated_right_gap,
+                left_projection_gap=updated_left_gap,
+                right_extracted_projection_gap=updated_extracted_right_gap,
+                left_extracted_projection_gap=updated_extracted_left_gap,
             ),
             summary1,
         ),
@@ -632,19 +664,23 @@ function run_sparse_linear_moment_pipeline_smoke(;
         println("Sparse linear moment pipeline smoke")
         println("  sparse diagonal T(z)=zI-A; validates generic Tmatrix/Tsolve path accepts sparse matrices")
         @printf(
-            "  n=%d expected=%d sparse=%s initial_matched=%d/%d updated_matched=%d/%d residual_rank=(%d,%d) basis=(%d,%d)\n",
-            n,
-            result.expected,
-            string(result.sparse_matrix),
-            result.initial.matched,
-            result.expected,
+        "  n=%d expected=%d sparse=%s initial_matched=%d/%d updated_matched=%d/%d residual_rank=(%d,%d) basis=(%d,%d) extracted_gap=(%.3e,%.3e)->(%.3e,%.3e)\n",
+        n,
+        result.expected,
+        string(result.sparse_matrix),
+        result.initial.matched,
+        result.expected,
             result.updated.matched,
             result.expected,
             result.updated.right_residual_rank,
-            result.updated.left_residual_rank,
-            result.updated.right_basis_cols,
-            result.updated.left_basis_cols,
-        )
+        result.updated.left_residual_rank,
+        result.updated.right_basis_cols,
+        result.updated.left_basis_cols,
+        result.initial.right_extracted_projection_gap,
+        result.initial.left_extracted_projection_gap,
+        result.updated.right_extracted_projection_gap,
+        result.updated.left_extracted_projection_gap,
+    )
     end
     result
 end

@@ -399,9 +399,13 @@ end
     @test result.initial.inside == result.expected
     @test result.initial.matched == 0
     @test result.initial.max_residual > 1e-10
+    @test result.initial.right_extracted_projection_gap <= 1e-8
+    @test result.initial.left_extracted_projection_gap <= 1e-8
     @test result.updated.matched == result.expected
     @test result.updated.spurious_good == 0
     @test result.updated.max_residual <= 1e-10
+    @test result.updated.right_extracted_projection_gap <= 1e-10
+    @test result.updated.left_extracted_projection_gap <= 1e-10
     @test result.updated.right_residual_rank <= result.expected
     @test result.updated.left_residual_rank <= result.expected
 end
