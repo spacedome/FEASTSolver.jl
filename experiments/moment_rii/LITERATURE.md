@@ -340,6 +340,27 @@ Sources checked:
   65(2), 2023, 439--470.
   DOI: https://doi.org/10.1137/20M1389303.
 
+### May 2026 Recheck
+
+A targeted search on 2026-05-03 again found the same immediate neighborhood:
+Brennan--Embree--Gugercin for systems/Loewner contour realization, Neumaier for
+scalar RII, NLFEAST for contour-generalized RII, Beyn/SS-style contour
+extraction, and Barkatou--Boito--Segura Ugalde for contour-computed invariant
+pairs. The search did not reveal a method that combines these into the specific
+algorithmic loop we are testing:
+
+```text
+left/right contour realization
+  -> reduced NEP extraction
+  -> residual Laurent moment repair of the physical trial/test spaces
+  -> re-extraction in local charts
+```
+
+The closest conceptual matches remain contour invariant-pair extraction plus
+Newton refinement, and systems-theoretic Loewner realization. Those support the
+state space and extractor story, but they do not appear to replace the
+residual-Laurent update or the chart/count policy.
+
 ## Actionable Design After Focused Pass
 
 The literature pass supports the direction of the current experiment rather

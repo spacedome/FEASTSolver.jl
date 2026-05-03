@@ -102,21 +102,29 @@ global block Newton, or rational-coordinate-only fixes.
   multiplicity-aware retained state representation with derivative/Jordan data.
   That remains an escalation path.
 - The reduced-extractor interface is still experimental.
-- More problem classes are needed before calling the algorithm publication
-  ready.
+- More problem classes are still needed before calling the algorithm
+  publication ready, but the count-driven lower rung now covers scalar delay,
+  scalar two-delay, nonnormal multi-delay, dense coupled two-delay, near-pole
+  rational, and multiplicity controls without exact-root stopping or
+  validation oracles.
 - Broader literature review now has a first pass over rational Krylov/NLEIGS,
-  infinite-GMRES contour solves, SS parameter selection, and quasi-Newton/RII
-  interpretations. A publication-level novelty review should still be done
-  before making final claims.
+  infinite-GMRES contour solves, SS parameter selection, quasi-Newton/RII
+  interpretations, systems/Loewner contour methods, and contour invariant-pair
+  methods. A publication-level novelty review should still be done before
+  making final claims.
 
 ## Completion Status
 
 The goal is not complete. We have a strong candidate algorithm family with
-test-backed boundaries, but not a decisive final solver or proof. The next
-productive steps are:
+test-backed boundaries, and the oracle-free count-driven branch is now covered
+across several analytic problem classes, but this is not yet a decisive final
+solver or proof. The next productive steps are:
 
-1. Add more problem classes that stress the same policy without relying on known
-   exact roots.
-2. Start a broader literature pass before making novelty claims.
+1. Stress the same policy on harder matrix-valued analytic problems where
+   residual-small extras, weak support, and local count warnings interact in
+   the same run.
+2. Continue the broader literature pass before making novelty claims, focusing
+   on whether any published contour method iterates a finite realization by a
+   residual-inverse moment correction.
 3. Only after those pass, consider extracting stable pieces from the experiment
    into a real implementation plan.
