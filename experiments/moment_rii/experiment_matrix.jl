@@ -2912,9 +2912,6 @@ function run_count_driven_adaptive_grid_refinement(;
         biorthogonalize = numerics.biorthogonalize
     end
     pipeline_configs = numerics === nothing ? nothing : moment_pipeline_configs(numerics)
-    basis_config = pipeline_configs === nothing ? nothing : pipeline_configs.basis
-    extraction_config = pipeline_configs === nothing ? nothing : pipeline_configs.extractor
-    update_config = pipeline_configs === nothing ? nothing : pipeline_configs.update
     count = full_operator_count_estimate(
         cases;
         outer_center=outer_center,
