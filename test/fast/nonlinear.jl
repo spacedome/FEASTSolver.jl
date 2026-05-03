@@ -165,6 +165,75 @@ end
     @test configs.update.biorthogonalize
 end
 
+@testitem "experimental moment RII: pipeline configs match loose chart keywords" begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    cases = (scalar_rational_case(; root=0.15 + 0.05im, pole=2.5, name="contract"),)
+    numerics = CountDrivenNumericsConfig(;
+        iterations=1,
+        basis_moments=1,
+        basis_nodes=8,
+        update_moment_count=1,
+        rii_nodes=32,
+        basis_ranktol=1e-10,
+        residual_ranktol=1e-10,
+        compression_ranktol=1e-10,
+        determinant_nodes=128,
+        determinant_capacity=8,
+        extractor=:loewner_counted,
+        reduced_moments=4,
+        reduced_nodes=128,
+        reduced_ranktol=1e-10,
+        loewner_points=4,
+        residual_normalization=:operator,
+    )
+    configs = moment_pipeline_configs(numerics; seed=1441)
+    common = (
+        cases=cases,
+        center=0.0 + 0.0im,
+        radius=0.5,
+        residual_tol=1e-8,
+        match_atol=1e-8,
+        verbose=false,
+    )
+
+    loose = run_dual_moment_compressed_rii_analytic_iteration(;
+        common...,
+        iterations=numerics.iterations,
+        basis_moments=numerics.basis_moments,
+        basis_nodes=numerics.basis_nodes,
+        update_moment_count=numerics.update_moment_count,
+        rii_nodes=numerics.rii_nodes,
+        basis_ranktol=numerics.basis_ranktol,
+        residual_ranktol=numerics.residual_ranktol,
+        compression_ranktol=numerics.compression_ranktol,
+        determinant_nodes=numerics.determinant_nodes,
+        determinant_capacity=numerics.determinant_capacity,
+        extractor=numerics.extractor,
+        reduced_moments=numerics.reduced_moments,
+        reduced_nodes=numerics.reduced_nodes,
+        reduced_ranktol=numerics.reduced_ranktol,
+        loewner_points=numerics.loewner_points,
+        residual_normalization=numerics.residual_normalization,
+        basis_config=configs.basis,
+    )
+    configured = run_dual_moment_compressed_rii_analytic_iteration(;
+        common...,
+        iterations=numerics.iterations,
+        basis_config=configs.basis,
+        extraction_config=configs.extractor,
+        update_config=configs.update,
+    )
+
+    loose_good = good_extraction_values(loose.extraction; residual_tol=1e-8)
+    configured_good = good_extraction_values(configured.extraction; residual_tol=1e-8)
+    @test length(loose_good) == 1
+    @test length(configured_good) == 1
+    @test abs(loose_good[1] - configured_good[1]) <= 1e-10
+    @test loose.summaries[end].matched == configured.summaries[end].matched
+    @test loose.summaries[end].good == configured.summaries[end].good
+end
+
 @testitem "experimental moment RII: linear SS-FEAST reduces to FEAST residual correction" tags=[:slow] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 
