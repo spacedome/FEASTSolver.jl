@@ -180,7 +180,11 @@ test-backed boundaries, and the oracle-free count-driven branch is now covered
 across several analytic problem classes, including a nonnormal weak-support
 stress. `just test --preset moment-core` is now the focused reduction gate for the
 FEAST/SS, Beyn/SS, dual extraction, canonical NLFEAST, and residual-Laurent
-update story. This is not yet a decisive final solver or proof. The next
+update story. The gate was last run after the RII-ladder and polynomial-bridge
+updates and passed 173 assertions covering linear SS-FEAST, dual linear RII,
+the polynomial companion bridge, dual extraction/update, canonical NLFEAST,
+residual-Laurent compression/equivalence, sparse factor reuse, extractor
+agreement, and contour partitioning. This is not yet a decisive final solver or proof. The next
 productive steps are:
 
 1. Continue tightening the experiment interface around a small set of stable
