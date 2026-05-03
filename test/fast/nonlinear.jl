@@ -572,6 +572,25 @@ end
     @test length(result.rows) == 1
 end
 
+@testitem "experimental moment RII: count-driven refinement handles oracle-free coupled two-delay" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_coupled_two_delay_count_driven_adaptive_refinement(; print_rows=false)
+    final = result.rows[end]
+
+    @test result.count.expected == 0
+    @test result.count.count_estimate == 6
+    @test result.count.count_error <= 1e-6
+    @test result.stop_reason == :target_count_complete
+    @test result.algebraic_retained_count == result.count.count_estimate
+    @test isempty(result.multiplicities)
+    @test final.count_complete
+    @test final.retained == result.count.count_estimate
+    @test final.target_count == result.count.count_estimate
+    @test final.validation_matched == 0
+    @test length(result.rows) == 1
+end
+
 @testitem "experimental moment RII: count-driven refinement handles oracle-free multiplicity" tags=[:slow] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 

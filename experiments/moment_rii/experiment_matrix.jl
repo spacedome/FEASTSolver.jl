@@ -1971,6 +1971,76 @@ function run_two_delay_count_driven_adaptive_refinement(;
     )
 end
 
+function coupled_two_delay_cases()
+    (
+        scalar_two_delay_case(; a=0.15, b=1.6, tau=0.7, c=0.85, sigma=1.4),
+        scalar_two_delay_case(; a=-0.25, b=1.25, tau=0.9, c=0.55, sigma=1.7),
+    )
+end
+
+function coupled_two_delay_operator_builder(; coupling=0.15)
+    function builder(cases; component_scales=nothing)
+        length(cases) == 2 || error("coupled two-delay control expects exactly two cases")
+        scales = component_scales === nothing ? ones(Float64, 2) : Float64.(component_scales)
+        function row_scaled(M)
+            Diagonal(ComplexF64.(1 ./ scales)) * M
+        end
+        function Tmatrix(z)
+            row_scaled(ComplexF64[
+                cases[1].f(z) coupling * (1 + 0.2z)
+                coupling * exp(-0.3z) cases[2].f(z)
+            ])
+        end
+        function Tderivative(z)
+            row_scaled(ComplexF64[
+                cases[1].df(z) 0.2 * coupling
+                -0.3 * coupling * exp(-0.3z) cases[2].df(z)
+            ])
+        end
+        Tsolve(z, B) = Tmatrix(z) \ B
+        Tadjoint_solve(z, B) = Tmatrix(z)' \ B
+        expected_roots(center, radius) = ComplexF64[]
+        Tmatrix, Tderivative, Tsolve, Tadjoint_solve, expected_roots
+    end
+end
+
+function run_coupled_two_delay_count_driven_adaptive_refinement(;
+    coupling=0.15,
+    outer_radius=6.0,
+    base_spacing=1.8,
+    target_support=2,
+    max_refinement_rounds=4,
+    chart_radii=(1.2, 2.0),
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    run_count_driven_adaptive_grid_refinement(;
+        label="Coupled two-delay count-driven adaptive refinement",
+        cases=coupled_two_delay_cases(),
+        outer_radius=outer_radius,
+        operator_builder=coupled_two_delay_operator_builder(; coupling=coupling),
+        operator_label="coupled two-delay(coupling=$coupling)",
+        base_spacing=base_spacing,
+        target_support=target_support,
+        max_refinement_rounds=max_refinement_rounds,
+        chart_radii=chart_radii,
+        iterations=2,
+        basis_moments=8,
+        basis_nodes=64,
+        rii_nodes=128,
+        determinant_nodes=768,
+        determinant_capacity=128,
+        reduced_moments=16,
+        reduced_nodes=768,
+        residual_normalization=:operator,
+        component_scaling=:none,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=print_rows,
+    )
+end
+
 function run_duplicate_delay_count_driven_adaptive_refinement(;
     coupling=5.0,
     outer_radius=6.0,

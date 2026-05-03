@@ -129,6 +129,10 @@ per scalar Ritz value.
   harness. The count-driven loop retains three roots from the full-operator
   argument-principle count alone, exercising multiple delay scales inside one
   scalar component.
+- Oracle-free coupled two-delay control: a dense 2x2 NEP couples two
+  two-delay components through analytic off-diagonal terms. Its determinant is
+  not the product of scalar component functions, and the count-driven loop
+  still retains six roots from the full-operator count alone.
 - Oracle-free multiplicity control: a duplicate delay NEP with triangular
   nonnormal coupling has algebraic contour count six, three retained geometric
   values, and local count multiplicity two on each value without any exact-root
@@ -235,6 +239,11 @@ Representative tests:
   exponential delay scales. The full-operator contour count is three on the
   radius-6 contour, support retention returns three values, and no exact-root
   list or multiplicity probes are used.
+- A coupled two-delay 2x2 control removes diagonal/triangular determinant
+  factorization from the no-oracle path. The analytic off-diagonal terms move
+  the determinant roots away from the scalar component roots. The full-operator
+  contour count is six on the radius-6 contour, and support retention returns
+  six values with no validation oracle.
 - A near-pole rational triangular control exercises the same no-oracle path
   with meromorphic components whose poles lie just outside the target contour.
   With pole gap `0.01`, the full-operator count is reliable, support retention
