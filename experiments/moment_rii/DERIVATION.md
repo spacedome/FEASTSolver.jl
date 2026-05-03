@@ -252,6 +252,16 @@ candidate algorithm becomes genuinely different: it keeps the finite contour
 realization local to a chart, extracts a reduced Petrov-Galerkin NEP, and
 repairs the physical left/right spaces by residual Laurent moments.
 
+The issue is not only memory. Expanded scalar RII chooses one scalar Ritz list
+as coordinates for a finite realization. In a low-dimensional many-root chart,
+that list is a poor gauge: multiple roots may share physical directions,
+residual blocks may be rank-deficient, and the expanded scalar columns can be
+more numerous while observing less of the useful physical realization. The
+rank-deficient analytic compression diagnostic pins this numerically:
+scalar-expanded RII uses more candidate columns and still misses target roots,
+while compressed residual-Laurent repair uses the residual subspace itself,
+adds fewer columns, and recovers the full target set.
+
 Thus the residual-Laurent update is best understood as the FEAST/RII geometry
 that survives the higher-moment analytic setting. It is not classical scalar
 RII on expanded moment columns. It is a two-sided residual-inverse repair of the
