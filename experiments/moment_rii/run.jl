@@ -2003,7 +2003,8 @@ function determinant_power_sums(Tred, Tred_derivative; center, radius, nodes=102
     for (z, weight) in zip(z_nodes, z_weights)
         M = Tred(z)
         dM = Tred_derivative(z)
-        logarithmic_derivative = tr(M \ dM)
+        rhs = dM isa AbstractSparseMatrix ? Matrix(dM) : dM
+        logarithmic_derivative = tr(M \ rhs)
         μ = (z - center) / radius
         μpower = one(ComplexF64)
         for k in 0:capacity

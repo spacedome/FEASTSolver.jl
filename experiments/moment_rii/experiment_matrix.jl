@@ -871,7 +871,7 @@ function run_sparse_schrodinger_moment_gallery_smoke(;
     problem = sparse_schrodinger_movebc_moment_context(n, center, radius)
     count_roots, count_estimate, count_sums = determinant_power_sums(
         problem.ctx.Tmatrix,
-        z -> Matrix(problem.ctx.Tderivative(z));
+        problem.ctx.Tderivative;
         center=center,
         radius=radius,
         nodes=512,
@@ -906,6 +906,7 @@ function run_sparse_schrodinger_moment_gallery_smoke(;
     result = (
         n=n,
         sparse_matrix=problem.ctx.Tmatrix(center + radius * im) isa AbstractSparseMatrix,
+        derivative_sparse=problem.ctx.Tderivative(center + radius * im) isa AbstractSparseMatrix,
         prototype_sparse=problem.prototype isa AbstractSparseMatrix,
         target_count=count_estimate,
         target_count_error=abs(count_sums[1] - count_estimate),

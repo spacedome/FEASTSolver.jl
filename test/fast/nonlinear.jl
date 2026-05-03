@@ -236,6 +236,7 @@ end
     result = run_sparse_nonlinear_gallery_moment_pipeline_smoke(; print_rows=false)
 
     @test result.sparse_matrix
+    @test result.derivative_sparse
     @test result.prototype_sparse
     @test result.expected == 6
     @test result.updated.matched == result.expected
