@@ -272,3 +272,34 @@ Loewner/realization, invariant-pair Newton, refined Rayleigh--Ritz, and
 Jacobi-Davidson methods do not already contain the same update in different
 notation. Until then the status remains "strong candidate with a sharply
 identified theorem gap", not "solved decisively."
+
+## 2026-05-03 Active Checkpoint
+
+The current implementation/research state should be treated as a principled
+stopping boundary, not as a benchmark-tuning checkpoint. The experiment has
+enough performance evidence for now: low-rank residual compression, sparse
+symbolic/stored-factor reuse smokes, persistent worker ownership smokes, and
+the small BenchmarkTools harness all support the claim that the design is not
+inherently wasteful. Further benchmark-maxing would not close the research
+objective.
+
+The remaining requirement is theoretical and novelty-facing. We need either:
+
+- a proof of Lemma 5 in `THEOREM_SKETCH.md`, relating contour-filtered
+  compressed residual enrichment to improved re-extracted physical residuals
+  for a captured two-sided finite NEP realization; or
+- a known theorem from Jacobi-Davidson, residual inverse iteration, refined
+  Rayleigh--Ritz, invariant-pair, Loewner/realization, or contour projection
+  theory that implies the same enrichment step under recognizable hypotheses.
+
+Until one of those exists, the honest claim is:
+
+```text
+residual-Laurent two-sided physical-space repair is the best current
+experiment-backed candidate for generalized higher-moment NLFEAST iteration,
+but it is not yet a decisive theory.
+```
+
+No additional local implementation task is currently known to resolve that
+gap. Productizing the sparse/distributed rungs or tuning benchmarks should wait
+until the local theorem/novelty question is settled.
