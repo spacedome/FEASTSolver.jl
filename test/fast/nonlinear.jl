@@ -1007,6 +1007,9 @@ end
     @test length(result.candidate_centers) == result.parent.good
     @test length(result.refinement_centers) > length(result.candidate_centers)
     @test result.parent.good < result.parent.count_estimate
+    @test result.parent.stress === :count_deficit
+    @test result.parent.action === :shrink_around_residual_candidates
+    @test result.parent.rationale === :missing_local_count
     @test length(result.naive_child.found) == 0
     @test result.naive_child.matched == 0
     @test result.candidate_child.matched == length(result.candidate_child.expected)
@@ -1022,6 +1025,8 @@ end
     result = run_triangular_count_error_split_probe(; print_rows=false)
 
     @test result.parent.stress === :count_error
+    @test result.parent.action === :preserve_parent_radius_for_count_error
+    @test result.parent.rationale === :unstable_local_count
     @test result.parent.good == result.parent.count_estimate
     @test result.parent.count_error > 1e-2
     @test maximum(result.parent.candidate_radii) == result.parent.radius

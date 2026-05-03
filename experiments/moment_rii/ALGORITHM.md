@@ -406,6 +406,9 @@ Representative tests:
   count-stressed charts. A nonnormal triangular count-error-only chart also
   shows that aggressive shrinking is not always correct: preserving the parent
   radius certifies the local roots, while the same shrink radii fail.
+  `count_stressed_chart_refinement` now records this as an explicit policy
+  split: count deficits use smaller overlapping radii around residual
+  candidates, while count-error-only charts preserve parent-radius candidates.
 - The three-function retention policy now has an oracle-free completion path:
   the target count comes from the full analytic operator by the argument
   principle, while exact roots are used only after the decision to validate the

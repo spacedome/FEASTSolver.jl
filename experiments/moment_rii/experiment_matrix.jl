@@ -3303,6 +3303,30 @@ function full_operator_count_estimate(
     )
 end
 
+function count_stressed_chart_refinement(record, candidate_centers, child_centers; match_atol=1e-6)
+    stress = record.good < record.count_estimate ? :count_deficit : :count_error
+    refinement_centers = sorted_unique_values(
+        vcat(candidate_centers, ComplexF64[record.center], child_centers);
+        atol=match_atol,
+    )
+    if stress === :count_deficit
+        candidate_radii = (record.radius / 4, 3 * record.radius / 8, 5 * record.radius / 8)
+        action = :shrink_around_residual_candidates
+        rationale = :missing_local_count
+    else
+        candidate_radii = (record.radius / 2, 2 * record.radius / 3, record.radius)
+        action = :preserve_parent_radius_for_count_error
+        rationale = :unstable_local_count
+    end
+    (
+        stress=stress,
+        refinement_centers=refinement_centers,
+        candidate_radii=candidate_radii,
+        action=action,
+        rationale=rationale,
+    )
+end
+
 function chart_policy_plan(
     result,
     summary;
@@ -3351,14 +3375,12 @@ function chart_policy_plan(
             ];
             atol=match_atol,
         )
-        refinement_centers = sorted_unique_values(
-            vcat(candidate_centers, ComplexF64[record.center], child_centers);
-            atol=match_atol,
+        refinement = count_stressed_chart_refinement(
+            record,
+            candidate_centers,
+            child_centers;
+            match_atol=match_atol,
         )
-        stress = record.good < record.count_estimate ? :count_deficit : :count_error
-        candidate_radii = stress === :count_deficit ?
-            (record.radius / 4, 3 * record.radius / 8, 5 * record.radius / 8) :
-            (record.radius / 2, 2 * record.radius / 3, record.radius)
         push!(
             split_records,
             (
@@ -3367,10 +3389,12 @@ function chart_policy_plan(
                 child_radius=child_radius,
                 child_centers=child_centers,
                 candidate_centers=candidate_centers,
-                refinement_centers=refinement_centers,
-                candidate_radii=candidate_radii,
+                refinement_centers=refinement.refinement_centers,
+                candidate_radii=refinement.candidate_radii,
                 selected=true,
-                stress=stress,
+                stress=refinement.stress,
+                action=refinement.action,
+                rationale=refinement.rationale,
                 good=record.good,
                 count_estimate=record.count_estimate,
                 count_error=record.count_error,

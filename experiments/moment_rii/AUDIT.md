@@ -102,8 +102,11 @@ global block Newton, or rational-coordinate-only fixes.
   overlapping parent/child cover anchors recover and support-certify the local
   roots in the current probe. A triangular nonnormal count-error-only chart
   requires preserving the parent radius; the aggressive shrink radii that work
-  for count deficits fail there. The sparse coupled two-delay radius-12 cover
-  is now pinned as an unresolved-defect diagnostic: the policy retains 10 of 12
+  for count deficits fail there. The policy split is now named explicitly:
+  count deficits shrink around residual candidates, while count-error-only
+  charts preserve parent-radius candidates. The sparse coupled two-delay
+  radius-12 cover is now pinned as an unresolved-defect diagnostic: the policy
+  retains 10 of 12
   counted roots and does not over-accept the incomplete cover. A blind
   supplemental half-grid fill-in was tried and rejected: it adds chart centers
   but still plateaus at 10 of 12 retained roots. Adding a larger local chart
