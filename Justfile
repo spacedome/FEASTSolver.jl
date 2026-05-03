@@ -32,6 +32,10 @@ test-torture *args:
 test-moment filter='moment RII':
     @just test {{quote(filter)}}
 
+# Run the focused moment-RII algorithm-family reduction checks.
+test-moment-core:
+    @just test --slow 'linear SS-FEAST|polynomial bridge agrees|canonical NLFEAST limit|residual Laurent update'
+
 # Run the expensive moment-RII agreement/policy diagnostics explicitly.
 test-moment-heavy filter='moment RII':
     @just test --slow --tags moment_heavy {{quote(filter)}}
@@ -98,6 +102,7 @@ notes:
       'Run just test-slow to include TestItems tagged :slow.' \
       'Regex filters do not include :slow tests unless --slow or explicit --tags are passed.' \
       'Run just test-moment for the fast moment-RII loop, and just test-moment-heavy for expensive moment diagnostics.' \
+      'Run just test-moment-core for the focused FEAST/SS/Beyn/NLFEAST reduction checks.' \
       'Run just test-moment-count for count-driven moment-RII policy tests.' \
       'Run just test-torture to include flagged generated/NLEVP numerical stress tests.' \
       'test/runtests.jl is the automated TestItemRunner entrypoint.' \
