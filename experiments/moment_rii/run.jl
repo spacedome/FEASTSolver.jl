@@ -4799,6 +4799,7 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
     match_atol=1e-6,
     biorthogonalize=false,
     update_mode=:moment_compressed,
+    basis_config=nothing,
     extraction_config=nothing,
     update_config=nothing,
     verbose=true,
@@ -4856,13 +4857,24 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
     compression_ranktol = residual_config.compression_ranktol
     update_mode = residual_config.mode
     biorthogonalize = residual_config.biorthogonalize
-    basis_config = MomentBasisConfig(
-        moments=basis_moments,
-        nodes=basis_nodes,
-        ranktol=basis_ranktol,
-        seed=9801 + round(Int, radius * 10) + 17 * length(cases),
-        biorthogonalize=biorthogonalize,
-    )
+    default_seed = 9801 + round(Int, radius * 10) + 17 * length(cases)
+    basis_config = basis_config === nothing ? MomentBasisConfig(
+            moments=basis_moments,
+            nodes=basis_nodes,
+            ranktol=basis_ranktol,
+            seed=default_seed,
+            biorthogonalize=biorthogonalize,
+        ) : MomentBasisConfig(
+            moments=basis_config.moments,
+            nodes=basis_config.nodes,
+            ranktol=basis_config.ranktol,
+            seed=basis_config.seed === nothing ? default_seed : basis_config.seed,
+            biorthogonalize=basis_config.biorthogonalize,
+        )
+    basis_moments = basis_config.moments
+    basis_nodes = basis_config.nodes
+    basis_ranktol = basis_config.ranktol
+    biorthogonalize = basis_config.biorthogonalize
     trial = initial_dual_trial_spaces(ctx, chart, basis_config)
     initial_summary = trial_space_summary(trial)
 
@@ -5346,9 +5358,16 @@ function run_dual_local_chart_sweep_analytic(;
     selection=:matched,
     skip_empty_expected=centers === nothing,
     print_charts=true,
+    basis_config=nothing,
     extraction_config=nothing,
     update_config=nothing,
 )
+    if basis_config !== nothing
+        basis_moments = basis_config.moments
+        basis_nodes = basis_config.nodes
+        basis_ranktol = basis_config.ranktol
+        biorthogonalize = basis_config.biorthogonalize
+    end
     if extraction_config !== nothing
         extractor = extraction_config.extractor
         determinant_nodes = extraction_config.determinant_nodes
@@ -5446,6 +5465,7 @@ function run_dual_local_chart_sweep_analytic(;
                     match_atol=match_atol,
                     biorthogonalize=biorthogonalize,
                     update_mode=update_mode,
+                    basis_config=basis_config,
                     extraction_config=extraction_config,
                     update_config=update_config,
                     verbose=false,

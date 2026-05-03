@@ -1705,6 +1705,16 @@ function reduced_extractor_config(numerics::CountDrivenNumericsConfig)
     )
 end
 
+function moment_basis_config(numerics::CountDrivenNumericsConfig; seed=nothing)
+    MomentBasisConfig(;
+        moments=numerics.basis_moments,
+        nodes=numerics.basis_nodes,
+        ranktol=numerics.basis_ranktol,
+        seed=seed,
+        biorthogonalize=numerics.biorthogonalize,
+    )
+end
+
 function residual_update_config(numerics::CountDrivenNumericsConfig)
     ResidualUpdateConfig(;
         moment_count=numerics.update_moment_count,
@@ -1845,6 +1855,7 @@ function run_count_driven_adaptive_grid_refinement(;
         update_mode = numerics.update_mode
         biorthogonalize = numerics.biorthogonalize
     end
+    basis_config = numerics === nothing ? nothing : moment_basis_config(numerics)
     extraction_config = numerics === nothing ? nothing : reduced_extractor_config(numerics)
     update_config = numerics === nothing ? nothing : residual_update_config(numerics)
     count = full_operator_count_estimate(
@@ -1898,6 +1909,7 @@ function run_count_driven_adaptive_grid_refinement(;
             component_scaling_nodes=component_scaling_nodes,
             biorthogonalize=biorthogonalize,
             update_mode=update_mode,
+            basis_config=basis_config,
             extraction_config=extraction_config,
             update_config=update_config,
             residual_tol=residual_tol,
