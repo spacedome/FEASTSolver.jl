@@ -49,6 +49,16 @@ geometry, gauges, multiplicity, and Newton/refinement rungs. The experiments so
 far indicate that invariant-pair Newton is a reduced cleanup or escalation
 step, not the central FEAST iteration that replaces the residual-Laurent repair.
 
+The story we are trying to preserve is an RII compatibility ladder. Linear
+FEAST and linear SS-FEAST admit an exact residual-inverse/filter identity.
+Canonical NLFEAST is the `K=1` nonlinear rung, where Keldysh gives a local
+linearized pole structure. Polynomial moment problems can be compared against a
+companion linearization or invariant-pair formulation. Fully analytic moment
+NLFEAST appears to be the first rung where literal scalar RII on expanded
+moment columns is no longer natural; the residual-Laurent update is the
+two-sided FEAST-style correction that still reduces correctly on the lower
+rungs.
+
 ## Earlier Invariant-Pair Hypothesis
 
 The right state for moment-RII is not a diagonal eigenpair list. It is an

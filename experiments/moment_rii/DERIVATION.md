@@ -197,6 +197,67 @@ on expanded columns is the wrong state model. The reduced realization should be
 kept finite, and only the physical left/right spaces should be repaired by
 low-rank residual Laurent moments.
 
+## RII Compatibility Ladder
+
+The central research question is not just "can we solve the roots?" It is
+whether the higher-moment algorithms preserve the special FEAST/NLFEAST feature:
+residual inverse iteration gives a genuine iterative correction instead of only
+a one-shot contour extractor.
+
+The current answer is a ladder rather than one universal scalar formula.
+
+Linear FEAST:
+
+For `T(z)=zI-A`, scalar RII is exactly the contour filter identity recorded
+above. This is the cleanest case: FEAST is subspace iteration with a rational
+filter, and residual inverse iteration is another algebraic form of the same
+filter.
+
+Linear SS-FEAST:
+
+Higher SS moments can be used without abandoning the FEAST correction. The
+moments form a finite realization of the same linear spectral projector, and
+the RII residual identity still applies to extracted Ritz vectors. In this
+setting an "SS-FEAST" is possible: SS/Hankel supplies a wider effective
+realization than the number of physical right-hand sides, while the residual
+correction reduces to ordinary FEAST on the represented invariant subspace. The
+experiment pins this with the linear SS-FEAST control and the dual linear RII
+reduction.
+
+Canonical NLFEAST:
+
+For `K=1`, NLFEAST uses the same residual inverse idea locally. Keldysh theory
+explains why this can work surprisingly well: near a simple eigenvalue the
+analytic NEP has a local pole structure that behaves like a linearized
+eigenproblem. This is the miracle that makes scalar nonlinear RII useful.
+
+Polynomial moment problems:
+
+Polynomial NEPs sit between linear and fully analytic problems. A companion
+linearization always exists, so a literal linear FEAST/RII story exists in a
+larger space. Polynomial-native moment extraction and invariant-pair refinement
+can be viewed as compressed ways to avoid exposing that companion space. This
+is why polynomial controls are the right lower rung for testing any proposed
+moment update: the method should agree with companion FEAST while keeping the
+physical-space realization compact.
+
+Fully analytic moment problems:
+
+For a general analytic NEP with many roots in a low-dimensional physical space,
+there is no fixed finite companion linearization that makes scalar RII on a
+`K*m` expanded Ritz list canonical. Literal scalar RII on all moment-expanded
+candidates forces an artificial deflation/truncation step, which destroys the
+very information higher moments were added to expose. This is where the
+candidate algorithm becomes genuinely different: it keeps the finite contour
+realization local to a chart, extracts a reduced Petrov-Galerkin NEP, and
+repairs the physical left/right spaces by residual Laurent moments.
+
+Thus the residual-Laurent update is best understood as the FEAST/RII geometry
+that survives the higher-moment analytic setting. It is not classical scalar
+RII on expanded moment columns. It is a two-sided residual-inverse repair of the
+physical realization, designed to reduce to scalar RII when the chart has only
+one moment/root direction and to reduce to FEAST when the operator is linear.
+
 ## Diagnostics And Boundaries
 
 The update is not a complete black-box solver by itself. The contour realization

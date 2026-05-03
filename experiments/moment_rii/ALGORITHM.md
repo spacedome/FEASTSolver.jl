@@ -124,6 +124,11 @@ per scalar Ritz value.
 - Linear FEAST: with `T(z)=zI-A`, one moment, and diagonal scalar states, the
   residual Laurent update reduces to the usual FEAST/RII residual-inverse
   correction.
+- Linear SS-FEAST: with `T(z)=zI-A` and higher SS/Hankel moments, the moment
+  realization gives a wider effective invariant subspace than the number of
+  physical right-hand sides. The residual inverse step still reduces to the
+  FEAST contour filter on extracted Ritz vectors, so SS-style moments and FEAST
+  iteration are compatible in the linear case.
 - Dual FEAST: nonnormal reduced extraction uses independent left and right
   contour-filtered physical spaces. On the dual-sensitive polynomial control,
   true dual and biorthogonal dual extraction recover all 12 target roots, while
@@ -144,6 +149,15 @@ per scalar Ritz value.
 - Moment-NLFEAST: with higher moments, the reduced realization is kept finite
   and local. The method avoids forcing a many-root Hankel realization back into
   a single global diagonal scalar-RII state.
+
+The resulting story is a compatibility ladder. Linear FEAST and linear
+SS-FEAST admit a true RII/filter identity. Canonical NLFEAST is the `K=1`
+nonlinear residual-inverse rung explained locally by Keldysh. Polynomial moment
+problems can be checked against companion FEAST or invariant-pair refinement.
+Fully analytic moment-NLFEAST does not appear to admit a literal scalar RII on
+expanded moment columns without artificial deflation; the residual-Laurent
+two-sided physical-space repair is the FEAST-style iteration that survives in
+that setting.
 
 ## Evidence
 
