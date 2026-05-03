@@ -50,6 +50,10 @@ function print_remote_stats(label, result)
         ",solution_buffers_second=", result.second_worker_solution_buffers,
         ",solves_first=", result.first_worker_solves,
         ",solves_second=", result.second_worker_solves,
+        ",setup_s=", result.setup_elapsed_ns / 1e9,
+        ",serial_update_s=", result.serial_update_elapsed_ns / 1e9,
+        ",remote_first_s=", result.remote_first_elapsed_ns / 1e9,
+        ",remote_second_s=", result.remote_second_elapsed_ns / 1e9,
         ",x_projection_gap=", result.x_projection_gap,
         ",y_projection_gap=", result.y_projection_gap,
     )

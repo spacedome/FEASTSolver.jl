@@ -1247,7 +1247,7 @@ function run_sparse_schrodinger_remote_stored_factor_worker_smoke(;
         println("Sparse Schrodinger remote stored-factor worker smoke")
         println("  realistic sparse Schrodinger gallery operator with persistent worker-owned contour factors")
         @printf(
-            "  workers=%s n=%d count=%d err=%.3e serial=%d/%d remote=%d/%d projection_gap=(%.3e, %.3e) factors=%d->%d solves=%d->%d\n",
+            "  workers=%s n=%d count=%d err=%.3e serial=%d/%d remote=%d/%d projection_gap=(%.3e, %.3e) factors=%d->%d solves=%d->%d setup=%.3fs serial_update=%.3fs remote_updates=(%.3fs, %.3fs)\n",
             string(result.workers),
             result.n,
             result.target_count,
@@ -1262,6 +1262,10 @@ function run_sparse_schrodinger_remote_stored_factor_worker_smoke(;
             result.second_worker_factorizations,
             result.first_worker_solves,
             result.second_worker_solves,
+            result.setup_elapsed_ns / 1e9,
+            result.serial_update_elapsed_ns / 1e9,
+            result.remote_first_elapsed_ns / 1e9,
+            result.remote_second_elapsed_ns / 1e9,
         )
     end
     result
@@ -1278,11 +1282,14 @@ function run_sparse_remote_stored_factor_context_smoke(
     residual_tol=1e-10,
     match_atol=1e-8,
 )
+    setup_start = time_ns()
     worker_ids, added = ensure_moment_remote_workers(worker_count)
     try
         trial = initial_dual_trial_spaces(ctx, chart, basis)
         extraction0 = extract_reduced_nep(ctx, trial, chart, extractor)
+        serial_start = time_ns()
         serial_trial, serial_stats = residual_laurent_update(ctx, trial, extraction0, chart, update)
+        serial_elapsed_ns = time_ns() - serial_start
 
         z_nodes, z_weights = circular_rule(chart, update.rii_nodes)
         assignments = [Int[] for _ in worker_ids]
@@ -1307,8 +1314,10 @@ function run_sparse_remote_stored_factor_context_smoke(
                 update.moment_count,
             )
         end
+        setup_elapsed_ns = time_ns() - setup_start
 
         function remote_cached_step()
+            step_start = time_ns()
             Rright_basis, Rleft_basis, right_residual_singulars, left_residual_singulars =
                 residual_blocks_from_matrix_extraction(ctx.Tmatrix, extraction0; residual_ranktol=update.residual_ranktol)
             right_moments = [zeros(ComplexF64, ctx.n, size(Rright_basis, 2)) for _ in 1:update.moment_count]
@@ -1372,6 +1381,7 @@ function run_sparse_remote_stored_factor_context_smoke(
                 right_singulars=right_singulars,
                 left_singulars=left_singulars,
                 workers=worker_reports,
+                elapsed_ns=time_ns() - step_start,
             )
             updated, stats
         end
@@ -1409,6 +1419,10 @@ function run_sparse_remote_stored_factor_context_smoke(
             serial_stats=serial_stats,
             remote_stats=remote_stats1,
             remote_stats_second=remote_stats2,
+            setup_elapsed_ns=setup_elapsed_ns,
+            serial_update_elapsed_ns=serial_elapsed_ns,
+            remote_first_elapsed_ns=remote_stats1.elapsed_ns,
+            remote_second_elapsed_ns=remote_stats2.elapsed_ns,
             first_worker_factorizations=sum(report.right_factorizations + report.left_factorizations for report in remote_stats1.workers; init=0),
             second_worker_factorizations=sum(report.right_factorizations + report.left_factorizations for report in remote_stats2.workers; init=0),
             first_worker_solution_buffers=sum(report.right_solution_buffers + report.left_solution_buffers for report in remote_stats1.workers; init=0),
@@ -1474,7 +1488,7 @@ function run_sparse_nonlinear_remote_stored_factor_worker_smoke(;
         println("Sparse nonlinear remote stored-factor worker smoke")
         println("  sparse quadratic polynomial gallery operator with persistent worker-owned contour factors")
         @printf(
-            "  workers=%s expected=%d serial=%d/%d remote=%d/%d projection_gap=(%.3e, %.3e) factors=%d->%d solves=%d->%d\n",
+            "  workers=%s expected=%d serial=%d/%d remote=%d/%d projection_gap=(%.3e, %.3e) factors=%d->%d solves=%d->%d setup=%.3fs serial_update=%.3fs remote_updates=(%.3fs, %.3fs)\n",
             string(result.workers),
             result.expected,
             result.serial.matched,
@@ -1487,6 +1501,10 @@ function run_sparse_nonlinear_remote_stored_factor_worker_smoke(;
             result.second_worker_factorizations,
             result.first_worker_solves,
             result.second_worker_solves,
+            result.setup_elapsed_ns / 1e9,
+            result.serial_update_elapsed_ns / 1e9,
+            result.remote_first_elapsed_ns / 1e9,
+            result.remote_second_elapsed_ns / 1e9,
         )
     end
     result

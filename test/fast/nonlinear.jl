@@ -553,6 +553,10 @@ end
     @test result.second_worker_solution_buffers == result.first_worker_solution_buffers
     @test result.first_worker_solves == 96
     @test result.second_worker_solves == 2 * result.first_worker_solves
+    @test result.setup_elapsed_ns > 0
+    @test result.serial_update_elapsed_ns > 0
+    @test result.remote_first_elapsed_ns > 0
+    @test result.remote_second_elapsed_ns > 0
 end
 
 @testitem "nonlinear FEAST: custom contour on linear pencil" setup=[FEASTTestSetup] begin
