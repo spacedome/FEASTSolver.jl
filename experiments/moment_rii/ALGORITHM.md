@@ -252,6 +252,11 @@ per scalar Ritz value.
   count estimates three target eigenvalues, and the residual-Laurent update
   improves all three action residuals to the strict threshold. This is
   realistic sparse NEP evidence, not a scaling benchmark.
+- Sparse Schrodinger remote stored-factor smoke: the same realistic sparse
+  Schrodinger control runs through persistent worker-owned contour partitions.
+  The worker factors are created once on the first update, reused on the
+  repeated update, and the remote physical spaces match the serial update. This
+  extends the distributed stored-factor evidence beyond diagonal controls.
 - Adjacent implementation recheck: RSRR, SLEPc CISS, and Riesz-projection
   methods all support the current separation between contour-node solves,
   reduced extraction, and selection/observability policy. They do not appear to
@@ -348,6 +353,7 @@ Representative tests:
 - `just test --tags distributed 'sparse residual Laurent update runs on remote contour workers'`
 - `just test --tags distributed 'sparse remote workers reuse'`
 - `just test --tags distributed 'sparse nonlinear remote workers reuse'`
+- `just test --tags distributed 'sparse Schrodinger remote workers reuse'`
 - `just test --preset moment-heavy 'residual Laurent update'`
 - `just test --preset moment-count`
 - `just test --slow 'analytic block Newton'`

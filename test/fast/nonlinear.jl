@@ -324,6 +324,33 @@ end
     @test result.second_worker_solves == 2 * result.first_worker_solves
 end
 
+@testitem "experimental moment RII: sparse Schrodinger remote workers reuse stored contour factors" tags=[:slow, :distributed] begin
+    if !isdefined(Main, :run_sparse_schrodinger_remote_stored_factor_worker_smoke)
+        Base.include(Main, joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+    end
+
+    result = Main.run_sparse_schrodinger_remote_stored_factor_worker_smoke(; worker_count=2, print_rows=false)
+
+    @test result.sparse_matrix
+    @test result.prototype_sparse
+    @test result.derivative_sparse
+    @test result.target_count == 3
+    @test result.target_count_reliable
+    @test length(result.workers) == 2
+    @test result.serial.matched == result.target_count
+    @test result.remote.matched == result.target_count
+    @test result.remote.spurious_good == 0
+    @test result.x_projection_gap <= 1e-10
+    @test result.y_projection_gap <= 1e-10
+    @test result.repeat_x_projection_gap <= 1e-10
+    @test result.repeat_y_projection_gap <= 1e-10
+    @test sum(length, result.assignments) == 48
+    @test result.first_worker_factorizations == 96
+    @test result.second_worker_factorizations == result.first_worker_factorizations
+    @test result.first_worker_solves == 96
+    @test result.second_worker_solves == 2 * result.first_worker_solves
+end
+
 @testitem "nonlinear FEAST: custom contour on linear pencil" setup=[FEASTTestSetup] begin
     using FEASTSolver
     using LinearAlgebra

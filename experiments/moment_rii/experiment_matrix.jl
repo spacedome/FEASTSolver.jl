@@ -1094,6 +1094,95 @@ function run_sparse_schrodinger_moment_gallery_smoke(;
     result
 end
 
+function run_sparse_schrodinger_remote_stored_factor_worker_smoke(;
+    worker_count=2,
+    n=128,
+    center=-35.0 + 0.0im,
+    radius=4.2,
+    residual_tol=1e-5,
+    match_atol=1e-4,
+    count_error_tol=1e-4,
+    print_rows=true,
+)
+    problem = sparse_schrodinger_movebc_moment_context(n, center, radius)
+    count_roots, count_estimate, count_sums = determinant_power_sums(
+        problem.ctx.Tmatrix,
+        problem.ctx.Tderivative;
+        center=center,
+        radius=radius,
+        nodes=512,
+        capacity=16,
+    )
+    expected = center .+ radius .* count_roots
+    basis = MomentBasisConfig(;
+        moments=2,
+        nodes=24,
+        ranktol=1e-10,
+        seed=44031,
+    )
+    extractor = ReducedExtractorConfig(;
+        extractor=:ss_counted,
+        determinant_nodes=512,
+        determinant_capacity=16,
+        reduced_moments=8,
+        reduced_nodes=512,
+        residual_normalization=:vector,
+    )
+    update = ResidualUpdateConfig(;
+        moment_count=1,
+        rii_nodes=48,
+        residual_ranktol=1e-10,
+        compression_ranktol=1e-10,
+    )
+    result = run_sparse_remote_stored_factor_context_smoke(
+        problem.ctx,
+        problem.chart,
+        expected;
+        worker_count=worker_count,
+        basis=basis,
+        extractor=extractor,
+        update=update,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+    )
+    result = merge(
+        result,
+        (
+            n=n,
+            prototype_sparse=problem.prototype isa AbstractSparseMatrix,
+            derivative_sparse=problem.ctx.Tderivative(center + radius * im) isa AbstractSparseMatrix,
+            target_count=count_estimate,
+            target_count_error=abs(count_sums[1] - count_estimate),
+            target_count_reliable=abs(count_sums[1] - count_estimate) <= count_error_tol,
+            count_roots=expected,
+            operator=:sparse_schrodinger_movebc_gallery,
+        ),
+    )
+    if print_rows
+        println()
+        println("Sparse Schrodinger remote stored-factor worker smoke")
+        println("  realistic sparse Schrodinger gallery operator with persistent worker-owned contour factors")
+        @printf(
+            "  workers=%s n=%d count=%d err=%.3e serial=%d/%d remote=%d/%d projection_gap=(%.3e, %.3e) factors=%d->%d solves=%d->%d\n",
+            string(result.workers),
+            result.n,
+            result.target_count,
+            result.target_count_error,
+            result.serial.matched,
+            result.target_count,
+            result.remote.matched,
+            result.target_count,
+            result.x_projection_gap,
+            result.y_projection_gap,
+            result.first_worker_factorizations,
+            result.second_worker_factorizations,
+            result.first_worker_solves,
+            result.second_worker_solves,
+        )
+    end
+    result
+end
+
 function run_sparse_remote_stored_factor_context_smoke(
     ctx,
     chart,
