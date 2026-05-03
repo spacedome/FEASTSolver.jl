@@ -22,7 +22,34 @@ roughly `K*m` Ritz candidates. If all candidates are used in the next RII step,
 the next Hankel extraction grows again; if we truncate back to `m`, we lose
 exactly the information that made higher moments useful.
 
-## Working Hypothesis
+## Current Candidate
+
+The current candidate is no longer "iterate the expanded Hankel columns" and
+is also not simply "replace scalar RII by block Newton." The most defensible
+algorithmic boundary is documented in `ALGORITHM.md` and derived in
+`DERIVATION.md`:
+
+```text
+generalized moment-NLFEAST =
+    local dual contour realization
+  + reduced Petrov-Galerkin NEP extraction
+  + residual Laurent correction of left/right physical trial spaces
+  + explicit chart policy driven by support, counts, residuals, and agreement
+```
+
+The iterative state is the chart plus physical right/left spaces `X,Y`, not the
+expanded moment columns and not a mandatory public invariant-pair state. The
+reduced realization/extractor may be counted SS/Hankel, Loewner, or a
+polynomial-native reduced solve. When reduced extraction is insufficient, the
+FEAST-style update repairs only the physical spaces by low-rank residual
+Laurent moments and then re-extracts the reduced NEP.
+
+Invariant-pair language remains important because it explains the local
+geometry, gauges, multiplicity, and Newton/refinement rungs. The experiments so
+far indicate that invariant-pair Newton is a reduced cleanup or escalation
+step, not the central FEAST iteration that replaces the residual-Laurent repair.
+
+## Earlier Invariant-Pair Hypothesis
 
 The right state for moment-RII is not a diagonal eigenpair list. It is an
 invariant pair `(X, S)`, where `S` is a small dense matrix. For polynomial NEPs,
@@ -41,7 +68,8 @@ With this state, the RII moment update becomes
 Q_k = contour_integral z^k * (X - T(z) \ T(X, S)) * inv(zI - S) dz
 ```
 
-This closes the higher-moment iteration. If `(X, S)` is exact, the residual term
+This was the first plausible way to close the higher-moment iteration. If
+`(X, S)` is exact, the residual term
 vanishes and Cauchy's formula gives
 
 ```text
@@ -52,27 +80,26 @@ so the higher moments live on the finite-dimensional invariant-pair manifold
 instead of creating independent new right-hand sides forever. The diagonal
 current implementation is the special case `S = Diagonal(Lambda)`.
 
-The current interpretation is sharper than the original name suggests: for
-higher moments this is probably no longer RII in the strict scalar-eigenpair
-sense. RII corrects a single root function/eigenvector with a scalar eigenvalue
-in the resolvent. The higher-moment state is an invariant pair on a quotient
-manifold: `T(X,S)=0` plus a gauge/minimality condition on the lifted block
-`[X; X*S; ...]`. The natural local refinement is invariant-pair Newton/block
-Newton. The contour step supplies a rationally filtered SS/Beyn-style
-initializer and may still be useful as a globalization/filtering iteration, but
-the local geometry is Newton on `(X,S)`, not scalar RII.
+This remains useful theory, but later dual-extraction and residual-Laurent
+experiments showed that exposing `(X,S)` as the main iteration state is too
+narrow. Higher moments are better treated as a finite realization coordinate
+inside a chart. The solver-facing state is the Petrov-Galerkin reduced NEP on
+left/right physical spaces; invariant-pair Newton is then available when the
+reduced realization needs local cleanup.
 
 ## Why This Matters
 
 - Defective or tightly clustered nonlinear spectra are naturally represented by
-  a small Schur/Jordan-like `S`, not by independent scalar eigenpairs.
-- SS-Hankel and higher-moment Beyn already construct a projected pencil whose
-  eigenspace approximates this invariant pair.
-- NLFEAST's RII update can plausibly refine that invariant pair directly,
-  rather than refining only a selected subset of scalar Ritz vectors.
-- This gives a clean theoretical bridge: Beyn is the first extraction,
-  SS-Hankel is the higher-moment extraction, and FEAST/NLFEAST is the RII
-  iteration applied to the same invariant-pair object.
+  a small realization, not by independent scalar eigenpairs.
+- SS-Hankel, Beyn, and Loewner all construct reduced realizations of the same
+  contour transfer behavior; they are extraction coordinates, not competing
+  outer iterations.
+- The FEAST/NLFEAST contribution is the residual-inverse correction. In the
+  moment setting that correction should repair the physical left/right spaces,
+  not force the reduced realization back into a scalar diagonal RII state.
+- This gives a clean bridge: Beyn/SS/Loewner are the zero-update extraction
+  rung, FEAST/NLFEAST is the residual-Laurent repair rung, and invariant-pair
+  Newton/deflation are higher local-refinement or escalation rungs.
 
 ## What The Moment Blocks Represent
 
@@ -111,7 +138,7 @@ root-correction viewpoint for scalar/diagonal states; higher moments ask for a
 correction of the realization `(X, S, C)` or its observable/controllable
 quotient.
 
-## Proposed First Prototype
+## Historical First Prototype
 
 Start with polynomial gallery operators only. They give an exact, cheap
 implementation of `T(X, S)` and avoid making the first pass depend on generic
@@ -129,7 +156,13 @@ analytic matrix-function machinery.
 5. Only after the serial dense prototype is numerically convincing, decide how
    this maps onto sparse and distributed NLFEAST.
 
-## Robust Path From Here
+This prototype path produced useful controls, but it is not the current
+implementation target. The current implementation target is the charted
+left/right pipeline described by `ContourChart`, `MomentBasisConfig`,
+`ReducedExtractorConfig`, `ResidualUpdateConfig`, `CountDrivenPolicyConfig`,
+and `CountDrivenNumericsConfig`.
+
+## Original Robust Path And Current Status
 
 The current goal is not to claim a universal higher-moment NLFEAST formula.
 The more defensible target is a small class of charted realization algorithms
@@ -153,6 +186,17 @@ with diagnostics good enough to choose the right chart in ordinary cases.
 6. Replace the current supervised scalar experiments with real count/rank
    estimation. The scalar demos still use known roots only to size the local
    finite realization; production code needs a contour count estimator.
+
+Most of this path has now been absorbed into the experiment:
+
+- Linear, polynomial, canonical NLFEAST, dual extraction, Loewner/SS, and
+  residual-Laurent reductions are pinned by focused tests and diagnostics.
+- `ContourChart`, basis/extractor/update configs, and count-driven policy
+  objects now hold the charted pipeline.
+- Full-operator argument-principle counts drive the no-oracle policy tests;
+  exact roots remain primarily validation data.
+- Sparse and remote rungs are currently implementation evidence only. They are
+  not part of the core algorithmic proof.
 
 ## Findings So Far
 
