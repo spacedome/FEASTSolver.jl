@@ -79,8 +79,9 @@ global block Newton, or rational-coordinate-only fixes.
 
 ## Remaining Gaps
 
-- Sparse and distributed moment-NLFEAST are not implemented. The experiment now
-  has a sparse linear pipeline smoke test showing generic sparse
+- Sparse and distributed moment-NLFEAST are prototyped only inside the
+  experiment, not productized as solver APIs. The experiment now has a sparse
+  linear pipeline smoke test showing generic sparse
   `Tmatrix`/`Tsolve` compatibility and a stored-factor sparse smoke showing
   fixed contour-node factorizations can be reused across residual-Laurent
   updates. It also has a partition diagnostic proving that
