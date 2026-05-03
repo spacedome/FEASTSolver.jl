@@ -361,6 +361,38 @@ Newton refinement, and systems-theoretic Loewner realization. Those support the
 state space and extractor story, but they do not appear to replace the
 residual-Laurent update or the chart/count policy.
 
+### May 2026 Targeted Residual-Update Query
+
+A narrower follow-up search used phrases around "residual inverse iteration",
+"moments", "finite realization", "Loewner", and "contour nonlinear eigenvalue".
+The result set again clustered around:
+
+- Neumaier's scalar residual inverse iteration:
+  <https://doi.org/10.1137/0722055>.
+- NLFEAST as contour-generalized residual inverse iteration:
+  <https://doi.org/10.1016/j.jocs.2018.05.006>.
+- Brennan--Embree--Gugercin's systems/Loewner realization framework:
+  <https://doi.org/10.1137/20M1389303>.
+- Contour-computed invariant pairs and Newton refinement:
+  <https://doi.org/10.1016/j.tcs.2017.03.024>.
+- Sakurai/SS projection and moment extraction:
+  <https://doi.org/10.14495/jsiaml.5.41> and
+  <https://doi.org/10.14495/jsiaml.1.52>.
+
+It also rediscovers the NLFEAST-Beyn hybrid preprint from this research line,
+which explicitly frames the missing problem as applying residual inverse
+iteration to contour moments. That is useful provenance, but it is not an
+external algorithm that resolves the higher-moment state/update problem.
+
+Current conclusion: the literature supports the decomposition into contour
+realization, reduced extraction, and local residual/Newton correction, but this
+search still did not find a published method that iterates a finite left/right
+Hankel or Loewner realization by the residual-Laurent physical-space update
+tested here. The novelty risk is therefore not "someone already named this exact
+loop" based on the targeted search; the larger risk is that an adjacent
+invariant-pair or model-reduction method can be specialized to the same formula
+with different language.
+
 ## Actionable Design After Focused Pass
 
 The literature pass supports the direction of the current experiment rather
