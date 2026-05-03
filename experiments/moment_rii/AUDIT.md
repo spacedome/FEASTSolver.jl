@@ -204,7 +204,15 @@ reuse, extractor agreement, and contour partitioning. This is
 not yet a decisive final solver or proof. The next
 productive steps are:
 
-1. Continue tightening the experiment interface around a small set of stable
+1. Turn the current derivation into a formal local theorem package. The proof
+   should use the now-pinned moment-role split: positive moments provide the
+   finite transfer realization and rank/recurrence evidence, while
+   inverse-Laurent residual moments enrich the physical trial/test spaces. The
+   remaining mathematical gap is a local statement relating residual-subspace
+   enrichment, quadrature/rank truncation, and the angle between `X,Y` and the
+   target residue spaces. A naive scalar denominator truncation proof has been
+   explicitly rejected by diagnostic.
+2. Continue tightening the experiment interface around a small set of stable
    objects: chart, pipeline, basis, extractor, update, policy, and diagnostic.
    `pipeline.jl` now holds the chart/pipeline/basis/extractor/update objects, while
    `policy.jl` holds `CountDrivenPolicyConfig`, `CountDrivenNumericsConfig`,
@@ -212,17 +220,17 @@ productive steps are:
    and central analytic iteration now pass the pipeline bundle through
    directly. Older helper harnesses still expose many loose keywords and should
    be migrated opportunistically.
-2. Continue publication-level novelty review before making final claims. The
+3. Continue publication-level novelty review before making final claims. The
    current literature, NEP-PACK, RSRR, CISS, Riesz-projection, and targeted
    extraction-versus-update checks did not find the exact residual-Laurent
    finite-realization iteration, but they are not an exhaustive publication
    review.
-3. Broaden problem-class evidence around the chart policy and reduced
+4. Broaden problem-class evidence around the chart policy and reduced
    extractor layer, not around benchmark maxing. The current sparse/distributed
    implementation rungs are sufficient as rough feasibility evidence; broader
    sparse coverage and scaling can wait until the algorithm story is more
    publication-ready.
-4. Only after those pass, consider extracting stable pieces from the experiment
+5. Only after those pass, consider extracting stable pieces from the experiment
    into a real implementation plan.
 
 ## Latest Completion Audit Snapshot
