@@ -176,6 +176,85 @@ The hard cases are then assigned to the right layer:
 - failure to linearize the local pole data into a finite realization: treat as
   an extractor/chart limitation, not as a successful moment-NLFEAST solve.
 
+## Collapsing Outer And Inner Moments
+
+The current prototype still contains an avoidable redundancy:
+
+```text
+outer FEAST layer:
+    compute contour samples T(z_j)^(-1) B and T(z_j)^(-H) C
+    build physical trial/test spaces X,Y
+
+inner extractor layer:
+    form Tred(z) = Y^H T(z) X
+    compute new contour samples Tred(z_j)^(-1)
+    build a reduced SS/Beyn/Loewner pencil
+```
+
+This is the same redundancy that motivated the original NLFEAST/Beyn hybrid:
+if FEAST has already paid for contour solves at the target quadrature nodes,
+then asking Beyn/SS to run a second contour solve on the projected problem is
+conceptually ugly, even if the second solve is small.
+
+The practical higher-moment algorithm should collapse these layers. The
+primary contour samples should be treated as the transfer data:
+
+```text
+R_j = T(z_j)^(-1) B,
+L_j = T(z_j)^(-H) C,
+G_j = C^H R_j = C^H T(z_j)^(-1) B.
+```
+
+From those same samples we can form:
+
+```text
+right physical moments:      M_k = sum_j w_j zeta_j^k R_j
+left physical moments:       N_k = sum_j conj(w_j) zeta_j^k L_j
+small two-sided moments:     H_k = sum_j w_j zeta_j^k G_j
+```
+
+The small moment sequence `H_k` is the reduced finite realization. SS/Hankel,
+Beyn, or Loewner extraction should build a small linear pencil from `H_k`
+directly. Physical right/left Ritz vectors are reconstructed from the physical
+moment data `M_k,N_k` and the small realization coordinates. The projected
+analytic object `Y^H T(lambda) X` then becomes a validation/refinement object,
+not the source of a second contour moment computation.
+
+This is the important practical claim:
+
+```text
+moment-NLFEAST should not be
+    FEAST projection -> reduced NEP -> Beyn/SS on the reduced NEP.
+
+It should be
+    one set of contour solves -> physical spaces + small finite realization
+    -> residual-Laurent repair -> updated contour-sample/realization data.
+```
+
+After a residual-Laurent update, the same principle should apply. The update
+already computes contour responses to compressed residual bases:
+
+```text
+T(z_j)^(-1) U_X,      T(z_j)^(-H) U_Y.
+```
+
+Those node-local responses should be retained as realization data for the next
+extraction whenever possible, rather than discarded and recomputed through
+`Tred(z)^(-1)`. The long-term implementation shape is therefore a contour
+sample cache owned by the chart/worker:
+
+```text
+node z_j owns factorizations/solvers;
+node applies them to active right/left probe blocks;
+global reduction forms physical moments and small two-sided moments;
+extractor builds a small pencil from the reduced moment sequence.
+```
+
+The current `ReducedExtractorConfig` path is still useful as a validation and
+fallback path, but it should not be the final efficient moment-NLFEAST design.
+The final design should make this collapsed one-contour-sample realization the
+default.
+
 ## Moment Roles
 
 The algorithm uses two moment families with different jobs.

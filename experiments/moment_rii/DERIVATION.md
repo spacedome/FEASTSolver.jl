@@ -237,6 +237,32 @@ The experiment now needs to keep two moment roles separate.
    the realization coordinates or improve conditioning; they are not the
    nonlinear iterative state.
 
+   In the final practical algorithm, these moments should not be recomputed by
+   first building physical spaces `X,Y` and then applying Beyn/SS to
+   `Y^H T(z) X`. The same contour samples should supply both physical moment
+   spaces and the reduced finite realization. With right probes `B`, left
+   probes `C`, and node samples
+
+   ```text
+   R_j = T(z_j)^(-1) B,
+   L_j = T(z_j)^(-H) C,
+   G_j = C^H R_j,
+   ```
+
+   one obtains physical and small two-sided moment data from the same solves:
+
+   ```text
+   M_k = sum_j w_j mu_j^k R_j,
+   N_k = sum_j conj(w_j) mu_j^k L_j,
+   H_k = sum_j w_j mu_j^k G_j.
+   ```
+
+   The sequence `H_k` is the small Markov sequence used by SS/Hankel, Beyn, or
+   Loewner to construct a linear finite-realization pencil. The physical
+   sequences `M_k,N_k` reconstruct right/left vectors. This is the collapsed
+   FEAST+Beyn/SS structure: one contour quadrature produces both the trial
+   spaces and the reduced realization.
+
 2. **Residual inverse-Laurent moments** are enrichment directions
 
    ```text
@@ -275,6 +301,24 @@ realize/extract local transfer data in X,Y
 This is closer to FEAST subspace iteration than to one-shot Beyn/SS. It also
 explains why `K_update` is an enrichment parameter, while basis/extractor
 moment order is a realization parameter.
+
+The collapsed view refines that loop:
+
+```text
+one set of contour node solves
+  -> physical right/left moment spaces
+  -> small two-sided linear realization pencil
+  -> physical residual subspaces
+  -> residual-Laurent enrichment using the same node/factorization model
+  -> updated physical moments and reduced realization
+```
+
+This is essential for low-dimensional, many-root problems such as sine or
+delay examples. The promise is not to solve an arbitrary projected analytic
+NEP globally. The promise is that contour moments expose a finite local
+realization whose roots are obtained from a small linear pencil; otherwise the
+method has fallen back to generic analytic rootfinding and is no longer the
+practical NLFEAST mechanism.
 
 ## Candidate Proof Obligations
 
