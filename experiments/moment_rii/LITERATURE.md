@@ -1119,3 +1119,63 @@ Interpretation:
 - This local code review strengthens the claim that our residual Laurent update
   is not just a renamed NEP-PACK contour method. It is a separate FEAST-style
   iteration applied after reduced extraction.
+
+## Targeted Adjacent Refinement Recheck, 2026-05-03
+
+Search scope: `"nonlinear eigenvalue problem contour integral residual inverse
+iteration moment method invariant pair"`, `"nonlinear eigenvalue problem
+contour integral Newton correction invariant pair Rayleigh functional"`,
+`"Sakurai Sugiura nonlinear eigenvalue problem moment Rayleigh Ritz iterative
+refinement"`, and `"Beyn contour integral nonlinear eigenvalue problem
+invariant pair Newton refinement"`.
+
+Primary sources checked:
+
+- Neumaier's residual inverse iteration paper defines nonlinear RII as a
+  shifted residual correction for one NEP eigenpair. This is the scalar local
+  correction that canonical NLFEAST generalizes with multiple contour shifts,
+  but it does not address higher-moment finite realizations or two-sided
+  residual Laurent repairs. DOI: <https://doi.org/10.1137/0722055>.
+- The 2018 nonlinear FEAST paper explicitly frames nonlinear FEAST as a
+  contour/multishift generalization of residual inverse iteration with fixed
+  factorization nodes and fixed subspace dimension. This supports the
+  experiment's reduction story for the `K=1` rung, but it is not a moment
+  realization update. DOI: <https://doi.org/10.1016/j.jocs.2018.05.006>.
+- The 2017 contour invariant-pair paper adapts Sakurai--Sugiura moments to
+  polynomial invariant pairs and studies Newton refinement. This reinforces the
+  invariant-pair/block-Newton interpretation as a reduced cleanup or escalation
+  rung, not the ordinary FEAST iteration loop. DOI:
+  <https://doi.org/10.1016/j.tcs.2017.03.024>.
+- The 2023 SIAM Review systems-theoretic contour paper treats contour methods
+  through realization and interpolation coordinates, especially Loewner pencils
+  as an alternative to block Hankel interpolation at infinity. This remains the
+  strongest external support for separating "realization/extractor coordinates"
+  from "physical-space residual repair." DOI:
+  <https://doi.org/10.1137/20M1389303>.
+- The 2025 SIAM Matrix Analysis paper on nonlinear Rayleigh--Ritz/refined
+  Rayleigh--Ritz analyzes convergence of reduced projection methods for regular
+  analytic NEPs. It is directly relevant to acceptance/refinement theory for
+  reduced Petrov--Galerkin data, but it is still an extraction/refinement
+  theory rather than a contour residual-update formula. DOI:
+  <https://doi.org/10.1137/23M161392X>.
+- Yokota and Sakurai's projection method extends Sakurai--Sugiura with
+  Rayleigh--Ritz projection for NEPs. This fits the extractor/projection rung:
+  contour moments produce a smaller NEP or pencil, followed by reduced
+  extraction. DOI: <https://doi.org/10.14495/jsiaml.5.41>.
+- Effenberger's deflation work uses minimal invariant pairs in a
+  Jacobi--Davidson setting for successive NEP eigenpairs. This is relevant to
+  future deflation/escalation policy for repeated or already accepted roots,
+  but it does not replace the local charted residual Laurent update. DOI:
+  <https://doi.org/10.1137/120885644>.
+
+Interpretation:
+
+- This recheck strengthens the current taxonomy rather than overturning it:
+  RII/nonlinear FEAST explain the scalar correction rung, SS/Beyn/Loewner
+  explain realization extraction, invariant-pair Newton/refined RR explain
+  reduced cleanup, and deflation explains a possible acceptance/escalation
+  layer.
+- I still did not find an adjacent source that updates a higher-moment
+  two-sided contour realization by low-rank residual Laurent repairs of the
+  physical trial/test spaces. That remains the distinctive candidate mechanism
+  to analyze, not a settled novelty claim.
