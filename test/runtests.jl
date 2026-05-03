@@ -1,5 +1,7 @@
 using TestItemRunner
 
+include("options.jl")
+
 function parse_test_tags(text)
     isempty(strip(text)) && return Set{Symbol}()
     Set(Symbol(strip(part)) for part in split(text, ",") if !isempty(strip(part)))
@@ -40,9 +42,16 @@ function apply_test_preset(
         run_torture = true
         run_slow = true
     else
-        error("unknown test preset: $name")
+        valid = join((preset.name for preset in TEST_PRESETS), ", ")
+        error("unknown test preset: $name. Available presets: $valid")
     end
     filter, include_tags, exclude_tags, run_slow, run_torture, only_torture
+end
+
+function maybe_handle_test_info_args(args)
+    normalized = normalize_test_args(args)
+    handle_test_info_args(normalized)
+    normalized
 end
 
 function normalize_test_args(args)
@@ -80,7 +89,7 @@ function normalize_test_args(args)
 end
 
 function parse_test_options(args)
-    args = normalize_test_args(args)
+    args = maybe_handle_test_info_args(args)
     filter = nothing
     include_tags = parse_test_tags(get(ENV, "FEAST_TEST_TAGS", ""))
     exclude_tags = parse_test_tags(get(ENV, "FEAST_TEST_EXCLUDE_TAGS", ""))
