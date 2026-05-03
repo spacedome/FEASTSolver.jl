@@ -165,7 +165,7 @@ end
     @test configs.update.biorthogonalize
 end
 
-@testitem "experimental moment RII: pipeline configs match loose chart keywords" begin
+@testitem "experimental moment RII: pipeline configs match loose chart keywords" tags=[:slow] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 
     cases = (scalar_rational_case(; root=0.15 + 0.05im, pole=2.5, name="contract"),)
