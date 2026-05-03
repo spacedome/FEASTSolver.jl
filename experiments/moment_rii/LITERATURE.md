@@ -1329,3 +1329,64 @@ Conclusion for the experiment:
   residual Laurent moments. This remains a plausible novel mechanism, but the
   novelty claim should remain qualified until a formal publication review is
   done.
+
+## Focused Novelty Pass: Residual Realization Updates, 2026-05-03
+
+This pass searched for the exact mechanism we would be tempted to claim as new,
+rather than for nearby contour eigensolvers. Search phrases included:
+`"residual moment" "nonlinear eigenvalue" contour`, `"residual" "Loewner"
+"nonlinear eigenvalue" contour`, `"Loewner" "residual inverse iteration"
+nonlinear eigenvalue`, `"finite realization" "residual" "nonlinear
+eigenvalue" "contour"`, `"Contour Integral Methods for Nonlinear Eigenvalue
+Problems" "Loewner" residual update`, and `"Rational Interpolation Methods for
+Nonlinear Eigenvalue Problems" "Iterated Rational Interpolation"`.
+
+The direct-search result is negative in the useful sense: I did not find a
+named method with the full pattern
+
+```text
+finite contour realization
+  -> physical right/left residual compression
+  -> contour inverse moments of those residual bases
+  -> repaired physical trial/test spaces
+  -> repeated reduced Petrov-Galerkin extraction
+```
+
+Closest adjacent sources:
+
+- Brennan--Embree--Gugercin's SIAM Review paper gives the systems/Loewner
+  realization view of contour NEP methods. It replaces Hankel coordinates with
+  Loewner coordinates and explicitly supports treating Hankel/SS/Loewner as
+  realization/extraction choices over the same contour solves. It does not
+  describe residual repair of physical trial/test spaces. DOI:
+  <https://doi.org/10.1137/20M1389303>.
+- Brennan's 2018 Virginia Tech thesis is especially close terminology-wise. It
+  develops Loewner contour integration and rational interpolation methods for
+  NEPs, then studies iterative rational interpolation where approximate
+  eigenvalues become new interpolation points; the one-point case is
+  Newton-like for a scalar function. This is an interpolation-point update of a
+  rational model, not the FEAST-style left/right physical residual-Laurent
+  update in this experiment. Persistent link:
+  <http://hdl.handle.net/10919/84924>.
+- The 2020 NLFEAST-Beyn hybrid preprint remains the provenance for the open
+  higher-moment iteration problem in this repo. It frames why naive
+  higher-moment RII expands the state and then requires deflation, but it does
+  not supply the residual realization update now being tested. DOI:
+  <https://doi.org/10.48550/arXiv.2007.03000>.
+
+Interpretation:
+
+- Loewner and rational interpolation are chart/extractor machinery. They may
+  improve rank visibility and reduced-model conditioning, but they are not the
+  FEAST iteration itself.
+- Residual inverse iteration and NLFEAST explain the scalar `K=1` correction
+  rung. They do not explain how to update a higher-moment realization without
+  collapsing it back to scalar Ritz columns.
+- The candidate mechanism is therefore still best described as a synthesis:
+  realization/extraction from SS/Beyn/Loewner, plus FEAST-style residual
+  inverse correction lifted to physical left/right spaces through compressed
+  Laurent moments.
+
+This is not a final novelty proof. It is a focused check that the most obvious
+terms around "residual realization update" and "residual Loewner update" do not
+appear to name the same loop.
