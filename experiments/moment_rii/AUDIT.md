@@ -32,10 +32,10 @@ and claims need both theoretical basis and numerical evidence.
 | Handle higher moments elegantly | `TrialSpaces`, `ReducedExtractorConfig`, Loewner/counting extractors, chart policy | The iterative state is physical `X,Y` plus reduced realization/extractor; expanded moments are not exposed as state. | Satisfied as design boundary |
 | Avoid ad-hoc black-box hacks | `retention_policy_decision`, `chart_policy_plan`, tests | Retention/refinement is expressed as support/count/residual/agreement diagnostics and explicit chart actions. Selected count-deficit charts shrink, while count-error-only nonnormal charts preserve parent-radius candidates. | Improving, not final |
 | Provide theoretical basis | `LITERATURE.md`, `README.md`, `ALGORITHM.md` | Systems/Loewner, SS/Hankel realization, invariant-pair/block Newton, algebraic multiplicity by argument principle, rational Krylov/NLEIGS, infinite-GMRES contour solves, and SS parameter-estimation references are summarized. | Stronger local basis; publication-level review still remains |
-| Provide numerical evidence | Slow tests under `just test 'moment RII'` | Linear, polynomial, analytic local-chart, Loewner-layout, extractor-agreement, near-pole rational, rational-coordinate, and block-Newton boundary tests. | Strong for dense experiment controls |
+| Provide numerical evidence | Slow tests under `just test 'moment RII'` | Linear, polynomial, analytic local-chart, Loewner-layout, extractor-agreement, near-pole rational, rational-coordinate, block-Newton boundary, and matrix-valued mixed diagnostic tests. | Strong for dense experiment controls |
 | Care about numerical properties | Rank, support, residual, count, layout/extractor agreement diagnostics | Tests pin cases where residuals, support, count, and agreement disagree. | Satisfied for current controls |
 | Care about efficiency | Algorithm avoids expanded Hankel state; residual update uses low-rank residual bases | `run_residual_laurent_compression_diagnostic` shows the moment update recovering a rank-deficient analytic chart with fewer candidate columns than scalar expanded RII. Sparse/distributed moment implementation and benchmark-level performance remain open. | Partially evidenced |
-| Avoid exact-root oracle in policy | `full_operator_count_estimate`, `adaptive_retention_score_summary`, `retention_policy_decision`, `run_count_driven_adaptive_grid_refinement`, `run_delay_count_driven_adaptive_refinement`, `run_multi_delay_count_driven_adaptive_refinement`, `run_two_delay_count_driven_adaptive_refinement`, `run_coupled_two_delay_count_driven_adaptive_refinement`, `run_near_pole_rational_count_driven_adaptive_refinement`, `run_duplicate_delay_count_driven_adaptive_refinement` | The three-function retention policy now decides support completeness and adaptive stopping against a full-operator argument-principle count. The scalar delay control goes further: it supplies no exact-root list and still stops when retained support matches the reliable contour count. The multi-delay triangular control exercises the same no-oracle simple-root path in a nonnormal dimension-three setting. The two-delay scalar control exercises a single quasipolynomial component with two exponential delay scales. The coupled two-delay control exercises a dense 2x2 NEP whose determinant roots are not independent scalar component roots. The near-pole rational control exercises that path with exterior rational singularities. The duplicate-delay control supplies no exact roots while exercising the algebraic multiplicity branch. | Satisfied for count-driven analytic policy paths |
+| Avoid exact-root oracle in policy | `full_operator_count_estimate`, `adaptive_retention_score_summary`, `retention_policy_decision`, `count_driven_chart_diagnostic_summary`, `run_count_driven_adaptive_grid_refinement`, `run_delay_count_driven_adaptive_refinement`, `run_multi_delay_count_driven_adaptive_refinement`, `run_two_delay_count_driven_adaptive_refinement`, `run_coupled_two_delay_count_driven_adaptive_refinement`, `run_near_pole_rational_count_driven_adaptive_refinement`, `run_duplicate_delay_count_driven_adaptive_refinement` | The three-function retention policy now decides support completeness and adaptive stopping against a full-operator argument-principle count. The scalar delay control goes further: it supplies no exact-root list and still stops when retained support matches the reliable contour count. The multi-delay triangular control now pins a no-oracle nonnormal stress where the base cover sees all nine residual-small candidates but retains only three support-2 roots before weak-center refinement completes the count. The two-delay scalar control exercises a single quasipolynomial component with two exponential delay scales. The coupled two-delay control exercises a dense 2x2 NEP whose determinant roots are not independent scalar component roots. The near-pole rational control exercises that path with exterior rational singularities. The duplicate-delay control supplies no exact roots while exercising the algebraic multiplicity branch. | Satisfied for count-driven analytic policy paths |
 | Separate algebraic count from unique-root retention | `local_cluster_multiplicity_estimates`, `run_triangular_count_driven_adaptive_refinement`, `run_squared_sine_count_driven_adaptive_refinement`, `run_duplicate_delay_count_driven_adaptive_refinement`, slow tests `count-driven refinement accounts for multiplicity`, `count-driven refinement handles repeated analytic roots`, and `count-driven refinement handles oracle-free multiplicity` | A nonnormal triangular control validates all 11 unique roots while the full determinant count is 12 because roots coincide. A `sin(z)^2` control validates seven unique roots while the full determinant count is 14. A duplicate-delay triangular control uses no exact-root list: full count is six, retained geometric support has three values, and every retained cluster receives multiplicity two. Local contour counts assign multiplicities to retained clusters, so the multiplicity-weighted retained count satisfies the algebraic count without duplicating scalar values. | Satisfied as boundary evidence |
 | Avoid unnecessary multiplicity work | `run_count_driven_adaptive_grid_refinement`, slow test `count-driven refinement stops without exact roots` | The simple-root count-driven path now stops when unique support equals the target count and returns no local multiplicity probes. Local cluster counts are only run on the algebraic/unique mismatch branch. | Satisfied for current count-driven path |
 
@@ -115,7 +115,10 @@ global block Newton, or rational-coordinate-only fixes.
   publication ready, but the count-driven lower rung now covers scalar delay,
   scalar two-delay, nonnormal multi-delay, dense coupled two-delay, near-pole
   rational, and multiplicity controls without exact-root stopping or
-  validation oracles.
+  validation oracles. The nonnormal multi-delay test now uses a coarse cover
+  that must refine weak support rather than trivially completing on the base
+  grid, and the triangular multiplicity test explicitly records residual/support
+  disagreement plus a local count warning.
 - Broader literature review now has a first pass over rational Krylov/NLEIGS,
   infinite-GMRES contour solves, SS parameter selection, quasi-Newton/RII
   interpretations, systems/Loewner contour methods, and contour invariant-pair
@@ -126,12 +129,13 @@ global block Newton, or rational-coordinate-only fixes.
 
 The goal is not complete. We have a strong candidate algorithm family with
 test-backed boundaries, and the oracle-free count-driven branch is now covered
-across several analytic problem classes, but this is not yet a decisive final
-solver or proof. The next productive steps are:
+across several analytic problem classes, including a nonnormal weak-support
+stress. This is not yet a decisive final solver or proof. The next productive
+steps are:
 
-1. Stress the same policy on harder matrix-valued analytic problems where
+1. Add at least one harder non-triangular matrix-valued analytic stress where
    residual-small extras, weak support, and local count warnings interact in
-   the same run.
+   the same run without relying on diagonal/triangular determinant structure.
 2. Continue the broader literature pass before making novelty claims, focusing
    on whether any published contour method iterates a finite realization by a
    residual-inverse moment correction.

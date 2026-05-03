@@ -1504,6 +1504,45 @@ function count_driven_refinement_row(stage, result, center_count, added_count, t
     )
 end
 
+function count_driven_chart_diagnostic_summary(
+    result;
+    outer_center=0.0 + 0.0im,
+    outer_radius,
+    match_atol=1e-6,
+    count_error_tol=1e-2,
+)
+    function stage_summary(stage_result)
+        clusters = stage_result.support_clusters
+        inside_clusters = [
+            cluster for cluster in clusters
+            if abs(cluster.value - outer_center) <= outer_radius + 10 * match_atol
+        ]
+        selected = stage_result.selected_records
+        usable_selected = [record for record in selected if !record.failed && record.good > 0]
+        count_errors = Float64[record.count_error for record in usable_selected]
+        (
+            union_good=length(stage_result.found),
+            retained=length(stage_result.support2_global_found),
+            inside_clusters=length(inside_clusters),
+            weak_inside_clusters=count(cluster -> cluster.support < 2, inside_clusters),
+            selected_records=length(selected),
+            selected_good_records=length(usable_selected),
+            selected_count_deficit=count(record -> record.good < record.count_estimate, usable_selected),
+            selected_count_error_bad=count(record -> record.count_error > count_error_tol, usable_selected),
+            max_selected_count_error=isempty(count_errors) ? 0.0 : maximum(count_errors),
+        )
+    end
+    (
+        base=stage_summary(result.base),
+        final=stage_summary(result.refined),
+        rows=result.rows,
+        stop_reason=result.stop_reason,
+        target_count=result.count.count_estimate,
+        target_count_error=result.count.count_error,
+        algebraic_retained_count=result.algebraic_retained_count,
+    )
+end
+
 function local_cluster_multiplicity_estimates(
     cases,
     values;

@@ -478,6 +478,7 @@ end
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 
     result = run_triangular_count_driven_adaptive_refinement(; print_rows=false)
+    diagnostic = count_driven_chart_diagnostic_summary(result; outer_radius=6.0)
     base = result.rows[1]
     final = result.rows[end]
 
@@ -493,6 +494,10 @@ end
     @test final.validation_success
     @test final.validation_matched == final.expected
     @test length(result.rows) == 3
+    @test diagnostic.base.union_good > diagnostic.base.retained
+    @test diagnostic.base.weak_inside_clusters > 0
+    @test diagnostic.base.selected_count_error_bad > 0
+    @test diagnostic.final.retained == final.retained
 end
 
 @testitem "experimental moment RII: count-driven refinement handles repeated analytic roots" tags=[:slow] begin
@@ -537,7 +542,13 @@ end
 @testitem "experimental moment RII: count-driven refinement handles oracle-free nonnormal delay" tags=[:slow] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 
-    result = run_multi_delay_count_driven_adaptive_refinement(; print_rows=false)
+    result = run_multi_delay_count_driven_adaptive_refinement(;
+        base_spacing=2.4,
+        chart_radii=(1.0, 1.6),
+        max_refinement_rounds=2,
+        print_rows=false,
+    )
+    diagnostic = count_driven_chart_diagnostic_summary(result; outer_radius=6.0)
     final = result.rows[end]
 
     @test result.count.expected == 0
@@ -550,7 +561,11 @@ end
     @test final.retained == result.count.count_estimate
     @test final.target_count == result.count.count_estimate
     @test final.validation_matched == 0
-    @test length(result.rows) == 1
+    @test length(result.rows) == 2
+    @test diagnostic.base.union_good == result.count.count_estimate
+    @test diagnostic.base.retained < result.count.count_estimate
+    @test diagnostic.base.weak_inside_clusters > 0
+    @test diagnostic.final.retained == result.count.count_estimate
 end
 
 @testitem "experimental moment RII: count-driven refinement handles oracle-free two-delay scalar" tags=[:slow] begin

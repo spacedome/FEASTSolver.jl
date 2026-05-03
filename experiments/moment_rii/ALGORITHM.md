@@ -130,7 +130,10 @@ per scalar Ritz value.
   count-driven loop is not secretly supervised by analytic roots.
 - Oracle-free nonnormal control: three distinct delay components with
   triangular nonnormal coupling retain all nine algebraic/geometric values from
-  support and contour count alone.
+  support and contour count alone. The pinned stress version starts from a
+  coarse cover with all nine residual-small candidates visible but only three
+  support-2 retained roots; adding weak target candidates completes the
+  count without exact roots.
 - Oracle-free two-delay control: a single quasipolynomial component
   `z+a-b exp(-tau z)-c exp(-sigma z)` has no closed-form root oracle in the
   harness. The count-driven loop retains three roots from the full-operator
@@ -144,6 +147,12 @@ per scalar Ritz value.
   nonnormal coupling has algebraic contour count six, three retained geometric
   values, and local count multiplicity two on each value without any exact-root
   list.
+- Matrix-valued mixed-diagnostic control: the triangular analytic multiplicity
+  case now records the coarse-cover diagnostic split directly. The base cover
+  has more residual-small values than retained support-2 roots, weak target
+  clusters, and a selected local count warning; the final accepted state is
+  algebraic-count complete through local multiplicity rather than by accepting
+  every residual-small candidate.
 
 Representative tests:
 
