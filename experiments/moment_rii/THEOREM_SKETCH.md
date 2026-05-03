@@ -264,6 +264,21 @@ The theorem should therefore be framed as a **FEAST-filtered block correction
 equation for a finite contour realization**. That is currently the most concise
 description of the candidate algorithm.
 
+The closest reduced-extraction theorem is Jia--Zheng's Rayleigh--Ritz/refined
+Rayleigh--Ritz analysis for analytic NEPs. It can likely supply the
+post-enrichment extraction side: given a sufficiently good trial space, it
+relates subspace deviation, Ritz values, refined Ritz vectors, and residual
+norms. It does not supply the enrichment side. The candidate proof therefore
+has to be modular:
+
+```text
+residual-Laurent enrichment estimate
+  + reduced NEP Ritz/refined-Ritz perturbation theory
+  + chart/count acceptance policy
+```
+
+Only the first line remains genuinely missing.
+
 ## Formal Obstruction
 
 The remaining proof is not blocked by implementation details. It is blocked at
@@ -319,3 +334,7 @@ This is the precise place where a new proof or a known theorem is required.
 The candidate algorithm is no longer vague; what is missing is a perturbation
 and correction estimate for **contour-filtered compressed residual corrections
 of a two-sided finite NEP realization**.
+
+Current literature search found reduced Rayleigh--Ritz perturbation theory and
+Jacobi-Davidson correction-equation theory adjacent to this obstruction, but
+not a theorem that directly covers the residual-Laurent enrichment step.

@@ -1482,3 +1482,41 @@ Interpretation for moment-NLFEAST:
 This strengthens the theorem target but does not close it. The missing result
 would compare the contour-averaged residual correction to a known local
 correction equation under chart-local assumptions.
+
+## Reduced Ritz Perturbation Boundary, 2026-05-03
+
+Search scope: `"nonlinear eigenvalue" "Ritz" perturbation reduced problem
+residual`, `"nonlinear eigenvalue" "Rayleigh-Ritz" perturbation residual
+vector`, `"finite realization" perturbation residual correction nonlinear
+eigenvalue`, and `"Loewner" perturbation residual correction nonlinear
+eigenvalue realization`.
+
+Closest result:
+
+- Jia and Zheng's 2025 Rayleigh--Ritz/refined Rayleigh--Ritz theory for regular
+  analytic NEPs is the closest theorem to our reduced-extraction layer. It
+  proves convergence results in terms of the deviation of the target
+  eigenvector from a trial subspace, shows that a Ritz value and refined Ritz
+  vector converge unconditionally as that deviation goes to zero, and shows
+  the Ritz vector itself can fail or be nonunique. It also gives residual-norm
+  based error bounds for approximate eigenvectors. DOI:
+  <https://doi.org/10.1137/23M161392X>.
+
+Interpretation:
+
+- This theorem supports two conclusions already seen numerically in the
+  experiment. First, subspace quality alone is not enough to trust Ritz
+  vectors in analytic NEPs. Second, physical residuals and refined extraction
+  matter.
+- It does not prove the residual-Laurent moment update. The theorem assumes a
+  given trial subspace and analyzes extraction/refinement inside it. Our
+  missing step is how contour-filtered compressed residual enrichment changes
+  the physical trial/test spaces before re-extraction.
+- Therefore the best current proof route is modular: use Jia--Zheng style
+  reduced Ritz perturbation theory after enrichment, but prove a separate
+  FEAST-filtered block-correction estimate for the enrichment step itself.
+
+The search did not find a finite-realization residual-correction theorem that
+directly implies the candidate update. This strengthens the current status:
+the extractor side has nearby theory, while the residual-Laurent enrichment
+side remains the unresolved theorem gap.
