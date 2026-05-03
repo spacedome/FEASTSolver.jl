@@ -257,6 +257,10 @@ end
     @test result.after_first.left_solves == 96
     @test result.after_second.right_solves == 192
     @test result.after_second.left_solves == 192
+    @test result.after_first.right_solution_buffers == 1
+    @test result.after_first.left_solution_buffers == 1
+    @test result.after_second.right_solution_buffers == 1
+    @test result.after_second.left_solution_buffers == 1
     @test result.symbolic_stats.right_candidate_cols == result.direct_stats.right_candidate_cols
     @test result.symbolic_stats.left_candidate_cols == result.direct_stats.left_candidate_cols
 end

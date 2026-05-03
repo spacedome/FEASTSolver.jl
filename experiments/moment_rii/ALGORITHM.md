@@ -205,10 +205,12 @@ per scalar Ritz value.
   claiming sparse nonlinear worker storage or benchmark performance.
 - Sparse symbolic-reuse smoke: on the same sparse quadratic gallery control,
   one reusable UMFPACK factor per side is initialized once and then refreshed
-  numerically across contour nodes with symbolic reuse. The resulting
-  residual-Laurent update matches the generic sparse update and remains stable
-  across a repeated update. This pins the no-store fixed-pattern sparse rung
-  without claiming complete sparse work-buffer reuse or benchmark performance.
+  numerically across contour nodes with symbolic reuse. Dense solve result
+  buffers are allocated once per side and reused across repeated updates. The
+  resulting residual-Laurent update matches the generic sparse update and
+  remains stable across a repeated update. This pins the no-store fixed-pattern
+  sparse rung without claiming complete sparse workspace reuse or benchmark
+  performance.
 - Sparse stored-factor smoke: the same sparse linear control caches
   contour-node sparse factorizations for the residual-Laurent update. The
   cached update reproduces the generic sparse update to roundoff projection

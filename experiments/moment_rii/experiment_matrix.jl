@@ -714,13 +714,17 @@ function run_sparse_symbolic_reuse_residual_laurent_smoke(;
         left_numeric_refactors=0,
         right_solves=0,
         left_solves=0,
+        right_solution_buffers=0,
+        left_solution_buffers=0,
     ))
     right_Tz = similar(problem.prototype)
     left_Tz = similar(problem.prototype)
     right_factor = Ref{Any}(nothing)
     left_factor = Ref{Any}(nothing)
+    right_solution = Ref{Any}(nothing)
+    left_solution = Ref{Any}(nothing)
 
-    function symbolic_factor_solve!(factor_ref, Tz, z, B; side)
+    function symbolic_factor_solve!(factor_ref, Tz, solution_ref, z, B; side)
         problem.T_update(Tz, z)
         old = stats_ref[]
         if factor_ref[] === nothing
@@ -738,14 +742,22 @@ function run_sparse_symbolic_reuse_residual_laurent_smoke(;
         stats_ref[] = side === :right ?
             merge(old, (right_solves=old.right_solves + 1,)) :
             merge(old, (left_solves=old.left_solves + 1,))
-        factor_ref[] \ B
+        if solution_ref[] === nothing || size(solution_ref[]) != size(B)
+            solution_ref[] = similar(B, ComplexF64)
+            old = stats_ref[]
+            stats_ref[] = side === :right ?
+                merge(old, (right_solution_buffers=old.right_solution_buffers + 1,)) :
+                merge(old, (left_solution_buffers=old.left_solution_buffers + 1,))
+        end
+        ldiv!(solution_ref[], factor_ref[], B)
+        solution_ref[]
     end
 
     symbolic_ctx = merge(
         direct_ctx,
         (
-            Tsolve=(z, B) -> symbolic_factor_solve!(right_factor, right_Tz, z, B; side=:right),
-            Tadjoint_solve=(z, B) -> symbolic_factor_solve!(left_factor, left_Tz, conj(z), B; side=:left),
+            Tsolve=(z, B) -> symbolic_factor_solve!(right_factor, right_Tz, right_solution, z, B; side=:right),
+            Tadjoint_solve=(z, B) -> symbolic_factor_solve!(left_factor, left_Tz, left_solution, conj(z), B; side=:left),
         ),
     )
     basis = MomentBasisConfig(;
@@ -804,7 +816,7 @@ function run_sparse_symbolic_reuse_residual_laurent_smoke(;
         println("Sparse symbolic-reuse residual Laurent smoke")
         println("  sparse quadratic gallery operator; validates one symbolic factor per side can be numerically refreshed")
         @printf(
-            "  expected=%d direct=%d/%d symbolic=%d/%d projection_gap=(%.3e, %.3e) init=(%d,%d) refactors=(%d,%d)->(%d,%d) solves=(%d,%d)->(%d,%d)\n",
+            "  expected=%d direct=%d/%d symbolic=%d/%d projection_gap=(%.3e, %.3e) init=(%d,%d) refactors=(%d,%d)->(%d,%d) solves=(%d,%d)->(%d,%d) buffers=(%d,%d)->(%d,%d)\n",
             result.expected,
             result.direct.matched,
             result.expected,
@@ -822,6 +834,10 @@ function run_sparse_symbolic_reuse_residual_laurent_smoke(;
             result.after_first.left_solves,
             result.after_second.right_solves,
             result.after_second.left_solves,
+            result.after_first.right_solution_buffers,
+            result.after_first.left_solution_buffers,
+            result.after_second.right_solution_buffers,
+            result.after_second.left_solution_buffers,
         )
     end
     result
@@ -954,6 +970,7 @@ function run_sparse_nonlinear_gallery_moment_pipeline_smoke(;
     result = (
         expected=length(problem.expected),
         sparse_matrix=problem.ctx.Tmatrix(center + radius * im) isa AbstractSparseMatrix,
+        derivative_sparse=problem.ctx.Tderivative(center + radius * im) isa AbstractSparseMatrix,
         prototype_sparse=problem.prototype isa AbstractSparseMatrix,
         initial=summary0,
         updated=merge(

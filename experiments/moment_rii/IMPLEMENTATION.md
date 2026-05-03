@@ -145,7 +145,10 @@ quadratic polynomial gallery operator with known roots on the generic nonlinear
 sparse pipeline. `run_sparse_symbolic_reuse_residual_laurent_smoke` verifies
 the no-store fixed-pattern rung: one sparse factor per side is initialized
 once, refreshed numerically with `reuse_symbolic=true` across contour nodes,
-and still reproduces the generic sparse residual-Laurent update.
+and still reproduces the generic sparse residual-Laurent update. The same
+smoke now reuses one dense solve-result buffer per side across repeated
+updates, which is the first explicit sparse workspace-reuse check in the moment
+experiment.
 `run_sparse_remote_stored_factor_worker_smoke` combines the linear sparse and
 remote rungs: a
 sparse linear control runs through persistent worker-owned contour partitions,
@@ -153,7 +156,7 @@ the first update creates the expected node-local sparse factors, and the second
 update reuses those factors while matching the serial residual-Laurent update.
 `run_sparse_nonlinear_remote_stored_factor_worker_smoke` repeats that
 stored-factor worker path on the nonlinear sparse quadratic gallery control.
-It does not yet provide reusable sparse work buffers, broad realistic sparse
+It does not yet provide full reusable sparse workspaces, broad realistic sparse
 gallery coverage, or benchmark-level performance.
 
 The first realistic sparse gallery smoke is now
