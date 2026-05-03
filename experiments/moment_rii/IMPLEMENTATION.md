@@ -77,10 +77,11 @@ The serial update and partition diagnostic now call the same
 compression helper, so the experiment has one node-local accumulation boundary
 to map onto workers.
 `run_remote_residual_laurent_worker_diagnostic` is the first process-level
-prototype: it sends those residual bases to actual Julia worker processes,
-each worker owns a stable subset of contour nodes for the update, and the
-master reduces the returned Laurent blocks before running the same compression
-step. This is still an experiment diagnostic, not a persistent public plan.
+prototype: it stores the operator closures and contour-node subsets on actual
+Julia worker processes, sends only the current low-rank residual bases for each
+update, and the master reduces the returned Laurent blocks before running the
+same compression step. This is still an experiment diagnostic, not a public or
+optimized sparse plan.
 
 ## What Not To Do
 
@@ -109,8 +110,9 @@ operator with known eigenvalues, not a difficult NEP:
    residual-Laurent update on the same problem.
 
 The current remote diagnostic completes steps 1-6 for a dense analytic control
-without persistent worker workspaces. The next implementation step is to turn
-that diagnostic into a reusable plan that keeps worker-local operator data,
-node assignments, and buffers alive across residual-update iterations.
+and keeps worker-local operator data and node assignments alive across two
+residual-update calls. The next implementation step is to add worker-local
+buffers and sparse/factorization storage, then benchmark against the serial and
+one-shot remote paths.
 
 Only after that should the prototype move to nonlinear sparse gallery problems.

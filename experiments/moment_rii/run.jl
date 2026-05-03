@@ -8,6 +8,10 @@ using Distributed
 
 const REPO_ROOT = normpath(joinpath(@__DIR__, "..", ".."))
 
+if !isdefined(@__MODULE__, :_MOMENT_RII_REMOTE_WORKSPACES)
+    const _MOMENT_RII_REMOTE_WORKSPACES = Dict{Symbol, Any}()
+end
+
 struct PairHistory
     iteration::Int
     rank::Int
@@ -4606,6 +4610,61 @@ function residual_laurent_remote_worker_step(
         elapsed_ns=time_ns() - start_ns,
         pid=myid(),
     )
+end
+
+function init_residual_laurent_remote_worker!(
+    key::Symbol,
+    Tsolve,
+    Tadjoint_solve,
+    z_nodes,
+    z_weights,
+    center,
+    radius,
+    moment_count,
+)
+    _MOMENT_RII_REMOTE_WORKSPACES[key] = (
+        Tsolve=Tsolve,
+        Tadjoint_solve=Tadjoint_solve,
+        z_nodes=ComplexF64.(z_nodes),
+        z_weights=ComplexF64.(z_weights),
+        center=ComplexF64(center),
+        radius=Float64(radius),
+        moment_count=Int(moment_count),
+    )
+    (
+        pid=myid(),
+        nodes=length(z_nodes),
+        key=key,
+    )
+end
+
+function residual_laurent_persistent_remote_worker_step(key::Symbol, Rright_basis, Rleft_basis)
+    ws = _MOMENT_RII_REMOTE_WORKSPACES[key]
+    start_ns = time_ns()
+    right_moments, left_moments = residual_laurent_moment_blocks_generic(
+        ws.Tsolve,
+        ws.Tadjoint_solve,
+        Rright_basis,
+        Rleft_basis,
+        ws.z_nodes,
+        ws.z_weights,
+        ws.center,
+        ws.radius;
+        moment_count=ws.moment_count,
+    )
+    (
+        right_moments=right_moments,
+        left_moments=left_moments,
+        nodes=length(ws.z_nodes),
+        elapsed_ns=time_ns() - start_ns,
+        pid=myid(),
+    )
+end
+
+function cleanup_residual_laurent_remote_worker!(key::Symbol)
+    existed = haskey(_MOMENT_RII_REMOTE_WORKSPACES, key)
+    delete!(_MOMENT_RII_REMOTE_WORKSPACES, key)
+    existed
 end
 
 function compress_residual_laurent_candidates(

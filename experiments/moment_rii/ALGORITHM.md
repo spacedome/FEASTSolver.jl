@@ -203,10 +203,11 @@ per scalar Ritz value.
   serial update to projection gaps near roundoff. This pins the algebra needed
   for persistent worker-owned contour partitions.
 - Remote residual-Laurent worker diagnostic: the same update runs on actual
-  Julia worker processes with each process receiving a stable contour-node
-  subset. The reduced Laurent blocks match the serial update to roundoff
-  projection gaps. This is process-level evidence for the worker model, not yet
-  an optimized persistent plan.
+  Julia worker processes with each process retaining the operator closures and
+  a stable contour-node subset across two residual-Laurent updates. The reduced
+  Laurent blocks match the serial update to roundoff projection gaps. This is
+  process-level evidence for the worker model, not yet an optimized sparse or
+  benchmarked implementation.
 - Canonical NLFEAST limit control: a three-component one-root-per-component
   rational NEP compares the existing `nlfeast!`, scalar-expanded residual RII,
   and compressed residual-Laurent update. All three recover the same three

@@ -4023,6 +4023,137 @@ function partitioned_residual_laurent_update(
     updated, stats
 end
 
+struct RemoteResidualLaurentUpdatePlan
+    key::Symbol
+    worker_ids::Vector{Int}
+    assignments::Vector{Vector{Int}}
+    chart::ContourChart
+    config::ResidualUpdateConfig
+end
+
+function RemoteResidualLaurentUpdatePlan(
+    ctx,
+    chart::ContourChart,
+    config::ResidualUpdateConfig;
+    worker_ids,
+    prepare_workers=true,
+)
+    worker_ids = collect(Int, worker_ids)
+    isempty(worker_ids) && error("remote residual-Laurent plan requires worker_ids")
+    if prepare_workers
+        run_path = joinpath(@__DIR__, "run.jl")
+        for pid in worker_ids
+            Distributed.remotecall_wait(Main.include, pid, run_path)
+        end
+    end
+    z_nodes, z_weights = circular_rule(chart, config.rii_nodes)
+    assignments = [Int[] for _ in worker_ids]
+    for (index, _) in enumerate(z_nodes)
+        push!(assignments[mod1(index, length(worker_ids))], index)
+    end
+    key = gensym(:moment_rii_remote)
+    for (pid, local_indices) in zip(worker_ids, assignments)
+        Distributed.remotecall_wait(
+            init_residual_laurent_remote_worker!,
+            pid,
+            key,
+            ctx.Tsolve,
+            ctx.Tadjoint_solve,
+            z_nodes[local_indices],
+            z_weights[local_indices],
+            chart.center,
+            chart.radius,
+            config.moment_count,
+        )
+    end
+    RemoteResidualLaurentUpdatePlan(key, worker_ids, assignments, chart, config)
+end
+
+function close_remote_residual_laurent_plan!(plan::RemoteResidualLaurentUpdatePlan)
+    for pid in plan.worker_ids
+        try
+            Distributed.remotecall_wait(cleanup_residual_laurent_remote_worker!, pid, plan.key)
+        catch err
+            @warn "failed to clean up moment-RII remote worker state" pid exception=(err, catch_backtrace())
+        end
+    end
+    nothing
+end
+
+function remote_residual_laurent_update(
+    ctx,
+    trial::TrialSpaces,
+    extraction,
+    plan::RemoteResidualLaurentUpdatePlan,
+)
+    config = plan.config
+    Rright_basis, Rleft_basis, right_residual_singulars, left_residual_singulars =
+        residual_blocks_from_matrix_extraction(ctx.Tmatrix, extraction; residual_ranktol=config.residual_ranktol)
+    n = size(trial.X, 1)
+    right_moments = [zeros(ComplexF64, n, size(Rright_basis, 2)) for _ in 1:config.moment_count]
+    left_moments = [zeros(ComplexF64, n, size(Rleft_basis, 2)) for _ in 1:config.moment_count]
+    futures = Any[]
+    for pid in plan.worker_ids
+        push!(
+            futures,
+            Distributed.remotecall(
+                residual_laurent_persistent_remote_worker_step,
+                pid,
+                plan.key,
+                Rright_basis,
+                Rleft_basis,
+            ),
+        )
+    end
+
+    worker_reports = NamedTuple[]
+    for future in futures
+        report = fetch(future)
+        for k in 1:config.moment_count
+            right_moments[k] .+= report.right_moments[k]
+            left_moments[k] .+= report.left_moments[k]
+        end
+        push!(
+            worker_reports,
+            (
+                pid=report.pid,
+                nodes=report.nodes,
+                elapsed_ns=report.elapsed_ns,
+                right_cols=size(Rright_basis, 2),
+                left_cols=size(Rleft_basis, 2),
+            ),
+        )
+    end
+
+    Xnew, Ynew, Xcandidate, Ycandidate, right_singulars, left_singulars =
+        compress_residual_laurent_candidates(
+            trial.X,
+            trial.Y,
+            right_moments,
+            left_moments;
+            compression_ranktol=config.compression_ranktol,
+        )
+    updated = common_square_trial_spaces(TrialSpaces(
+        X=Xnew,
+        Y=Ynew,
+        right_singulars=Float64.(right_singulars),
+        left_singulars=Float64.(left_singulars),
+        source=:persistent_remote_residual_laurent_update,
+    ))
+    stats = (
+        right_residual_rank=size(Rright_basis, 2),
+        left_residual_rank=size(Rleft_basis, 2),
+        right_residual_singulars=right_residual_singulars,
+        left_residual_singulars=left_residual_singulars,
+        right_candidate_cols=size(Xcandidate, 2),
+        left_candidate_cols=size(Ycandidate, 2),
+        right_singulars=right_singulars,
+        left_singulars=left_singulars,
+        workers=worker_reports,
+    )
+    updated, stats
+end
+
 function remote_residual_laurent_update(
     ctx,
     trial::TrialSpaces,
@@ -4220,45 +4351,67 @@ function run_remote_residual_laurent_worker_diagnostic(;
         )
         trial = initial_dual_trial_spaces(ctx, chart, basis)
         extraction0 = extract_reduced_nep(ctx, trial, chart, extractor)
-        serial_trial, serial_stats = residual_laurent_update(ctx, trial, extraction0, chart, update)
-        remote_trial, remote_stats = remote_residual_laurent_update(
+        plan = RemoteResidualLaurentUpdatePlan(
             ctx,
-            trial,
-            extraction0,
             chart,
             update;
             worker_ids=worker_ids,
         )
-        serial_extraction = extract_reduced_nep(ctx, serial_trial, chart, extractor)
-        remote_extraction = extract_reduced_nep(ctx, remote_trial, chart, extractor)
-        serial_summary = dual_scalar_rii_summary(serial_extraction, ctx.expected; residual_tol=residual_tol, match_atol=match_atol)
-        remote_summary = dual_scalar_rii_summary(remote_extraction, ctx.expected; residual_tol=residual_tol, match_atol=match_atol)
-        Px = serial_trial.X * serial_trial.X' - remote_trial.X * remote_trial.X'
-        Py = serial_trial.Y * serial_trial.Y' - remote_trial.Y * remote_trial.Y'
-        result = (
-            expected=length(ctx.expected),
-            workers=worker_ids,
-            serial=serial_summary,
-            remote=remote_summary,
-            x_projection_gap=opnorm(Px),
-            y_projection_gap=opnorm(Py),
-            serial_stats=serial_stats,
-            remote_stats=remote_stats,
-        )
+        result = try
+            serial_trial, serial_stats = residual_laurent_update(ctx, trial, extraction0, chart, update)
+            remote_trial, remote_stats = remote_residual_laurent_update(ctx, trial, extraction0, plan)
+            serial_extraction = extract_reduced_nep(ctx, serial_trial, chart, extractor)
+            remote_extraction = extract_reduced_nep(ctx, remote_trial, chart, extractor)
+            serial_trial2, serial_stats2 = residual_laurent_update(ctx, serial_trial, serial_extraction, chart, update)
+            remote_trial2, remote_stats2 = remote_residual_laurent_update(ctx, remote_trial, remote_extraction, plan)
+            serial_extraction2 = extract_reduced_nep(ctx, serial_trial2, chart, extractor)
+            remote_extraction2 = extract_reduced_nep(ctx, remote_trial2, chart, extractor)
+            serial_summary = dual_scalar_rii_summary(serial_extraction, ctx.expected; residual_tol=residual_tol, match_atol=match_atol)
+            remote_summary = dual_scalar_rii_summary(remote_extraction, ctx.expected; residual_tol=residual_tol, match_atol=match_atol)
+            serial_summary2 = dual_scalar_rii_summary(serial_extraction2, ctx.expected; residual_tol=residual_tol, match_atol=match_atol)
+            remote_summary2 = dual_scalar_rii_summary(remote_extraction2, ctx.expected; residual_tol=residual_tol, match_atol=match_atol)
+            Px = serial_trial.X * serial_trial.X' - remote_trial.X * remote_trial.X'
+            Py = serial_trial.Y * serial_trial.Y' - remote_trial.Y * remote_trial.Y'
+            Px2 = serial_trial2.X * serial_trial2.X' - remote_trial2.X * remote_trial2.X'
+            Py2 = serial_trial2.Y * serial_trial2.Y' - remote_trial2.Y * remote_trial2.Y'
+            (
+                expected=length(ctx.expected),
+                workers=worker_ids,
+                assignments=plan.assignments,
+                serial=serial_summary,
+                remote=remote_summary,
+                serial_second=serial_summary2,
+                remote_second=remote_summary2,
+                x_projection_gap=opnorm(Px),
+                y_projection_gap=opnorm(Py),
+                x_projection_gap_second=opnorm(Px2),
+                y_projection_gap_second=opnorm(Py2),
+                serial_stats=serial_stats,
+                remote_stats=remote_stats,
+                serial_stats_second=serial_stats2,
+                remote_stats_second=remote_stats2,
+            )
+        finally
+            close_remote_residual_laurent_plan!(plan)
+        end
         if print_rows
             println()
             println("Remote residual Laurent worker diagnostic")
-            println("  verifies actual Julia worker processes can own contour-node subsets for the residual-Laurent update")
+            println("  verifies actual Julia worker processes can retain contour-node ownership across residual-Laurent updates")
             @printf(
-                "  workers=%s expected=%d serial=%d/%d remote=%d/%d projection_gap=(%.3e, %.3e) worker_nodes=%s\n",
+                "  workers=%s expected=%d serial=%d/%d remote=%d/%d second=%d/%d projection_gap=(%.3e, %.3e) second_gap=(%.3e, %.3e) worker_nodes=%s\n",
                 string(worker_ids),
                 result.expected,
                 result.serial.matched,
                 result.expected,
                 result.remote.matched,
                 result.expected,
+                result.remote_second.matched,
+                result.expected,
                 result.x_projection_gap,
                 result.y_projection_gap,
+                result.x_projection_gap_second,
+                result.y_projection_gap_second,
                 string([report.nodes for report in result.remote_stats.workers]),
             )
         end

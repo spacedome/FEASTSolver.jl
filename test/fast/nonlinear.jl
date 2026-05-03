@@ -1117,11 +1117,19 @@ end
     @test result.expected == 20
     @test result.serial.matched == result.expected
     @test result.remote.matched == result.expected
+    @test result.serial_second.matched == result.expected
+    @test result.remote_second.matched == result.expected
     @test result.remote.spurious_good == 0
+    @test result.remote_second.spurious_good == 0
     @test result.x_projection_gap <= 1e-12
     @test result.y_projection_gap <= 1e-12
+    @test result.x_projection_gap_second <= 1e-12
+    @test result.y_projection_gap_second <= 1e-12
     @test length(result.remote_stats.workers) == 2
     @test sum(report.nodes for report in result.remote_stats.workers) == 128
+    @test length(result.remote_stats_second.workers) == 2
+    @test sum(report.nodes for report in result.remote_stats_second.workers) == 128
+    @test result.assignments == [[i for i in 1:2:128], [i for i in 2:2:128]]
     @test result.remote_stats.right_candidate_cols == result.serial_stats.right_candidate_cols
     @test result.remote_stats.left_candidate_cols == result.serial_stats.left_candidate_cols
 end
