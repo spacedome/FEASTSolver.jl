@@ -1027,3 +1027,39 @@ Interpretation:
   two-sided contour realization by low-rank residual Laurent moments. That is
   not a novelty claim yet, but it narrows what a publication-level review must
   check.
+
+## NEP-PACK Contour Implementation Check, 2026-05-03
+
+Local source reviewed under
+`.julia/packages/NonlinearEigenproblems/HkMZG/src/`:
+
+- `method_beyncontour.jl`
+- `method_block_SS.jl`
+- `method_contour_common.jl`
+
+Observations:
+
+- `contour_beyn` constructs two contour integrals `A0` and `A1`, computes an
+  SVD/rank estimate of `A0`, solves the small matrix eigenproblem from Beyn's
+  algorithm, forms vectors `V0 * VB`, and then optionally filters/sorts by
+  residual and contour membership. There is no outer FEAST/RII-style residual
+  update of physical trial spaces.
+- `contour_block_SS` computes higher moments `Shat`, projects them with random
+  left probes into moment matrices `Mhat`, builds the Hankel pencils
+  `Hhat`/`Hhat2`, extracts eigenvalues from the small generalized eigenproblem,
+  and forms vectors from the moment tensor. Again, this is extraction from
+  contour moments, not an iterative residual repair loop.
+- `method_contour_common.jl` confirms the shared abstraction is a matrix
+  integrator over expensive samples `f(t)` times cheap scalar basis functions
+  `gv(t)`. This aligns with our extractor-coordinate view: NEP-PACK's contour
+  methods expose quadrature/realization machinery, not FEAST-style moment
+  iteration.
+
+Interpretation:
+
+- NEP-PACK supports the taxonomy used in `ALGORITHM.md`: Beyn and block SS are
+  reduced-extraction rungs. Their residual checks are acceptance/filtering
+  diagnostics, not updates of the left/right physical spaces.
+- This local code review strengthens the claim that our residual Laurent update
+  is not just a renamed NEP-PACK contour method. It is a separate FEAST-style
+  iteration applied after reduced extraction.
