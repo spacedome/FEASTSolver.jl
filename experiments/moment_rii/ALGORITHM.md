@@ -110,6 +110,13 @@ per scalar Ritz value.
 - Residual-Laurent compression control: on a rank-deficient analytic chart, the
   moment update recovers all roots with fewer candidate columns and a larger
   observable physical realization than scalar expanded RII, which fails.
+- Residual-Laurent update ladder: on the radius-20 upper-triangular nonnormal
+  analytic chart cover, reduced extraction alone (`iterations=0`) recovers
+  `34/44` target roots, one residual-Laurent update recovers `42/44`, and two
+  updates recover `44/44`. This pins the algorithm-family interpretation:
+  Beyn/SS-style extraction is the lower rung, while the FEAST residual update
+  repairs weak/nonnormal physical trial-test spaces when extraction alone is
+  insufficient.
 - Canonical NLFEAST limit control: a three-component one-root-per-component
   rational NEP compares the existing `nlfeast!`, scalar-expanded residual RII,
   and compressed residual-Laurent update. All three recover the same three
@@ -191,6 +198,7 @@ Representative tests:
 - `just test 'automatic retention policy'`
 - `just test 'candidate-centered split'`
 - `just test 'residual Laurent update'`
+- `just test 'repairs nonnormal chart cover'`
 - `just test 'canonical NLFEAST limit'`
 - `just test 'near-pole rational'`
 - `just test 'without root oracle'`

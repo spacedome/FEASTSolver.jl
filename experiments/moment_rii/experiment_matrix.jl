@@ -3421,6 +3421,71 @@ function run_residual_laurent_compression_diagnostic(;
     )
 end
 
+function run_residual_laurent_update_ladder_diagnostic(;
+    coupling=10.0,
+    outer_radius=20.0,
+    spacing=2.4,
+    chart_radii=(0.8, 1.2, 1.8, 2.4, 3.0),
+    iteration_counts=(0, 1, 2),
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    rows = NamedTuple[]
+    results = Any[]
+    for iterations in iteration_counts
+        result = run_dual_grid_chart_cover_triangular_analytic(;
+            coupling=coupling,
+            outer_radius=outer_radius,
+            spacing=spacing,
+            chart_radii=chart_radii,
+            basis_nodes=32,
+            rii_nodes=512,
+            iterations=iterations,
+            basis_ranktol=1e-8,
+            determinant_nodes=1024,
+            reduced_nodes=1024,
+            residual_normalization=:vector,
+            component_scaling=:contour_max,
+            residual_tol=residual_tol,
+            match_atol=match_atol,
+            print_charts=false,
+        )
+        push!(results, result)
+        push!(
+            rows,
+            (
+                iterations=iterations,
+                expected=length(result.expected),
+                union=length(result.found),
+                matched=result.matched,
+                retained=length(result.support2_global_found),
+                retained_matched=result.support2_global_matched,
+            ),
+        )
+    end
+    if print_rows
+        println()
+        println("Residual Laurent update ladder diagnostic")
+        println("  triangular nonnormal chart cover; iterations=0 is reduced extraction only")
+        @printf("  %-10s %8s %12s %12s %12s\n", "updates", "union", "matched", "retained", "retained_ok")
+        for row in rows
+            @printf(
+                "  %-10d %8d %5d/%-6d %5d/%-6d %5d/%-6d\n",
+                row.iterations,
+                row.union,
+                row.matched,
+                row.expected,
+                row.retained,
+                row.expected,
+                row.retained_matched,
+                row.expected,
+            )
+        end
+    end
+    (rows=rows, results=results, final=last(rows))
+end
+
 function retention_policy_decision(
     summary;
     residual_tol=1e-8,

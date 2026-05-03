@@ -964,6 +964,22 @@ end
     @test result.compressed_updated.right_basis_cols > result.scalar_updated.right_basis_cols
 end
 
+@testitem "experimental moment RII: residual Laurent update repairs nonnormal chart cover" tags=[:slow, :moment_heavy] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_residual_laurent_update_ladder_diagnostic(; print_rows=false)
+    rows = result.rows
+
+    @test [row.iterations for row in rows] == [0, 1, 2]
+    @test all(row.expected == 44 for row in rows)
+    @test rows[1].matched == 34
+    @test rows[2].matched == 42
+    @test rows[3].matched == 44
+    @test rows[1].retained_matched < rows[2].retained_matched < rows[3].retained_matched
+    @test rows[3].retained == rows[3].expected
+    @test rows[3].retained_matched == rows[3].expected
+end
+
 @testitem "experimental moment RII: adaptive radius-20 analytic solve agrees across reduced extractors" tags=[:slow, :moment_heavy] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 
