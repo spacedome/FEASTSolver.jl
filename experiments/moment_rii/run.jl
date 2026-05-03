@@ -4828,6 +4828,20 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
             refinement_steps=refinement_steps,
             refinement_nodes=refinement_nodes,
         ) : extraction_config
+    extractor = extractor_config.extractor
+    determinant_nodes = extractor_config.determinant_nodes
+    determinant_capacity = extractor_config.determinant_capacity
+    reduced_moments = extractor_config.reduced_moments
+    reduced_nodes = extractor_config.reduced_nodes
+    reduced_ranktol = extractor_config.reduced_ranktol
+    reduced_ss_mode = extractor_config.reduced_ss_mode
+    loewner_points = extractor_config.loewner_points
+    loewner_radius = extractor_config.loewner_radius
+    loewner_phase = extractor_config.loewner_phase
+    residual_normalization = extractor_config.residual_normalization
+    reduced_refinement = extractor_config.refinement
+    refinement_steps = extractor_config.refinement_steps
+    refinement_nodes = extractor_config.refinement_nodes
     residual_config = update_config === nothing ? ResidualUpdateConfig(
             moment_count=update_moment_count,
             rii_nodes=rii_nodes,
