@@ -94,6 +94,31 @@ R_X ~= U_X C_X,        R_Y ~= U_Y C_Y,
 because the correction should depend on the residual subspace, not on an
 arbitrary scalar enumeration of possibly redundant Ritz values.
 
+## Why The Test Space Is Structural
+
+The reduced equation
+
+```text
+Y^H T(lambda) X u = 0
+```
+
+is a Petrov-Galerkin stationarity condition: the physical residual
+`T(lambda) X u` is orthogonal to the chosen left test space `Y`. If `Y` is a
+good approximation to the left spectral subspace, a small reduced residual is
+evidence that the physical residual is small in the directions that matter. If
+`Y` is replaced by an unrelated one-sided choice, the reduced problem can
+annihilate the wrong components and return Ritz data that is internally
+consistent but physically false.
+
+This is the nonlinear/moment analogue of why dual FEAST matters for nonnormal
+linear problems. The current dual-sensitive polynomial control makes the point
+numerically: one-sided Galerkin extraction returns more inside reduced Ritz
+values than the target count and has reduced residuals near machine precision,
+yet zero values satisfy the original NEP residual tolerance. True dual and
+biorthogonal dual extraction recover the full target set. The left contour
+moments are therefore part of the realization geometry, not a cosmetic
+stabilization option.
+
 ## Residual-Laurent Update
 
 The right update adds the chart-local residual moments
