@@ -101,6 +101,62 @@ The central implementation path is currently `ContourChart`, `TrialSpaces`,
 `run_count_driven_policy_diagnostic`. These are experiment objects, not public
 `FEASTSolver` API.
 
+## Reduced Problem Boundary
+
+Stages 2--5 deliberately keep the reduced nonlinear solve and the acceptance
+policy separate from the FEAST-style update. This mirrors linear FEAST more
+than it may first appear: FEAST theory controls the contour projection, the
+filtered subspace iteration, and the Rayleigh--Ritz reduction, while the
+details of the small reduced eigenproblem are mostly an implementation choice.
+
+For moment-NLFEAST the reduced object is harder:
+
+```text
+Tred(lambda) = Y^H T(lambda) X.
+```
+
+Even if `X,Y` expose the correct local finite realization, `Tred` is still a
+nonlinear eigenvalue problem. In pathological or highly oscillatory cases,
+such as sine/delay-type problems with many roots in a low-dimensional physical
+space, the reduced problem can remain globally difficult. The contour method
+does not magically make arbitrary analytic rootfinding easy; it localizes the
+problem, supplies a finite realization, and gives diagnostics for whether that
+realization is trustworthy.
+
+The extractor layer should therefore be understood as a coordinate choice for
+the finite local realization, not as part of the residual-Laurent update
+itself:
+
+```text
+SS/Hankel, Beyn, Loewner, companion/QZ, or local Newton-like extraction
+```
+
+are interchangeable reduced-realization coordinates when their assumptions
+hold. The policy layer then decides whether the extracted roots are credible
+using physical residuals, contour counts, support across overlapping charts,
+left/right consistency, extractor agreement, and near-pole diagnostics.
+
+This boundary is important for the research claim. The algorithmic finding is
+not "we have made every reduced NEP easy." It is:
+
+```text
+given a trustworthy reduced local realization, the FEAST-style higher-moment
+iteration should repair physical left/right spaces by compressed
+residual-Laurent enrichment, then re-extract in whatever reduced coordinate is
+appropriate for the local problem.
+```
+
+The hard cases are then assigned to the right layer:
+
+- bad or oversized chart: refine, split, or increase overlap;
+- unreliable reduced coordinate: switch extractor or compare extractor
+  agreement;
+- algebraic/geometric mismatch: use local contour counts for multiplicity;
+- contour near a pole or singularity: diagnose as unsafe rather than hiding
+  the placement error;
+- genuinely hard reduced analytic rootfinding: treat as an extractor/local
+  solver limitation, not as a failure of the FEAST residual update.
+
 ## Moment Roles
 
 The algorithm uses two moment families with different jobs.
