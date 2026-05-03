@@ -228,6 +228,13 @@ that setting.
   preserving the updated right/left physical spaces to roundoff projection
   gaps. This pins residual compression as an efficiency transformation, not a
   numerical branch of the algorithm.
+- Residual-coordinate invariance: the reduced Ritz residual columns can be
+  mixed by independent nonsingular right/left coordinate changes before
+  compression, and the residual-Laurent update still recovers the same roots
+  with roundoff-level projection gaps between the updated physical spaces. This
+  pins the first proof obligation in `DERIVATION.md`: the update depends on
+  the physical residual subspace, not on the scalar Ritz coordinate list used
+  to present it.
 - Residual-Laurent update ladder: on the radius-20 upper-triangular nonnormal
   analytic chart cover, reduced extraction alone (`iterations=0`) recovers
   `34/44` target roots, one residual-Laurent update recovers `42/44`, and two
@@ -398,6 +405,7 @@ Representative tests:
 - `just test --preset moment-core`
 - `just test --slow 'dual linear RII'`
 - `just test --slow 'low-rank compression preserves update'`
+- `just test --slow 'residual-coordinate invariant'`
 - `just test --slow 'sparse symbolic reuse'`
 - `just test --slow 'sparse nonlinear gallery operator'`
 - `just test --slow 'sparse Schrodinger gallery'`

@@ -4732,6 +4732,138 @@ function run_residual_laurent_low_rank_equivalence_diagnostic(;
     result
 end
 
+function run_residual_laurent_residual_coordinate_invariance_diagnostic(;
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    cases = (scalar_sine_case(), scalar_cosine_case(), scalar_shifted_sine_case())
+    chart = ContourChart(0.0 + 0.0im, 10.0)
+    ctx = analytic_context(cases, chart, similarity_analytic_tools)
+    basis = MomentBasisConfig(moments=4, nodes=8, ranktol=0.5, seed=9923)
+    extractor = ReducedExtractorConfig(;
+        extractor=:loewner_counted,
+        determinant_nodes=512,
+        determinant_capacity=64,
+        reduced_moments=12,
+        reduced_nodes=512,
+        loewner_points=6,
+        loewner_radius=1.3,
+        residual_normalization=:vector,
+    )
+    update = ResidualUpdateConfig(;
+        moment_count=1,
+        rii_nodes=128,
+        residual_ranktol=1e-10,
+        compression_ranktol=1e-10,
+    )
+    trial = initial_dual_trial_spaces(ctx, chart, basis)
+    extraction0 = extract_reduced_nep(ctx, trial, chart, extractor)
+    selected = extraction0.inside
+    values = extraction0.values[selected]
+    Xright = extraction0.right_vectors[:, selected]
+    Xleft = extraction0.left_vectors[:, selected]
+    n, k = size(Xright)
+    Rright = zeros(ComplexF64, n, k)
+    Rleft = zeros(ComplexF64, n, k)
+    for j in 1:k
+        Tλ = ctx.Tmatrix(values[j])
+        Rright[:, j] .= Tλ * Xright[:, j]
+        Rleft[:, j] .= Tλ' * Xleft[:, j]
+    end
+
+    Random.seed!(9931)
+    right_mix = k == 0 ? zeros(ComplexF64, 0, 0) : Matrix(qr(randn(ComplexF64, k, k)).Q)
+    left_mix = k == 0 ? zeros(ComplexF64, 0, 0) : Matrix(qr(randn(ComplexF64, k, k)).Q)
+    Rright_basis, _, right_singulars = low_rank_column_factor(Rright; ranktol=update.residual_ranktol)
+    Rleft_basis, _, left_singulars = low_rank_column_factor(Rleft; ranktol=update.residual_ranktol)
+    Rright_basis_mixed, _, right_singulars_mixed =
+        low_rank_column_factor(Rright * right_mix; ranktol=update.residual_ranktol)
+    Rleft_basis_mixed, _, left_singulars_mixed =
+        low_rank_column_factor(Rleft * left_mix; ranktol=update.residual_ranktol)
+
+    rii_z_nodes, rii_z_weights = circular_rule(chart, update.rii_nodes)
+    right_moments, left_moments = residual_laurent_moment_blocks_generic(
+        ctx.Tsolve,
+        ctx.Tadjoint_solve,
+        Rright_basis,
+        Rleft_basis,
+        rii_z_nodes,
+        rii_z_weights,
+        chart.center,
+        chart.radius;
+        moment_count=update.moment_count,
+    )
+    right_moments_mixed, left_moments_mixed = residual_laurent_moment_blocks_generic(
+        ctx.Tsolve,
+        ctx.Tadjoint_solve,
+        Rright_basis_mixed,
+        Rleft_basis_mixed,
+        rii_z_nodes,
+        rii_z_weights,
+        chart.center,
+        chart.radius;
+        moment_count=update.moment_count,
+    )
+    Xnew, Ynew, _, _, _, _ = compress_residual_laurent_candidates(
+        trial.X,
+        trial.Y,
+        right_moments,
+        left_moments;
+        compression_ranktol=update.compression_ranktol,
+    )
+    Xmixed, Ymixed, _, _, _, _ = compress_residual_laurent_candidates(
+        trial.X,
+        trial.Y,
+        right_moments_mixed,
+        left_moments_mixed;
+        compression_ranktol=update.compression_ranktol,
+    )
+    trial_updated = common_square_trial_spaces(TrialSpaces(X=Xnew, Y=Ynew, source=:residual_coordinate_reference))
+    trial_mixed = common_square_trial_spaces(TrialSpaces(X=Xmixed, Y=Ymixed, source=:residual_coordinate_mixed))
+    extraction = extract_reduced_nep(ctx, trial_updated, chart, extractor)
+    extraction_mixed = extract_reduced_nep(ctx, trial_mixed, chart, extractor)
+    summary = dual_scalar_rii_summary(extraction, ctx.expected; residual_tol=residual_tol, match_atol=match_atol)
+    mixed_summary = dual_scalar_rii_summary(extraction_mixed, ctx.expected; residual_tol=residual_tol, match_atol=match_atol)
+    Px = trial_updated.X * trial_updated.X' - trial_mixed.X * trial_mixed.X'
+    Py = trial_updated.Y * trial_updated.Y' - trial_mixed.Y * trial_mixed.Y'
+    result = (
+        expected=length(ctx.expected),
+        reference=summary,
+        mixed=mixed_summary,
+        x_projection_gap=opnorm(Px),
+        y_projection_gap=opnorm(Py),
+        right_residual_rank=size(Rright_basis, 2),
+        left_residual_rank=size(Rleft_basis, 2),
+        right_mixed_residual_rank=size(Rright_basis_mixed, 2),
+        left_mixed_residual_rank=size(Rleft_basis_mixed, 2),
+        right_singulars=right_singulars,
+        left_singulars=left_singulars,
+        right_singulars_mixed=right_singulars_mixed,
+        left_singulars_mixed=left_singulars_mixed,
+    )
+    if print_rows
+        println()
+        println("Residual Laurent residual-coordinate invariance diagnostic")
+        println("  mixes scalar Ritz residual columns before compression and verifies the update space is unchanged")
+        @printf(
+            "  expected=%d reference=%d/%d mixed=%d/%d projection_gap=(%.3e, %.3e) residual_rank=(%d,%d)->(%d,%d)\n",
+            result.expected,
+            result.reference.matched,
+            result.expected,
+            result.mixed.matched,
+            result.expected,
+            result.x_projection_gap,
+            result.y_projection_gap,
+            result.right_residual_rank,
+            result.left_residual_rank,
+            result.right_mixed_residual_rank,
+            result.left_mixed_residual_rank,
+        )
+    end
+    result
+end
+
 function partitioned_residual_laurent_update(
     ctx,
     trial::TrialSpaces,

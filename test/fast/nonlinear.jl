@@ -1449,6 +1449,22 @@ end
     @test result.compressed_stats.left_candidate_cols < result.full_stats.left_candidate_cols
 end
 
+@testitem "experimental moment RII: residual Laurent update is residual-coordinate invariant" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_residual_laurent_residual_coordinate_invariance_diagnostic(; print_rows=false)
+
+    @test result.expected == 20
+    @test result.reference.matched == result.expected
+    @test result.mixed.matched == result.expected
+    @test result.reference.spurious_good == 0
+    @test result.mixed.spurious_good == 0
+    @test result.x_projection_gap <= 1e-12
+    @test result.y_projection_gap <= 1e-12
+    @test result.right_residual_rank == result.right_mixed_residual_rank
+    @test result.left_residual_rank == result.left_mixed_residual_rank
+end
+
 @testitem "experimental moment RII: residual Laurent update decomposes across contour partitions" tags=[:slow] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 
