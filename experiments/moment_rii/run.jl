@@ -4799,6 +4799,8 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
     match_atol=1e-6,
     biorthogonalize=false,
     update_mode=:moment_compressed,
+    extraction_config=nothing,
+    update_config=nothing,
     verbose=true,
 )
     labels = join((case.name for case in cases), ",")
@@ -4810,30 +4812,36 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
     )
     ctx = analytic_context(cases, chart, operator_builder)
     expected = ctx.expected
-    extractor_config = ReducedExtractorConfig(
-        extractor=extractor,
-        determinant_nodes=determinant_nodes,
-        determinant_capacity=determinant_capacity,
-        reduced_moments=reduced_moments,
-        reduced_nodes=reduced_nodes,
-        reduced_ranktol=reduced_ranktol,
-        reduced_ss_mode=reduced_ss_mode,
-        loewner_points=loewner_points,
-        loewner_radius=loewner_radius,
-        loewner_phase=loewner_phase,
-        residual_normalization=residual_normalization,
-        refinement=reduced_refinement,
-        refinement_steps=refinement_steps,
-        refinement_nodes=refinement_nodes,
-    )
-    update_config = ResidualUpdateConfig(
-        moment_count=update_moment_count,
-        rii_nodes=rii_nodes,
-        residual_ranktol=residual_ranktol,
-        compression_ranktol=compression_ranktol,
-        mode=update_mode,
-        biorthogonalize=biorthogonalize,
-    )
+    extractor_config = extraction_config === nothing ? ReducedExtractorConfig(
+            extractor=extractor,
+            determinant_nodes=determinant_nodes,
+            determinant_capacity=determinant_capacity,
+            reduced_moments=reduced_moments,
+            reduced_nodes=reduced_nodes,
+            reduced_ranktol=reduced_ranktol,
+            reduced_ss_mode=reduced_ss_mode,
+            loewner_points=loewner_points,
+            loewner_radius=loewner_radius,
+            loewner_phase=loewner_phase,
+            residual_normalization=residual_normalization,
+            refinement=reduced_refinement,
+            refinement_steps=refinement_steps,
+            refinement_nodes=refinement_nodes,
+        ) : extraction_config
+    residual_config = update_config === nothing ? ResidualUpdateConfig(
+            moment_count=update_moment_count,
+            rii_nodes=rii_nodes,
+            residual_ranktol=residual_ranktol,
+            compression_ranktol=compression_ranktol,
+            mode=update_mode,
+            biorthogonalize=biorthogonalize,
+        ) : update_config
+    update_moment_count = residual_config.moment_count
+    rii_nodes = residual_config.rii_nodes
+    residual_ranktol = residual_config.residual_ranktol
+    compression_ranktol = residual_config.compression_ranktol
+    update_mode = residual_config.mode
+    biorthogonalize = residual_config.biorthogonalize
     trial = initial_dual_trial_spaces(
         ctx,
         chart;
@@ -4898,7 +4906,7 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
     end
     for iteration in 1:iterations
         if update_mode === :moment_compressed
-            trial, stats = residual_laurent_update(ctx, trial, extraction, chart, update_config)
+            trial, stats = residual_laurent_update(ctx, trial, extraction, chart, residual_config)
         elseif update_mode === :scalar_expanded
             selected = extraction.inside
             if !any(selected)
@@ -5434,6 +5442,8 @@ function run_dual_local_chart_sweep_analytic(;
                     match_atol=match_atol,
                     biorthogonalize=biorthogonalize,
                     update_mode=update_mode,
+                    extraction_config=extraction_config,
+                    update_config=update_config,
                     verbose=false,
                 )
             catch err
