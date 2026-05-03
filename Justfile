@@ -17,6 +17,7 @@ smoke:
 #   just test --exclude moment_heavy 'moment RII'
 #   just test --preset moment-core
 #   just test --preset moment-heavy 'residual Laurent update'
+#   just test --list-tests --slow 'moment RII'
 #   just test --list-presets
 
 # Run the package test harness.
@@ -85,7 +86,7 @@ notes:
       'Run just smoke, just test, and just docs for the normal local loop.' \
       'Run just test [OPTIONS] [REGEX] to run matching TestItems through Pkg.test(test_args=...).' \
       'Run just test --help for the full test-harness help.' \
-      'Supported options: --slow, --torture, --only-torture, --tags TAGS, --exclude TAGS, --preset PRESET, --list-presets.' \
+      'Supported options: --slow, --torture, --only-torture, --tags TAGS, --exclude TAGS, --preset PRESET, --list-tests, --list-presets.' \
       'Tags are comma-separated; for example: just test --tags moment_heavy "moment RII".' \
       'Presets are moment-core, moment-heavy, moment-count, and torture.' \
       'Run just test-slow to include TestItems tagged :slow.' \
