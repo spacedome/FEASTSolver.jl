@@ -727,6 +727,17 @@ that setting.
   count estimates three target eigenvalues, and the residual-Laurent update
   improves all three action residuals to the strict threshold. This is
   realistic sparse NEP evidence, not a scaling benchmark.
+- Fused Schrodinger domain-decomposition diagnostic: a one-dimensional
+  finite-difference Schrodinger operator is split into subdomains and local
+  interiors are eliminated, producing a rational Schur-complement NEP on the
+  interface variables. The default hard chart keeps the contour below the first
+  eliminated-interior pole, so the sampled interface NEP remains analytic. On
+  the current `full_n=207`, `interface_n=15` control, the fused contour
+  realization identifies the 13 physical roots in the chart, but raw extracted
+  values have large full residuals; reduced `Tred` Newton cleanup recovers all
+  13 with residuals below `1e-8`. This is the better Schrodinger DD stress
+  than the small moving-boundary smoke because it exercises a genuinely
+  nonlinear Schur complement while preserving a full linear reference spectrum.
 - Sparse Schrodinger remote stored-factor smoke: the same realistic sparse
   Schrodinger control runs through persistent worker-owned contour partitions.
   The worker factors and node-local solve buffers are created once on the first

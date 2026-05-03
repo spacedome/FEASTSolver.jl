@@ -131,8 +131,15 @@ global block Newton, or rational-coordinate-only fixes.
   plan boundary. The small default Schrodinger run still shows the expected
   pattern: setup and first-use costs dominate the coarse wall clock, while
   repeated updates reuse the same 96 worker-owned factors and solve buffers and
-  match the serial spaces to projection gaps near `1e-14`. This is enough
-  implementation evidence for now; it is not a benchmark-maxing result.
+  match the serial spaces to projection gaps near `1e-14`. The fused
+  Schrodinger domain-decomposition diagnostic is now the harder Schrodinger
+  correctness stress: it eliminates local subdomain interiors from a linear
+  finite-difference Schrodinger operator, solves the resulting rational
+  interface Schur-complement NEP below the first interior pole, and verifies
+  that reduced `Tred` cleanup recovers all 13 target roots on a
+  `full_n=207`, `interface_n=15` control after raw fused extraction has large
+  physical residuals. This is enough implementation evidence for now; it is
+  not a benchmark-maxing result.
   The experiment deliberately does not yet provide full reusable sparse
   workspaces, broad realistic sparse gallery coverage, or publication-level
   scaling claims.

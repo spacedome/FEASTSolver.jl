@@ -545,6 +545,43 @@ end
     @test result.updated.left_residual_rank == result.target_count
 end
 
+@testitem "experimental moment RII: fused Schrodinger sweep identifies Tred cleanup role" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_fused_schrodinger_refinement_sweep(; nodes_values=(16, 32, 48), print_rows=false)
+    coarse, middle, fine = result.rows
+
+    @test all(row -> row.target_count == 3, result.rows)
+    @test all(row -> row.rank == row.target_count, result.rows)
+    @test coarse.raw_good < coarse.target_count
+    @test coarse.refined_good == coarse.target_count
+    @test middle.raw_good == middle.target_count
+    @test middle.refined_good == middle.target_count
+    @test fine.raw_good == fine.target_count
+    @test fine.refined_good == fine.target_count
+    @test middle.max_refinement_correction < coarse.max_refinement_correction
+    @test fine.max_refinement_correction < middle.max_refinement_correction
+    @test fine.raw_max_inside_residual < middle.raw_max_inside_residual
+end
+
+@testitem "experimental moment RII: fused Schrodinger domain decomposition needs Tred cleanup" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_fused_schrodinger_dd_interface_diagnostic(; print_rows=false)
+
+    @test result.full_n > result.interface_n
+    @test result.expected == 13
+    @test result.pole_boundary_margin > 0
+    @test result.rank == result.expected
+    @test result.raw_inside == result.expected
+    @test result.raw_good < result.expected
+    @test result.refined_inside == result.expected
+    @test result.refined_good == result.expected
+    @test result.refined_matched == result.expected
+    @test result.refined_max_inside_residual <= 1e-8
+    @test result.refined_max_inside_residual < result.raw_max_inside_residual
+end
+
 @testitem "experimental moment RII: sparse nonlinear remote workers reuse stored contour factors" tags=[:slow, :distributed] begin
     if !isdefined(Main, :run_sparse_nonlinear_remote_stored_factor_worker_smoke)
         Base.include(Main, joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
