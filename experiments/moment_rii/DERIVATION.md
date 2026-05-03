@@ -157,6 +157,18 @@ For `T(z) = zI - A`, the residual is `(lambda I - A) x`. The contour inverse
 residual-inverse correction. Higher moments correspond to an SS/Hankel
 realization of the same invariant subspace.
 
+The scalar dual RII identity is exact. For a Ritz pair `(lambda, x)`,
+
+```text
+x - (zI - A)^(-1) (lambda I - A) x = (z - lambda) (zI - A)^(-1) x.
+```
+
+Therefore the RII integrand
+`(x - (zI - A)^(-1) r)/(z - lambda)` is exactly the FEAST filter
+`(zI - A)^(-1) x`; the adjoint equation gives the same identity for the left
+trial space. The diagnostic `run_linear_dual_rii_reduction_diagnostic` pins
+this on both diagonal and nonnormal Grcar controls.
+
 Canonical NLFEAST:
 
 For one local chart, one moment, and one root per physical component, the

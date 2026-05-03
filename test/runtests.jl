@@ -22,7 +22,7 @@ function apply_test_preset(
 )
     if name == "moment-core"
         filter = Regex(
-            "linear SS-FEAST|polynomial bridge agrees|dual reduced extraction|" *
+            "linear SS-FEAST|dual linear RII|polynomial bridge agrees|dual reduced extraction|" *
             "agrees across extractors without root oracle|canonical NLFEAST limit|" *
             "residual Laurent update",
         )

@@ -565,6 +565,130 @@ function run_sparse_linear_moment_pipeline_smoke(;
     result
 end
 
+function linear_dual_rii_reduction_row(name, A, center, radius; seed, trial_cols, determinant_nodes, rii_nodes)
+    n = size(A, 1)
+    I_n = Matrix{ComplexF64}(I, n, n)
+    Tmatrix(z) = z * I_n - A
+    Tderivative(z) = I_n
+    Tsolve(z, B) = Tmatrix(z) \ B
+    Tadjoint_solve(z, B) = adjoint(Tmatrix(z)) \ B
+
+    Random.seed!(seed)
+    Xprobe = Matrix(qr(randn(ComplexF64, n, trial_cols)).Q[:, 1:trial_cols])
+    Yprobe = Matrix(qr(randn(ComplexF64, n, trial_cols)).Q[:, 1:trial_cols])
+    chart = ContourChart(center, radius)
+    ctx = (
+        Tmatrix=Tmatrix,
+        Tderivative=Tderivative,
+        Tsolve=Tsolve,
+        Tadjoint_solve=Tadjoint_solve,
+        expected=linear_reference_inside(A, center, radius),
+        n=n,
+    )
+    trial = common_square_trial_spaces(TrialSpaces(X=Xprobe, Y=Yprobe, source=:manual_linear_trial))
+    extraction = extract_reduced_nep(
+        ctx,
+        trial,
+        chart,
+        ReducedExtractorConfig(;
+            extractor=:determinant,
+            determinant_nodes=determinant_nodes,
+            determinant_capacity=max(32, 2 * trial_cols),
+            residual_normalization=:vector,
+        ),
+    )
+
+    z_nodes, z_weights = circular_rule(center, radius, rii_nodes)
+    inside = extraction.inside
+    values = extraction.values[inside]
+    Xright = extraction.right_vectors[:, inside]
+    Xleft = extraction.left_vectors[:, inside]
+    Qright, Qleft, stats = dual_scalar_rii_step_generic(
+        Tsolve,
+        Tadjoint_solve,
+        Tmatrix,
+        values,
+        Xright,
+        Xleft,
+        z_nodes,
+        z_weights,
+    )
+
+    Pright = zeros(ComplexF64, n, size(Xright, 2))
+    Pleft = zeros(ComplexF64, n, size(Xleft, 2))
+    for (z, weight) in zip(z_nodes, z_weights)
+        Pright .+= weight .* Tsolve(z, Xright)
+        Pleft .+= conj(weight) .* Tadjoint_solve(z, Xleft)
+    end
+    Qright_basis, _ = physical_basis_from_columns(Qright; ranktol=1e-12)
+    Qleft_basis, _ = physical_basis_from_columns(Qleft; ranktol=1e-12)
+    Pright_basis, _ = physical_basis_from_columns(Pright; ranktol=1e-12)
+    Pleft_basis, _ = physical_basis_from_columns(Pleft; ranktol=1e-12)
+    (
+        name=name,
+        n=n,
+        expected=length(ctx.expected),
+        extracted=count(inside),
+        max_extracted_residual=any(inside) ? maximum(extraction.residuals[inside]) : Inf,
+        right_projection_gap=opnorm(Qright_basis * Qright_basis' - Pright_basis * Pright_basis'),
+        left_projection_gap=opnorm(Qleft_basis * Qleft_basis' - Pleft_basis * Pleft_basis'),
+        right_relative_error=norm(Qright - Pright) / max(norm(Pright), eps(Float64)),
+        left_relative_error=norm(Qleft - Pleft) / max(norm(Pleft), eps(Float64)),
+        right_residual_rank=stats.right_residual_rank,
+        left_residual_rank=stats.left_residual_rank,
+    )
+end
+
+function run_linear_dual_rii_reduction_diagnostic(;
+    determinant_nodes=512,
+    rii_nodes=512,
+    print_rows=true,
+)
+    A_diag, c_diag, r_diag, _ = many_eigenvalue_diagonal_matrix()
+    A_grcar, c_grcar, r_grcar, _ = grcar_linear_matrix()
+    rows = [
+        linear_dual_rii_reduction_row(
+            "many_eigenvalue_diagonal",
+            A_diag,
+            c_diag,
+            r_diag;
+            seed=1201,
+            trial_cols=10,
+            determinant_nodes=determinant_nodes,
+            rii_nodes=rii_nodes,
+        ),
+        linear_dual_rii_reduction_row(
+            "grcar_nonnormal",
+            A_grcar,
+            c_grcar,
+            r_grcar;
+            seed=1201,
+            trial_cols=10,
+            determinant_nodes=determinant_nodes,
+            rii_nodes=rii_nodes,
+        ),
+    ]
+    result = (rows=rows, max_projection_gap=maximum(max(row.right_projection_gap, row.left_projection_gap) for row in rows))
+    if print_rows
+        println()
+        println("Linear dual RII reduction diagnostic")
+        println("  verifies scalar residual-inverse iteration equals the FEAST contour filter for T(z)=zI-A")
+        for row in rows
+            @printf(
+                "  %-24s extracted=%d expected=%d projection_gap=(%.3e, %.3e) relative_error=(%.3e, %.3e)\n",
+                row.name,
+                row.extracted,
+                row.expected,
+                row.right_projection_gap,
+                row.left_projection_gap,
+                row.right_relative_error,
+                row.left_relative_error,
+            )
+        end
+    end
+    result
+end
+
 function run_matrix_analytic_case(;
     name,
     problem_class=:analytic,

@@ -150,6 +150,11 @@ per scalar Ritz value.
 - Linear SS-RII control: documented in `README.md`, showing the update becomes
   the linear FEAST residual correction and recovers a larger invariant subspace
   than the physical probe count.
+- Linear dual RII reduction: for `T(z)=zI-A`, the scalar residual-inverse
+  contour step is algebraically identical to applying the FEAST contour filter
+  to the extracted right and left Ritz vectors. The diagnostic pins this on a
+  diagonal many-root control and a nonnormal Grcar control with projection gaps
+  near roundoff.
 - Polynomial controls: regular, deficient, many-root low-dimensional, and
   near-multiple polynomial cases are recovered by two-sided reduced extraction;
   polynomial invariant-pair Newton is useful as a reduced cleanup. The
@@ -273,6 +278,7 @@ per scalar Ritz value.
 Representative tests:
 
 - `just test --preset moment-core`
+- `just test --slow 'dual linear RII'`
 - `just test --preset moment-heavy 'residual Laurent update'`
 - `just test --preset moment-count`
 - `just test --slow 'analytic block Newton'`

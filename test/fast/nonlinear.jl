@@ -89,6 +89,24 @@ end
     @test result.final.pair_residual < result.initial.pair_residual
 end
 
+@testitem "experimental moment RII: dual linear RII reduces to FEAST contour filter" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_linear_dual_rii_reduction_diagnostic(; print_rows=false)
+
+    @test length(result.rows) == 2
+    @test result.max_projection_gap <= 1e-12
+    for row in result.rows
+        @test row.extracted > 0
+        @test row.right_projection_gap <= 1e-12
+        @test row.left_projection_gap <= 1e-12
+        @test row.right_relative_error <= 1e-12
+        @test row.left_relative_error <= 1e-12
+        @test row.right_residual_rank == row.extracted
+        @test row.left_residual_rank == row.extracted
+    end
+end
+
 @testitem "experimental moment RII: polynomial bridge agrees with companion FEAST" tags=[:slow] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 
