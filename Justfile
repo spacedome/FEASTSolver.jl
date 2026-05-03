@@ -22,11 +22,11 @@ test *args:
 
 # Include test items tagged :slow.
 test-slow *args:
-    @just test --slow {{args}}
+    @just test --slow {{quote(args)}}
 
 # Run only flagged numerical torture tests. These are correctness tests, not benchmarks.
 test-torture *args:
-    @just test --only-torture {{args}}
+    @just test --only-torture {{quote(args)}}
 
 # Run the fast moment-RII iteration smoke loop.
 test-moment filter='moment RII':

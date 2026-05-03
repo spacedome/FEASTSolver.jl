@@ -129,8 +129,9 @@ per scalar Ritz value.
   agreement; the policy returns explicit retained roots and chart-refinement
   suggestions. The count-driven stress harness now carries the reusable
   `CountDrivenPolicyConfig` object so grid spacing, support threshold,
-  refinement depth, local chart radii, residual tolerance, and count tolerance
-  are treated as one experiment policy rather than incidental keyword clutter.
+  refinement depth, local chart radii, optional radius-ladder stages, residual
+  tolerance, and count tolerance are treated as one experiment policy rather
+  than incidental keyword clutter.
 - Oracle-free control: a scalar delay NEP with no exact-root list stops from
   the full-operator argument-principle count alone, validating that the
   count-driven loop is not secretly supervised by analytic roots.
@@ -219,7 +220,10 @@ Representative tests:
   count-driven refinement with small local charts first; if it stops with an
   unresolved count deficit, rerun with a larger chart radius/overlap schedule.
   On the sparse coupled two-delay control this turns a diagnostic `10/12`
-  failure into a certified `12/12` solve without exact roots.
+  failure into a certified `12/12` solve without exact roots. The ladder is now
+  attached to `CountDrivenPolicyConfig.chart_radii_stages` and runs through the
+  same `run_count_driven_policy_diagnostic` path as the other no-oracle stress
+  cases, so radius escalation is a policy rung rather than a one-off runner.
 - Scalar residuals alone are not acceptance evidence in high dynamic-range
   analytic NEPs. Local count, support, target membership, and extractor/layout
   agreement are needed.
@@ -307,9 +311,9 @@ Representative tests:
   `:count_multiplicity_or_unresolved_defect` instead of silently accepting an
   incomplete solve. The missing roots lie near the outer target contour and are
   repaired by allowing a larger local radius `3.0`, which gives enough overlap
-  to generate the needed weak center. The radius-ladder wrapper captures this
-  as an explicit two-stage policy: diagnose with small charts, then retry with
-  larger overlap only when the count deficit remains unresolved.
+  to generate the needed weak center. The radius-ladder policy captures this as
+  an explicit two-stage `CountDrivenPolicyConfig`: diagnose with small charts,
+  then retry with larger overlap only when the count deficit remains unresolved.
 - A near-pole rational triangular control exercises the same no-oracle path
   with meromorphic components whose poles lie just outside the target contour.
   With pole gap `0.01`, the full-operator count is reliable, support retention

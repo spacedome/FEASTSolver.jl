@@ -1548,10 +1548,25 @@ Base.@kwdef struct CountDrivenPolicyConfig
     target_support::Int = 2
     max_refinement_rounds::Int = 4
     chart_radii::Tuple{Vararg{Float64}} = (1.2, 2.0)
+    chart_radii_stages::Union{Nothing, Tuple{Vararg{Tuple{Vararg{Float64}}}}} = nothing
     residual_tol::Float64 = 1e-8
     match_atol::Float64 = 1e-6
     count_error_tol::Float64 = 1e-2
     refine_inside_target_only::Bool = true
+end
+
+function with_chart_radii(policy::CountDrivenPolicyConfig, chart_radii)
+    CountDrivenPolicyConfig(;
+        base_spacing=policy.base_spacing,
+        target_support=policy.target_support,
+        max_refinement_rounds=policy.max_refinement_rounds,
+        chart_radii=Tuple(Float64.(chart_radii)),
+        chart_radii_stages=policy.chart_radii_stages,
+        residual_tol=policy.residual_tol,
+        match_atol=policy.match_atol,
+        count_error_tol=policy.count_error_tol,
+        refine_inside_target_only=policy.refine_inside_target_only,
+    )
 end
 
 Base.@kwdef struct CountDrivenNumericsConfig
@@ -1912,6 +1927,26 @@ function run_count_driven_radius_ladder(;
     )
 end
 
+function run_count_driven_policy_ladder(;
+    policy::CountDrivenPolicyConfig,
+    numerics=nothing,
+    print_rows=true,
+    kwargs...,
+)
+    stages = policy.chart_radii_stages
+    stages === nothing && error("policy chart_radii_stages must be set for radius-ladder execution")
+    run_count_driven_radius_ladder(;
+        chart_radii_stages=stages,
+        print_rows=print_rows,
+        runner=radii -> run_count_driven_adaptive_grid_refinement(;
+            policy=with_chart_radii(policy, radii),
+            numerics=numerics,
+            print_rows=false,
+            kwargs...,
+        ),
+    )
+end
+
 function run_count_driven_policy_diagnostic(;
     outer_center=0.0 + 0.0im,
     outer_radius,
@@ -1921,7 +1956,7 @@ function run_count_driven_policy_diagnostic(;
     diagnostic_label="policy diagnostic",
     kwargs...,
 )
-    result = run_count_driven_adaptive_grid_refinement(;
+    ladder = policy.chart_radii_stages === nothing ? nothing : run_count_driven_policy_ladder(;
         outer_center=outer_center,
         outer_radius=outer_radius,
         policy=policy,
@@ -1929,6 +1964,14 @@ function run_count_driven_policy_diagnostic(;
         print_rows=print_rows,
         kwargs...,
     )
+    result = ladder === nothing ? run_count_driven_adaptive_grid_refinement(;
+            outer_center=outer_center,
+            outer_radius=outer_radius,
+            policy=policy,
+            numerics=numerics,
+            print_rows=print_rows,
+            kwargs...,
+        ) : ladder.result
     diagnostic = count_driven_chart_diagnostic_summary(
         result;
         outer_center=outer_center,
@@ -1963,6 +2006,7 @@ function run_count_driven_policy_diagnostic(;
         stop_reason=result.stop_reason,
         algebraic_retained_count=result.algebraic_retained_count,
         added_centers=result.added_centers,
+        stages=ladder === nothing ? nothing : ladder.stages,
     )
 end
 
@@ -2380,20 +2424,36 @@ function run_coupled_two_delay_radius_ladder_refinement(;
     match_atol=1e-6,
     print_rows=true,
 )
-    print_rows && println("\nCoupled two-delay radius-ladder refinement")
-    run_count_driven_radius_ladder(;
-        chart_radii_stages=chart_radii_stages,
+    policy = CountDrivenPolicyConfig(;
+        base_spacing=base_spacing,
+        max_refinement_rounds=max_refinement_rounds,
+        chart_radii=first(chart_radii_stages),
+        chart_radii_stages=Tuple(Tuple(Float64.(radii)) for radii in chart_radii_stages),
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+    )
+    numerics = CountDrivenNumericsConfig(;
+        iterations=2,
+        basis_moments=8,
+        basis_nodes=64,
+        rii_nodes=128,
+        determinant_nodes=768,
+        determinant_capacity=128,
+        reduced_moments=16,
+        reduced_nodes=768,
+        residual_normalization=:operator,
+        component_scaling=:none,
+    )
+    run_count_driven_policy_diagnostic(;
+        label="Coupled two-delay radius-ladder refinement",
+        cases=coupled_two_delay_cases(),
+        outer_radius=outer_radius,
+        operator_builder=coupled_two_delay_operator_builder(; coupling=coupling),
+        operator_label="coupled two-delay(coupling=$coupling)",
+        policy=policy,
+        numerics=numerics,
         print_rows=print_rows,
-        runner=radii -> run_coupled_two_delay_count_driven_adaptive_refinement(;
-            coupling=coupling,
-            outer_radius=outer_radius,
-            base_spacing=base_spacing,
-            chart_radii=Tuple(radii),
-            max_refinement_rounds=max_refinement_rounds,
-            residual_tol=residual_tol,
-            match_atol=match_atol,
-            print_rows=false,
-        ),
+        diagnostic_label="radius-ladder diagnostic",
     )
 end
 
