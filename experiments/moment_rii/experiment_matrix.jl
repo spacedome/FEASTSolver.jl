@@ -2235,6 +2235,73 @@ function run_coupled_two_delay_radius_ladder_refinement(;
     )
 end
 
+function run_coupled_two_delay_mixed_policy_stress(;
+    coupling=1.0,
+    outer_radius=16.0,
+    base_spacing=4.0,
+    chart_radii=(1.5, 3.0),
+    max_refinement_rounds=4,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    result = run_count_driven_adaptive_grid_refinement(;
+        label="Coupled two-delay mixed policy stress",
+        cases=coupled_two_delay_cases(),
+        outer_radius=outer_radius,
+        operator_builder=coupled_two_delay_operator_builder(; coupling=coupling),
+        operator_label="coupled two-delay(coupling=$coupling)",
+        base_spacing=base_spacing,
+        chart_radii=chart_radii,
+        max_refinement_rounds=max_refinement_rounds,
+        iterations=2,
+        basis_moments=8,
+        basis_nodes=64,
+        rii_nodes=128,
+        determinant_nodes=768,
+        determinant_capacity=160,
+        reduced_moments=16,
+        reduced_nodes=768,
+        residual_normalization=:operator,
+        component_scaling=:none,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=print_rows,
+    )
+    diagnostic = count_driven_chart_diagnostic_summary(
+        result;
+        outer_radius=outer_radius,
+        match_atol=match_atol,
+    )
+    if print_rows
+        println("  mixed diagnostic:")
+        @printf(
+            "    base union=%d retained=%d weak=%d count_warnings=%d max_count_error=%.3e\n",
+            diagnostic.base.union_good,
+            diagnostic.base.retained,
+            diagnostic.base.weak_inside_clusters,
+            diagnostic.base.selected_count_error_bad,
+            diagnostic.base.max_selected_count_error,
+        )
+        @printf(
+            "    final union=%d retained=%d weak=%d count_warnings=%d\n",
+            diagnostic.final.union_good,
+            diagnostic.final.retained,
+            diagnostic.final.weak_inside_clusters,
+            diagnostic.final.selected_count_error_bad,
+        )
+    end
+    (
+        result=result,
+        diagnostic=diagnostic,
+        rows=result.rows,
+        count=result.count,
+        stop_reason=result.stop_reason,
+        algebraic_retained_count=result.algebraic_retained_count,
+        added_centers=result.added_centers,
+    )
+end
+
 function run_duplicate_delay_count_driven_adaptive_refinement(;
     coupling=5.0,
     outer_radius=6.0,

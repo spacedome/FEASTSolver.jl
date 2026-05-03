@@ -143,6 +143,12 @@ per scalar Ritz value.
   two-delay components through analytic off-diagonal terms. Its determinant is
   not the product of scalar component functions, and the count-driven loop
   still retains six roots from the full-operator count alone.
+- Oracle-free fully coupled mixed diagnostic: a larger dense 2x2 coupled
+  two-delay contour has 16 counted target roots and no exact-root oracle. The
+  base cover sees 20 residual-small values, retains only 15 target roots,
+  contains a weak target cluster, and records local count warnings. One
+  weak-center refinement retains all 16 target roots while keeping the
+  outside-domain residual-small values out of the accepted set.
 - Oracle-free multiplicity control: a duplicate delay NEP with triangular
   nonnormal coupling has algebraic contour count six, three retained geometric
   values, and local count multiplicity two on each value without any exact-root
@@ -168,6 +174,7 @@ Representative tests:
 - `just test 'near-pole rational'`
 - `just test 'without root oracle'`
 - `just test 'oracle-free nonnormal delay'`
+- `just test 'fully coupled mixed diagnostics'`
 - `just test 'oracle-free multiplicity'`
 - `just test 'oracle-free near-pole rational'`
 

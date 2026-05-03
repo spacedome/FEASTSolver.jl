@@ -606,6 +606,32 @@ end
     @test length(result.rows) == 1
 end
 
+@testitem "experimental moment RII: count-driven refinement handles fully coupled mixed diagnostics" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    stress = run_coupled_two_delay_mixed_policy_stress(; print_rows=false)
+    result = stress.result
+    diagnostic = stress.diagnostic
+    final = result.rows[end]
+
+    @test result.count.expected == 0
+    @test result.count.count_estimate == 16
+    @test result.count.count_error <= 1e-8
+    @test result.stop_reason == :target_count_complete
+    @test result.algebraic_retained_count == result.count.count_estimate
+    @test final.count_complete
+    @test final.retained == result.count.count_estimate
+    @test length(result.rows) == 2
+    @test length(result.added_centers) == 1
+    @test diagnostic.base.union_good > diagnostic.base.retained
+    @test diagnostic.base.retained < result.count.count_estimate
+    @test diagnostic.base.weak_inside_clusters > 0
+    @test diagnostic.base.selected_count_error_bad > 0
+    @test diagnostic.final.union_good > diagnostic.final.retained
+    @test diagnostic.final.weak_inside_clusters == 0
+    @test diagnostic.final.retained == result.count.count_estimate
+end
+
 @testitem "experimental moment RII: count-driven refinement diagnoses sparse coupled cover" tags=[:slow] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 
