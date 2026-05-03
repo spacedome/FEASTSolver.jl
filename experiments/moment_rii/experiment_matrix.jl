@@ -4316,19 +4316,23 @@ function run_residual_laurent_partition_diagnostic(;
     result
 end
 
+function ensure_moment_remote_workers(worker_count)
+    existing = filter(!=(Distributed.myid()), Distributed.workers())
+    added = Int[]
+    if length(existing) < worker_count
+        added = Distributed.addprocs(worker_count - length(existing); exeflags="--project=$(Base.active_project())")
+    end
+    filter(!=(Distributed.myid()), Distributed.workers())[1:worker_count], added
+end
+
 function run_remote_residual_laurent_worker_diagnostic(;
     worker_count=2,
     residual_tol=1e-8,
     match_atol=1e-6,
     print_rows=true,
 )
-    existing = filter(!=(Distributed.myid()), Distributed.workers())
-    added = Int[]
-    if length(existing) < worker_count
-        added = Distributed.addprocs(worker_count - length(existing); exeflags="--project=$(Base.active_project())")
-    end
+    worker_ids, added = ensure_moment_remote_workers(worker_count)
     try
-        worker_ids = filter(!=(Distributed.myid()), Distributed.workers())[1:worker_count]
         cases = (scalar_sine_case(), scalar_cosine_case(), scalar_shifted_sine_case())
         chart = ContourChart(0.0 + 0.0im, 10.0)
         ctx = analytic_context(cases, chart, similarity_analytic_tools)
@@ -4412,6 +4416,103 @@ function run_remote_residual_laurent_worker_diagnostic(;
                 result.y_projection_gap,
                 result.x_projection_gap_second,
                 result.y_projection_gap_second,
+                string([report.nodes for report in result.remote_stats.workers]),
+            )
+        end
+        result
+    finally
+        !isempty(added) && Distributed.rmprocs(added)
+    end
+end
+
+function run_sparse_remote_residual_laurent_worker_smoke(;
+    worker_count=2,
+    n=24,
+    center=4.5 + 0.0im,
+    radius=4.1,
+    residual_tol=1e-10,
+    match_atol=1e-8,
+    print_rows=true,
+)
+    worker_ids, added = ensure_moment_remote_workers(worker_count)
+    try
+        A = spdiagm(0 => ComplexF64.(1:n))
+        Isp = sparse(I, n, n)
+        Tmatrix(z) = z * Isp - A
+        Tderivative(z) = Isp
+        Tsolve(z, B) = Tmatrix(z) \ B
+        Tadjoint_solve(z, B) = Tmatrix(z)' \ B
+        expected = ComplexF64[λ for λ in 1:n if abs(λ - center) <= radius]
+        chart = ContourChart(center, radius)
+        ctx = (
+            Tmatrix=Tmatrix,
+            Tderivative=Tderivative,
+            Tsolve=Tsolve,
+            Tadjoint_solve=Tadjoint_solve,
+            expected=expected,
+            n=n,
+            component_scales=ones(Float64, n),
+        )
+        basis = MomentBasisConfig(;
+            moments=2,
+            nodes=24,
+            ranktol=1e-10,
+            seed=44001,
+        )
+        extractor = ReducedExtractorConfig(;
+            extractor=:ss_counted,
+            determinant_nodes=256,
+            determinant_capacity=n,
+            reduced_moments=8,
+            reduced_nodes=256,
+            residual_normalization=:vector,
+        )
+        update = ResidualUpdateConfig(;
+            moment_count=1,
+            rii_nodes=64,
+            residual_ranktol=1e-10,
+            compression_ranktol=1e-10,
+        )
+        trial = initial_dual_trial_spaces(ctx, chart, basis)
+        extraction0 = extract_reduced_nep(ctx, trial, chart, extractor)
+        serial_trial, serial_stats = residual_laurent_update(ctx, trial, extraction0, chart, update)
+        plan = RemoteResidualLaurentUpdatePlan(ctx, chart, update; worker_ids=worker_ids)
+        remote_trial, remote_stats = try
+            remote_residual_laurent_update(ctx, trial, extraction0, plan)
+        finally
+            close_remote_residual_laurent_plan!(plan)
+        end
+        serial_extraction = extract_reduced_nep(ctx, serial_trial, chart, extractor)
+        remote_extraction = extract_reduced_nep(ctx, remote_trial, chart, extractor)
+        serial_summary = dual_scalar_rii_summary(serial_extraction, expected; residual_tol=residual_tol, match_atol=match_atol)
+        remote_summary = dual_scalar_rii_summary(remote_extraction, expected; residual_tol=residual_tol, match_atol=match_atol)
+        Px = serial_trial.X * serial_trial.X' - remote_trial.X * remote_trial.X'
+        Py = serial_trial.Y * serial_trial.Y' - remote_trial.Y * remote_trial.Y'
+        result = (
+            expected=length(expected),
+            sparse_matrix=Tmatrix(center + radius * im) isa AbstractSparseMatrix,
+            workers=worker_ids,
+            serial=serial_summary,
+            remote=remote_summary,
+            x_projection_gap=opnorm(Px),
+            y_projection_gap=opnorm(Py),
+            serial_stats=serial_stats,
+            remote_stats=remote_stats,
+        )
+        if print_rows
+            println()
+            println("Sparse remote residual Laurent worker smoke")
+            println("  sparse diagonal T(z)=zI-A; validates sparse operator closures in persistent remote workers")
+            @printf(
+                "  workers=%s expected=%d serial=%d/%d remote=%d/%d projection_gap=(%.3e, %.3e) worker_nodes=%s\n",
+                string(worker_ids),
+                result.expected,
+                result.serial.matched,
+                result.expected,
+                result.remote.matched,
+                result.expected,
+                result.x_projection_gap,
+                result.y_projection_gap,
                 string([report.nodes for report in result.remote_stats.workers]),
             )
         end

@@ -208,6 +208,10 @@ per scalar Ritz value.
   Laurent blocks match the serial update to roundoff projection gaps. This is
   process-level evidence for the worker model, not yet an optimized sparse or
   benchmarked implementation.
+- Sparse remote worker smoke: the persistent worker path also accepts a sparse
+  diagonal linear operator through `Tmatrix/Tsolve` closures and reproduces the
+  serial residual-Laurent update on the sparse linear control. This is generic
+  sparse compatibility evidence, not sparse factorization reuse.
 - Canonical NLFEAST limit control: a three-component one-root-per-component
   rational NEP compares the existing `nlfeast!`, scalar-expanded residual RII,
   and compressed residual-Laurent update. All three recover the same three
@@ -292,6 +296,7 @@ Representative tests:
 - `just test --slow 'dual linear RII'`
 - `just test --slow 'low-rank compression preserves update'`
 - `just test --tags distributed 'remote contour workers'`
+- `just test --tags distributed 'sparse residual Laurent update runs on remote contour workers'`
 - `just test --preset moment-heavy 'residual Laurent update'`
 - `just test --preset moment-count`
 - `just test --slow 'analytic block Newton'`

@@ -114,5 +114,9 @@ and keeps worker-local operator data and node assignments alive across two
 residual-update calls. The next implementation step is to add worker-local
 buffers and sparse/factorization storage, then benchmark against the serial and
 one-shot remote paths.
+`run_sparse_remote_residual_laurent_worker_smoke` also verifies that sparse
+linear operator closures pass through the same persistent worker boundary. It
+does not yet reuse symbolic sparse factorizations or keep sparse work buffers
+node-local.
 
 Only after that should the prototype move to nonlinear sparse gallery problems.
