@@ -1015,6 +1015,10 @@ Interpretation:
 - The residual Laurent update should therefore continue to repair both `X` and
   `Y`. A one-sided moment update may be useful as a negative diagnostic, but it
   should not be promoted as the general algorithmic rung.
+- The negative diagnostic is now pinned numerically: on the weak-basis
+  dual-sensitive polynomial, two-sided residual-Laurent repair recovers all 12
+  target roots, while right-only or left-only repair has to be truncated back
+  to the old square reduced dimension and recovers zero target roots.
 - The new no-oracle extractor-agreement diagnostic separates this dual
   requirement from the choice of realization coordinates. On the scalar delay
   control, Loewner-counted and counted SS/Hankel extraction both complete the

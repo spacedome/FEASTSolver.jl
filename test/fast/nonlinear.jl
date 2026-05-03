@@ -153,6 +153,31 @@ end
     @test galerkin.original_max > 1e-3
 end
 
+@testitem "experimental moment RII: dual residual Laurent update needs both sides" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_dual_residual_laurent_two_sided_update_control(; print_rows=false)
+
+    initial = result.rows[findfirst(row -> row.stage === :initial, result.rows)]
+    two_sided = result.rows[findfirst(row -> row.stage === :two_sided_residual_laurent, result.rows)]
+    right_only = result.rows[findfirst(row -> row.stage === :right_only_truncated, result.rows)]
+    left_only = result.rows[findfirst(row -> row.stage === :left_only_truncated, result.rows)]
+
+    @test result.expected == 12
+    @test result.initial_basis == (right=3, left=3)
+    @test result.updated_basis == (right=6, left=6)
+    @test initial.matched == 0
+    @test two_sided.matched == result.expected
+    @test two_sided.spurious_good == 0
+    @test two_sided.max_residual <= 1e-12
+    @test right_only.truncated
+    @test left_only.truncated
+    @test right_only.raw_right_basis > right_only.raw_left_basis
+    @test left_only.raw_left_basis > left_only.raw_right_basis
+    @test right_only.matched == initial.matched
+    @test left_only.matched == initial.matched
+end
+
 @testitem "nonlinear FEAST: sparse linear polynomial uses sparse path" setup=[FEASTTestSetup] begin
     using FEASTSolver
     using LinearAlgebra

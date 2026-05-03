@@ -119,6 +119,14 @@ biorthogonal dual extraction recover the full target set. The left contour
 moments are therefore part of the realization geometry, not a cosmetic
 stabilization option.
 
+The same point appears in the update, not only extraction. On a deliberately
+weak dual-sensitive basis, the residual-Laurent correction succeeds when both
+`X` and `Y` are repaired. A right-only or left-only correction changes only one
+dimension, so a square Petrov-Galerkin reduced NEP can only be formed by
+truncating away the newly added side; that truncated one-sided update returns
+the same false residual-small data as the initial weak basis. This is why the
+candidate update is explicitly two-sided.
+
 ## Residual-Laurent Update
 
 The right update adds the chart-local residual moments

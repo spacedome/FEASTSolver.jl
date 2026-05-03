@@ -4532,6 +4532,121 @@ function run_dual_moment_compressed_rii_polynomial_experiment(;
     end
 end
 
+function run_dual_residual_laurent_two_sided_update_control(;
+    name="dual_sensitive_polynomial_bad_initial",
+    make_problem=dual_sensitive_polynomial_problem,
+    basis_moments=5,
+    basis_nodes=6,
+    rii_nodes=48,
+    basis_ranktol=1e-6,
+    compression_ranktol=1e-10,
+    residual_ranktol=1e-10,
+    residual_tol=1e-6,
+    match_atol=1e-3,
+    print_rows=true,
+)
+    problem = make_problem()
+    coeffs, center, radius, n = problem[1], problem[2], problem[3], problem[4]
+    expected = length(problem) >= 5 ? ComplexF64.(problem[5]) : companion_reference(coeffs, center, radius)
+    z_nodes, z_weights = circular_rule(center, radius, basis_nodes)
+    rii_z_nodes, rii_z_weights = circular_rule(center, radius, rii_nodes)
+
+    Random.seed!(9601)
+    Xprobe = rand(ComplexF64, n, n)
+    Wprobe = rand(ComplexF64, n, n)
+    Tsolve = (z, B) -> polynomial_matrix(coeffs, z) \ B
+    right_moments = initial_moments_generic_scaled(Tsolve, Xprobe, z_nodes, z_weights, center, radius, basis_moments)
+    left_moments = initial_adjoint_moments_polynomial_scaled(coeffs, Wprobe, z_nodes, z_weights, center, radius, basis_moments)
+    Xbasis, _ = moment_block_basis(right_moments, basis_moments; ranktol=basis_ranktol)
+    Ybasis, _ = moment_block_basis(left_moments, basis_moments; ranktol=basis_ranktol)
+    if size(Xbasis, 2) != size(Ybasis, 2)
+        common = min(size(Xbasis, 2), size(Ybasis, 2))
+        Xbasis = Xbasis[:, 1:common]
+        Ybasis = Ybasis[:, 1:common]
+    end
+    extraction0 = reduced_polynomial_extraction(coeffs, Xbasis, Ybasis, center, radius)
+    Xnew, Ynew, stats = moment_compressed_dual_rii_bases(
+        coeffs,
+        Xbasis,
+        Ybasis,
+        extraction0,
+        rii_z_nodes,
+        rii_z_weights,
+        center,
+        radius;
+        moment_count=1,
+        residual_ranktol=residual_ranktol,
+        compression_ranktol=compression_ranktol,
+    )
+
+    function summarize(label, Xraw, Yraw; truncated=false)
+        common = min(size(Xraw, 2), size(Yraw, 2))
+        Xtest = Xraw[:, 1:common]
+        Ytest = Yraw[:, 1:common]
+        extraction = reduced_polynomial_extraction(coeffs, Xtest, Ytest, center, radius)
+        summary = dual_scalar_rii_summary(extraction, expected; residual_tol=residual_tol, match_atol=match_atol)
+        (
+            stage=label,
+            expected=length(expected),
+            inside=summary.inside,
+            good=summary.good,
+            matched=summary.matched,
+            spurious_good=summary.spurious_good,
+            max_residual=summary.max_residual,
+            raw_right_basis=size(Xraw, 2),
+            raw_left_basis=size(Yraw, 2),
+            right_basis=size(Xtest, 2),
+            left_basis=size(Ytest, 2),
+            truncated=truncated || size(Xraw, 2) != size(Yraw, 2),
+        )
+    end
+
+    rows = [
+        summarize(:initial, Xbasis, Ybasis),
+        summarize(:two_sided_residual_laurent, Xnew, Ynew),
+        summarize(:right_only_truncated, Xnew, Ybasis; truncated=true),
+        summarize(:left_only_truncated, Xbasis, Ynew; truncated=true),
+    ]
+
+    if print_rows
+        println()
+        println("Dual residual-Laurent two-sided update control: $name")
+        println("  one-sided repair cannot form a square Petrov-Galerkin reduced NEP without truncating away the new side")
+        @printf(
+            "  initial_basis=(%d,%d) updated_basis=(%d,%d) residual_ranks=(%d,%d)\n",
+            size(Xbasis, 2),
+            size(Ybasis, 2),
+            size(Xnew, 2),
+            size(Ynew, 2),
+            stats.right_residual_rank,
+            stats.left_residual_rank,
+        )
+        for row in rows
+            @printf(
+                "  stage=%s matched=%d/%d good=%d spurious=%d max=%.3e raw_basis=(%d,%d) used_basis=(%d,%d) truncated=%s\n",
+                string(row.stage),
+                row.matched,
+                row.expected,
+                row.good,
+                row.spurious_good,
+                row.max_residual,
+                row.raw_right_basis,
+                row.raw_left_basis,
+                row.right_basis,
+                row.left_basis,
+                string(row.truncated),
+            )
+        end
+    end
+    (
+        rows=rows,
+        expected=length(expected),
+        initial_basis=(right=size(Xbasis, 2), left=size(Ybasis, 2)),
+        updated_basis=(right=size(Xnew, 2), left=size(Ynew, 2)),
+        residual_ranks=(right=stats.right_residual_rank, left=stats.left_residual_rank),
+    )
+end
+
 function residual_blocks_from_matrix_extraction(Tmatrix, extraction; residual_ranktol=1e-10)
     values = extraction.values[extraction.inside]
     Xright = extraction.right_vectors[:, extraction.inside]

@@ -169,6 +169,13 @@ per scalar Ritz value.
   one-sided run returns 13 inside values with reduced residual near
   `1e-15`, but zero values pass the original residual tolerance, while both
   true dual variants recover the 12 expected target roots.
+- Dual residual-Laurent update control: on the same dual-sensitive polynomial
+  with a deliberately weak initial basis, the two-sided residual-Laurent repair
+  expands both physical spaces from dimension three to six and recovers all 12
+  target roots. Updating only the right or left space is not a square
+  Petrov-Galerkin reduced NEP without truncating back to the old dimension; that
+  truncation recovers zero target roots. This pins "repair both sides" as part
+  of the update geometry, not only the extraction geometry.
 - Analytic controls: global many-root charts fail in predictable ways, while
   local chart covers plus residual Laurent updates recover the target roots.
 - Residual-Laurent compression control: on a rank-deficient analytic chart, the
