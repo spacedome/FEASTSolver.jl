@@ -164,6 +164,10 @@ Representative tests:
   Mobius coordinates recover many roots but keep spurious candidates.
 - Support threshold alone is not a pruning law. Support `>=3` can drop true
   roots when the chart cover is not dense enough.
+- A count-driven policy must not over-accept a sparse chart cover just because
+  some residual-small values exist. The coupled two-delay radius-12 control
+  with spacing `4.0` retains only 10 of 12 counted roots after refinement and
+  correctly stops as an unresolved defect.
 - Scalar residuals alone are not acceptance evidence in high dynamic-range
   analytic NEPs. Local count, support, target membership, and extractor/layout
   agreement are needed.
@@ -244,6 +248,12 @@ Representative tests:
   the determinant roots away from the scalar component roots. The full-operator
   contour count is six on the radius-6 contour, and support retention returns
   six values with no validation oracle.
+- Pushing that coupled control to radius 12 gives a useful chart-cover
+  boundary. With a moderately dense cover, refinement recovers all 12 counted
+  roots. With spacing `4.0` and small local radii, the policy sees only 10
+  supported roots after adding weak centers and stops with
+  `:count_multiplicity_or_unresolved_defect` instead of silently accepting an
+  incomplete solve.
 - A near-pole rational triangular control exercises the same no-oracle path
   with meromorphic components whose poles lie just outside the target contour.
   With pole gap `0.01`, the full-operator count is reliable, support retention

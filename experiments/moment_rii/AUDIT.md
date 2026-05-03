@@ -85,7 +85,9 @@ global block Newton, or rational-coordinate-only fixes.
   overlapping parent/child cover anchors recover and support-certify the local
   roots in the current probe. A triangular nonnormal count-error-only chart
   requires preserving the parent radius; the aggressive shrink radii that work
-  for count deficits fail there.
+  for count deficits fail there. The sparse coupled two-delay radius-12 cover
+  is now pinned as an unresolved-defect diagnostic: the policy retains 10 of 12
+  counted roots and does not over-accept the incomplete cover.
 - Oracle-free target completion and stopping are now covered by the radius-20
   three-function policy path, scalar delay, scalar two-delay, nonnormal
   multi-delay, dense coupled two-delay, near-pole rational, and
