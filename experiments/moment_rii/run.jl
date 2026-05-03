@@ -4,6 +4,7 @@ using MatrixMarket
 using Random
 using Printf
 using SparseArrays
+using Distributed
 
 const REPO_ROOT = normpath(joinpath(@__DIR__, "..", ".."))
 
@@ -4573,6 +4574,38 @@ function residual_laurent_moment_blocks_generic(
         end
     end
     right_moments, left_moments
+end
+
+function residual_laurent_remote_worker_step(
+    Tsolve,
+    Tadjoint_solve,
+    Rright_basis,
+    Rleft_basis,
+    z_nodes,
+    z_weights,
+    center,
+    radius,
+    moment_count,
+)
+    start_ns = time_ns()
+    right_moments, left_moments = residual_laurent_moment_blocks_generic(
+        Tsolve,
+        Tadjoint_solve,
+        Rright_basis,
+        Rleft_basis,
+        z_nodes,
+        z_weights,
+        center,
+        radius;
+        moment_count=moment_count,
+    )
+    (
+        right_moments=right_moments,
+        left_moments=left_moments,
+        nodes=length(z_nodes),
+        elapsed_ns=time_ns() - start_ns,
+        pid=myid(),
+    )
 end
 
 function compress_residual_laurent_candidates(

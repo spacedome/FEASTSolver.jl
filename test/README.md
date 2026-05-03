@@ -49,9 +49,9 @@ test items whose names match `REGEX`. Slow tests are tagged `:slow`; include the
 with `just test --slow REGEX` or `just test-slow REGEX`. Torture tests are tagged
 `:torture`; use `just test-torture` to run only that flagged stress suite.
 Use `just test --preset moment-core` for the focused higher-moment
-algorithm-family checks; this excludes `:moment_heavy` and is the shorter loop
-for the linear FEAST/SS, polynomial companion, dual reduced extraction,
-no-oracle Beyn/SS extractor agreement, canonical NLFEAST, and
+algorithm-family checks; this excludes `:moment_heavy` and `:distributed`, and
+is the shorter loop for the linear FEAST/SS, polynomial companion, dual reduced
+extraction, no-oracle Beyn/SS extractor agreement, canonical NLFEAST, and
 residual-Laurent-update reductions.
 
 The maintained test options are:

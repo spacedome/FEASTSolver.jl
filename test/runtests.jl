@@ -26,7 +26,7 @@ function apply_test_preset(
             "agrees across extractors without root oracle|canonical NLFEAST limit|" *
             "residual Laurent update|low-rank compression preserves update",
         )
-        exclude_tags = union_test_tags(exclude_tags, Set([:moment_heavy]))
+        exclude_tags = union_test_tags(exclude_tags, Set([:moment_heavy, :distributed]))
         run_slow = true
     elseif name == "moment-heavy"
         filter === nothing && (filter = Regex("moment RII"))

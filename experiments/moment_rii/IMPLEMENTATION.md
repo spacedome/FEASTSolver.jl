@@ -76,6 +76,11 @@ The serial update and partition diagnostic now call the same
 `residual_laurent_moment_blocks_generic` kernel and the same candidate-space
 compression helper, so the experiment has one node-local accumulation boundary
 to map onto workers.
+`run_remote_residual_laurent_worker_diagnostic` is the first process-level
+prototype: it sends those residual bases to actual Julia worker processes,
+each worker owns a stable subset of contour nodes for the update, and the
+master reduces the returned Laurent blocks before running the same compression
+step. This is still an experiment diagnostic, not a persistent public plan.
 
 ## What Not To Do
 
@@ -102,5 +107,10 @@ operator with known eigenvalues, not a difficult NEP:
 5. Reduce worker Laurent moments back to the master.
 6. Verify the result matches the pinned partition diagnostic and the serial
    residual-Laurent update on the same problem.
+
+The current remote diagnostic completes steps 1-6 for a dense analytic control
+without persistent worker workspaces. The next implementation step is to turn
+that diagnostic into a reusable plan that keeps worker-local operator data,
+node assignments, and buffers alive across residual-update iterations.
 
 Only after that should the prototype move to nonlinear sparse gallery problems.

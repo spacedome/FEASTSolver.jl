@@ -1108,6 +1108,24 @@ end
     @test sum(row.nodes for row in result.partitioned_stats.partitions) == 128
 end
 
+@testitem "experimental moment RII: residual Laurent update runs on remote contour workers" tags=[:slow, :distributed] begin
+    Base.include(Main, joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = Main.run_remote_residual_laurent_worker_diagnostic(; worker_count=2, print_rows=false)
+
+    @test length(result.workers) == 2
+    @test result.expected == 20
+    @test result.serial.matched == result.expected
+    @test result.remote.matched == result.expected
+    @test result.remote.spurious_good == 0
+    @test result.x_projection_gap <= 1e-12
+    @test result.y_projection_gap <= 1e-12
+    @test length(result.remote_stats.workers) == 2
+    @test sum(report.nodes for report in result.remote_stats.workers) == 128
+    @test result.remote_stats.right_candidate_cols == result.serial_stats.right_candidate_cols
+    @test result.remote_stats.left_candidate_cols == result.serial_stats.left_candidate_cols
+end
+
 @testitem "experimental moment RII: residual Laurent update repairs nonnormal chart cover" tags=[:slow, :moment_heavy] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 

@@ -88,7 +88,7 @@ notes:
       'Presets are moment-core, moment-heavy, moment-count, and torture.' \
       'Run just test-slow to include TestItems tagged :slow.' \
       'Regex filters do not include :slow tests unless --slow or explicit --tags are passed.' \
-      'Run just test --preset moment-core for focused FEAST/SS/Beyn/NLFEAST reduction checks; it excludes :moment_heavy.' \
+      'Run just test --preset moment-core for focused FEAST/SS/Beyn/NLFEAST reduction checks; it excludes :moment_heavy and :distributed.' \
       'Run just test --preset moment-heavy for expensive moment diagnostics.' \
       'Run just test --preset moment-count for count-driven moment-RII policy tests.' \
       'Run just test-torture to include flagged generated/NLEVP numerical stress tests.' \
