@@ -1554,19 +1554,6 @@ Base.@kwdef struct CountDrivenPolicyConfig
     refine_inside_target_only::Bool = true
 end
 
-function count_driven_policy_kwargs(policy::CountDrivenPolicyConfig)
-    (
-        base_spacing=policy.base_spacing,
-        target_support=policy.target_support,
-        max_refinement_rounds=policy.max_refinement_rounds,
-        chart_radii=policy.chart_radii,
-        residual_tol=policy.residual_tol,
-        match_atol=policy.match_atol,
-        count_error_tol=policy.count_error_tol,
-        refine_inside_target_only=policy.refine_inside_target_only,
-    )
-end
-
 function local_cluster_multiplicity_estimates(
     cases,
     values;
@@ -1624,6 +1611,7 @@ function run_count_driven_adaptive_grid_refinement(;
     outer_radius=10.0,
     operator_builder=similarity_analytic_tools,
     operator_label="similarity",
+    policy=nothing,
     base_spacing=2.4,
     target_support=2,
     max_refinement_rounds=4,
@@ -1653,6 +1641,16 @@ function run_count_driven_adaptive_grid_refinement(;
     refine_inside_target_only=true,
     print_rows=true,
 )
+    if policy !== nothing
+        base_spacing = policy.base_spacing
+        target_support = policy.target_support
+        max_refinement_rounds = policy.max_refinement_rounds
+        chart_radii = policy.chart_radii
+        residual_tol = policy.residual_tol
+        match_atol = policy.match_atol
+        count_error_tol = policy.count_error_tol
+        refine_inside_target_only = policy.refine_inside_target_only
+    end
     count = full_operator_count_estimate(
         cases;
         outer_center=outer_center,
@@ -1881,7 +1879,7 @@ function run_count_driven_policy_diagnostic(;
     result = run_count_driven_adaptive_grid_refinement(;
         outer_center=outer_center,
         outer_radius=outer_radius,
-        count_driven_policy_kwargs(policy)...,
+        policy=policy,
         print_rows=print_rows,
         kwargs...,
     )
