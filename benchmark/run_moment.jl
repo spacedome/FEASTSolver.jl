@@ -77,12 +77,11 @@ function main()
     println("config,problem=$problem,workers=$workers,samples=$samples,seconds=$seconds_limit")
 
     # Warm package, experiment, and worker code paths before timing.
-    run_schrodinger_serial()
-    run_schrodinger_remote(workers)
+    serial_result = run_schrodinger_serial()
+    remote_result = run_schrodinger_remote(workers)
 
     serial_trial = run(@benchmarkable run_schrodinger_serial() samples=samples evals=1 seconds=seconds_limit)
     print_trial("moment,schrodinger_serial", serial_trial)
-    serial_result = run_schrodinger_serial()
     println(
         "stats,schrodinger_serial",
         ",expected=", serial_result.target_count,
@@ -95,7 +94,7 @@ function main()
 
     remote_trial = run(@benchmarkable run_schrodinger_remote($workers) samples=samples evals=1 seconds=seconds_limit)
     print_trial("moment,schrodinger_remote_stored", remote_trial)
-    print_remote_stats("stats,schrodinger_remote_stored", run_schrodinger_remote(workers))
+    print_remote_stats("stats,schrodinger_remote_stored", remote_result)
 end
 
 main()

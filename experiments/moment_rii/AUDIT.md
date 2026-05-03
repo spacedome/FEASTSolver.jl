@@ -112,11 +112,11 @@ global block Newton, or rational-coordinate-only fixes.
   local BenchmarkTools harness for that Schrodinger serial/remote rung and
   prints timing, allocation, correctness, and reuse counters after warmup. It
   was most recently run on the small default Schrodinger case with two workers
-  after adding setup/update timing splits: serial took `0.491s` with three
+  after adding setup/update timing splits: serial took `0.498s` with three
   matched roots and max residual `3.40e-11`, while the coarse
   persistent-worker stored-factor path took `15.38s`. The split shows
-  `12.73s` setup/JIT/factor initialization, `2.61s` for the first remote
-  update, and `0.031s` for the second update with the same 96 worker-owned
+  `13.52s` setup/JIT/factor initialization, `3.99s` for the first remote
+  update, and `0.009s` for the second update with the same 96 worker-owned
   factors and solve buffers. The remote spaces match the serial spaces to
   projection gaps near `1e-14`. This confirms correctness/reuse and shows that
   setup and first-use costs dominate this small benchmark, while the steady
