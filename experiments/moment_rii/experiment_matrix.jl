@@ -1554,6 +1554,28 @@ Base.@kwdef struct CountDrivenPolicyConfig
     refine_inside_target_only::Bool = true
 end
 
+Base.@kwdef struct CountDrivenNumericsConfig
+    iterations::Int = 1
+    basis_moments::Int = 4
+    basis_nodes::Int = 16
+    rii_nodes::Int = 128
+    basis_ranktol::Float64 = 1e-8
+    determinant_nodes::Int = 512
+    determinant_capacity::Int = 32
+    extractor::Symbol = :loewner_counted
+    reduced_moments::Int = 8
+    reduced_nodes::Int = 512
+    reduced_ranktol::Float64 = 1e-10
+    reduced_refinement::Symbol = :none
+    refinement_steps::Int = 4
+    loewner_radius::Float64 = 1.3
+    loewner_phase::Float64 = 0.0
+    loewner_points::Int = 6
+    residual_normalization::Symbol = :vector
+    component_scaling::Symbol = :none
+    component_scaling_nodes::Int = 64
+end
+
 function local_cluster_multiplicity_estimates(
     cases,
     values;
@@ -1612,6 +1634,7 @@ function run_count_driven_adaptive_grid_refinement(;
     operator_builder=similarity_analytic_tools,
     operator_label="similarity",
     policy=nothing,
+    numerics=nothing,
     base_spacing=2.4,
     target_support=2,
     max_refinement_rounds=4,
@@ -1650,6 +1673,27 @@ function run_count_driven_adaptive_grid_refinement(;
         match_atol = policy.match_atol
         count_error_tol = policy.count_error_tol
         refine_inside_target_only = policy.refine_inside_target_only
+    end
+    if numerics !== nothing
+        iterations = numerics.iterations
+        basis_moments = numerics.basis_moments
+        basis_nodes = numerics.basis_nodes
+        rii_nodes = numerics.rii_nodes
+        basis_ranktol = numerics.basis_ranktol
+        determinant_nodes = numerics.determinant_nodes
+        determinant_capacity = numerics.determinant_capacity
+        extractor = numerics.extractor
+        reduced_moments = numerics.reduced_moments
+        reduced_nodes = numerics.reduced_nodes
+        reduced_ranktol = numerics.reduced_ranktol
+        reduced_refinement = numerics.reduced_refinement
+        refinement_steps = numerics.refinement_steps
+        loewner_radius = numerics.loewner_radius
+        loewner_phase = numerics.loewner_phase
+        loewner_points = numerics.loewner_points
+        residual_normalization = numerics.residual_normalization
+        component_scaling = numerics.component_scaling
+        component_scaling_nodes = numerics.component_scaling_nodes
     end
     count = full_operator_count_estimate(
         cases;
@@ -1872,6 +1916,7 @@ function run_count_driven_policy_diagnostic(;
     outer_center=0.0 + 0.0im,
     outer_radius,
     policy=CountDrivenPolicyConfig(),
+    numerics=nothing,
     print_rows=true,
     diagnostic_label="policy diagnostic",
     kwargs...,
@@ -1880,6 +1925,7 @@ function run_count_driven_policy_diagnostic(;
         outer_center=outer_center,
         outer_radius=outer_radius,
         policy=policy,
+        numerics=numerics,
         print_rows=print_rows,
         kwargs...,
     )
@@ -2368,13 +2414,7 @@ function run_coupled_two_delay_mixed_policy_stress(;
         residual_tol=residual_tol,
         match_atol=match_atol,
     )
-    run_count_driven_policy_diagnostic(;
-        label="Coupled two-delay mixed policy stress",
-        cases=coupled_two_delay_cases(),
-        outer_radius=outer_radius,
-        operator_builder=coupled_two_delay_operator_builder(; coupling=coupling),
-        operator_label="coupled two-delay(coupling=$coupling)",
-        policy=policy,
+    numerics = CountDrivenNumericsConfig(;
         iterations=2,
         basis_moments=8,
         basis_nodes=64,
@@ -2385,6 +2425,15 @@ function run_coupled_two_delay_mixed_policy_stress(;
         reduced_nodes=768,
         residual_normalization=:operator,
         component_scaling=:none,
+    )
+    run_count_driven_policy_diagnostic(;
+        label="Coupled two-delay mixed policy stress",
+        cases=coupled_two_delay_cases(),
+        outer_radius=outer_radius,
+        operator_builder=coupled_two_delay_operator_builder(; coupling=coupling),
+        operator_label="coupled two-delay(coupling=$coupling)",
+        policy=policy,
+        numerics=numerics,
         print_rows=print_rows,
         diagnostic_label="mixed diagnostic",
     )
@@ -2407,13 +2456,7 @@ function run_dense_multi_delay_weak_support_stress(;
         residual_tol=residual_tol,
         match_atol=match_atol,
     )
-    run_count_driven_policy_diagnostic(;
-        label="Dense multi-delay weak-support stress",
-        cases=dense_multi_delay_cases(),
-        outer_radius=outer_radius,
-        operator_builder=dense_multi_delay_operator_builder(; coupling=coupling),
-        operator_label="dense multi-delay(coupling=$coupling)",
-        policy=policy,
+    numerics = CountDrivenNumericsConfig(;
         iterations=2,
         basis_moments=8,
         basis_nodes=64,
@@ -2424,6 +2467,15 @@ function run_dense_multi_delay_weak_support_stress(;
         reduced_nodes=768,
         residual_normalization=:operator,
         component_scaling=:none,
+    )
+    run_count_driven_policy_diagnostic(;
+        label="Dense multi-delay weak-support stress",
+        cases=dense_multi_delay_cases(),
+        outer_radius=outer_radius,
+        operator_builder=dense_multi_delay_operator_builder(; coupling=coupling),
+        operator_label="dense multi-delay(coupling=$coupling)",
+        policy=policy,
+        numerics=numerics,
         print_rows=print_rows,
         diagnostic_label="dense diagnostic",
     )
