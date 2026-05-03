@@ -5016,6 +5016,9 @@ function run_dual_local_chart_sweep_analytic(;
     reduced_nodes=1024,
     reduced_ranktol=1e-10,
     reduced_ss_mode=:similarity,
+    loewner_points=4,
+    loewner_radius=1.6,
+    loewner_phase=0.0,
     residual_normalization=:vector,
     reduced_refinement=:none,
     refinement_steps=4,
@@ -5089,6 +5092,9 @@ function run_dual_local_chart_sweep_analytic(;
                     reduced_nodes=reduced_nodes,
                     reduced_ranktol=reduced_ranktol,
                     reduced_ss_mode=reduced_ss_mode,
+                    loewner_points=loewner_points,
+                    loewner_radius=loewner_radius,
+                    loewner_phase=loewner_phase,
                     residual_normalization=residual_normalization,
                     reduced_refinement=reduced_refinement,
                     refinement_steps=refinement_steps,
@@ -5109,6 +5115,8 @@ function run_dual_local_chart_sweep_analytic(;
                     good=0,
                     matched=0,
                     max_residual=Inf,
+                    count_estimate=0,
+                    count_error=Inf,
                     failed=true,
                     error=string(typeof(err)),
                 )
@@ -5125,6 +5133,8 @@ function run_dual_local_chart_sweep_analytic(;
                     good=0,
                     matched=0,
                     max_residual=Inf,
+                    count_estimate=0,
+                    count_error=Inf,
                     failed=true,
                     error="empty_basis",
                 )
@@ -5143,6 +5153,8 @@ function run_dual_local_chart_sweep_analytic(;
                 good=summary.good,
                 matched=matched,
                 max_residual=summary.max_residual,
+                count_estimate=getproperty(extraction, :count_estimate),
+                count_error=getproperty(extraction, :count_error),
                 failed=false,
                 error="",
             )
@@ -5191,14 +5203,25 @@ function run_dual_local_chart_sweep_analytic(;
     matched_global = match_expected_count(found_unique, expected_global; atol=match_atol)
     support_clusters = chart_entry_clusters(found_entries; atol=match_atol)
     support2_values = supported_cluster_values(support_clusters; min_support=2)
+    support2_global_values = globally_supported_cluster_values(
+        support_clusters,
+        outer_center,
+        outer_radius;
+        min_support=2,
+        boundary_margin=10 * match_atol,
+    )
     support2_matched = match_expected_count(support2_values, expected_global; atol=match_atol)
+    support2_global_matched = match_expected_count(support2_global_values, expected_global; atol=match_atol)
     @printf(
-        "  union_good=%d matched_global=%d/%d support2_good=%d support2_matched=%d/%d\n",
+        "  union_good=%d matched_global=%d/%d support2_good=%d support2_matched=%d/%d support2_global_good=%d support2_global_matched=%d/%d\n",
         length(found_unique),
         matched_global,
         length(expected_global),
         length(support2_values),
         support2_matched,
+        length(expected_global),
+        length(support2_global_values),
+        support2_global_matched,
         length(expected_global),
     )
     (
@@ -5207,9 +5230,11 @@ function run_dual_local_chart_sweep_analytic(;
         found_entries=found_entries,
         support_clusters=support_clusters,
         support2_found=support2_values,
+        support2_global_found=support2_global_values,
         expected=expected_global,
         matched=matched_global,
         support2_matched=support2_matched,
+        support2_global_matched=support2_global_matched,
         centers=chart_centers,
     )
 end

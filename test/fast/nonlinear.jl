@@ -254,6 +254,240 @@ end
 
     @test result.matched == length(result.expected)
     @test result.support2_matched == length(result.expected)
+    @test result.support2_global_matched == length(result.expected)
+    @test length(result.support2_global_found) == length(result.expected)
     @test length(result.support2_found) <= length(result.found)
     @test length(result.found) > length(result.expected)
+end
+
+@testitem "experimental moment RII: Loewner layout support prunes interpolation artifacts" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_loewner_interpolation_sweep(;
+        radii=(1.15, 1.3, 1.6),
+        phase_fractions=(0.0, 0.25),
+        loewner_points=6,
+        print_rows=false,
+    )
+
+    @test result.initial_support[1].spurious > 0
+    @test result.initial_support[2].matched == 18
+    @test result.initial_support[2].spurious == 0
+    @test result.updated_support[2].matched == 18
+    @test result.updated_support[2].spurious == 0
+end
+
+@testitem "experimental moment RII: global Loewner layout support removes in-target artifacts" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_global_loewner_interior_artifact_diagnostic(; print_rows=false)
+    summary = result.summary
+
+    @test summary.layouts == 6
+    @test summary.bad_single_layouts > 0
+    @test summary.worst_nearest_expected > 1e-6
+    @test summary.worst_bad_residual < 1e-8
+    @test summary.initial_support1_spurious > 0
+    @test summary.initial_support2_spurious == 0
+    @test summary.updated_support2_matched == summary.expected
+    @test summary.updated_support2_count == summary.expected
+    @test summary.updated_support2_spurious == 0
+    @test summary.support2_prunes_artifacts
+end
+
+@testitem "experimental moment RII: global Loewner artifact policy requires cross-layout support" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_global_loewner_artifact_retention_policy(; print_rows=false)
+    decision = result.decision
+
+    @test decision.status == :accept_cross_layout
+    @test !decision.single_layout_safe
+    @test decision.cross_layout_safe
+    @test decision.retained == decision.expected
+    @test :do_not_accept_single_layout_residual_small_values in decision.actions
+    @test :require_cross_layout_support2 in decision.actions
+    @test :retain_cross_layout_support2 in decision.actions
+end
+
+@testitem "experimental moment RII: local Loewner layouts retain exponential roots" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    rows = run_exponential_local_chart_loewner_layout_sweep(;
+        loewner_radii=(1.3,),
+        phase_fractions=(0.0, 0.25),
+        loewner_points=6,
+        chart_radii=(1.2,),
+        print_rows=false,
+    )
+
+    @test length(rows) == 2
+    @test all(row.union_matched == row.expected for row in rows)
+    @test all(row.support2_matched == row.expected for row in rows)
+    @test all(row.support2 == row.expected for row in rows)
+end
+
+@testitem "experimental moment RII: grid Loewner charts recover exponential roots" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    rows = run_exponential_grid_chart_loewner_spacing_sweep(;
+        spacings=(1.8,),
+        loewner_radius=1.3,
+        loewner_points=6,
+        chart_radii=(1.2, 2.0),
+        print_rows=false,
+    )
+
+    @test length(rows) == 1
+    @test rows[1].union_matched == rows[1].expected
+    @test rows[1].support2_matched == rows[1].expected
+    @test rows[1].support2 == rows[1].expected
+    @test rows[1].centers > rows[1].expected
+end
+
+@testitem "experimental moment RII: adaptive grid Loewner refinement repairs weak support" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_exponential_adaptive_grid_loewner_refinement(;
+        base_spacing=2.4,
+        loewner_radius=1.3,
+        loewner_points=6,
+        chart_radii=(1.2, 2.0),
+        print_rows=false,
+    )
+    base = result.rows[1]
+    refined = result.rows[end]
+
+    @test base.union_matched == base.expected
+    @test base.support2_matched < base.expected
+    @test refined.support2_matched == refined.expected
+    @test refined.support2 == refined.expected
+    @test refined.support2_global_matched == refined.expected
+    @test refined.support2_global == refined.expected
+    @test refined.centers < 97
+end
+
+@testitem "experimental moment RII: adaptive grid refinement exposes triangular spurious boundary" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_triangular_adaptive_grid_loewner_refinement(;
+        coupling=10.0,
+        outer_radius=6.0,
+        base_spacing=2.4,
+        chart_radii=(1.2, 1.8),
+        refinement_rounds=2,
+        print_rows=false,
+    )
+    base = result.rows[1]
+    refined = result.rows[end]
+
+    @test base.union_matched == base.expected
+    @test base.support2_matched < base.expected
+    @test refined.support2_matched == refined.expected
+    @test refined.support2 > refined.expected
+    @test refined.support2_global_matched == refined.expected
+    @test refined.support2_global == refined.expected
+    @test refined.centers < 57
+end
+
+@testitem "experimental moment RII: target-limited refinement repairs radius-20 analytic support" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_three_function_adaptive_grid_loewner_refinement(;
+        outer_radius=20.0,
+        base_spacing=3.0,
+        chart_radii=(1.5, 2.4),
+        refinement_rounds=2,
+        loewner_radius=1.3,
+        loewner_points=6,
+        print_rows=false,
+    )
+    base = result.rows[1]
+    first_refined = result.rows[2]
+    refined = result.rows[end]
+
+    @test base.union_matched < base.expected
+    @test first_refined.union_matched == first_refined.expected
+    @test first_refined.support2_global_matched < first_refined.expected
+    @test refined.support2_global_matched == refined.expected
+    @test refined.support2_global == refined.expected
+    @test refined.support2 > refined.expected
+    @test refined.centers < 161
+end
+
+@testitem "experimental moment RII: adaptive radius-20 analytic solve is Loewner-layout stable" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_three_function_adaptive_grid_loewner_layout_sweep(;
+        radii=(1.15, 1.3, 1.6),
+        phase_fractions=(0.0,),
+        loewner_points=6,
+        print_rows=false,
+    )
+
+    @test all(row.success for row in result.rows)
+    @test result.summary.layouts == 3
+    @test result.summary.support == 2
+    @test result.summary.matched == result.summary.expected
+    @test result.summary.supported == result.summary.expected
+    @test result.summary.success
+end
+
+@testitem "experimental moment RII: adaptive retention score distinguishes support and local count stress" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_three_function_retention_score_diagnostic(; print_rows=false)
+    summary = result.summary
+
+    @test summary.exact_support2_global
+    @test summary.support1_global_matched == summary.expected
+    @test summary.support2_global_matched == summary.expected
+    @test summary.support2_global == summary.expected
+    @test summary.support3_global < summary.expected
+    @test summary.weak_inside_clusters == 0
+    @test summary.count_deficit_records > 0
+    @test summary.max_count_error > 1e-2
+    @test summary.max_record_residual <= 1e-7
+    @test result.evidence.support_and_target
+    @test result.evidence.local_count_warning
+    @test result.evidence.residual_ok
+end
+
+@testitem "experimental moment RII: automatic retention policy escalates count warnings to agreement checks" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_three_function_automatic_retention_policy(; print_rows=false)
+    initial = result.initial_decision
+    final = result.final_decision
+
+    @test initial.status == :escalate
+    @test :request_loewner_layout_agreement in initial.actions
+    @test :request_reduced_extractor_agreement in initial.actions
+    @test final.status == :accept_with_chart_warnings
+    @test final.retained == final.expected
+    @test final.support_ok
+    @test final.residual_ok
+    @test final.local_count_warning
+    @test final.layout_ok
+    @test final.extractor_ok
+    @test :layout_agreement_certified in final.actions
+    @test :extractor_agreement_certified in final.actions
+end
+
+@testitem "experimental moment RII: adaptive radius-20 analytic solve agrees across reduced extractors" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_three_function_adaptive_grid_extractor_agreement(;
+        extractors=(:loewner_counted, :ss_counted),
+        loewner_radius=1.3,
+        loewner_points=6,
+        print_rows=false,
+    )
+
+    @test all(row.success for row in result.rows)
+    @test result.summary.extractors == 2
+    @test result.summary.support == 2
+    @test result.summary.matched == result.summary.expected
+    @test result.summary.supported == result.summary.expected
+    @test result.summary.success
 end
