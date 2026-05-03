@@ -27,6 +27,48 @@ iterative state. The iterative state is instead:
 - a residual Laurent update that repairs `X` and `Y`;
 - chart diagnostics and a reproducible policy for retention/refinement.
 
+## Reference Algorithm
+
+For one local chart, the experiment-level solver loop is:
+
+```text
+given T, T', a circular chart Gamma(c,r), and right/left probes V,W:
+
+1. Build right and left contour-moment trial spaces
+       X = orth([int zeta^k T(z)^(-1) V dz]_{k=0}^{K_basis-1})
+       Y = orth([int zeta^k T(z)^(-H) W dz]_{k=0}^{K_basis-1})
+
+2. Solve/extract the reduced Petrov-Galerkin NEP
+       Y^H T(lambda) X u = 0
+   using a realization coordinate such as counted SS/Hankel or Loewner.
+
+3. Score physical Ritz data
+       x = X u,  y = Y v
+   by right/left residuals, chart membership, local counts, support across
+   overlapping charts, and agreement across layouts/extractors when requested.
+
+4. If the retained set satisfies the reliable full-operator contour count,
+   accept the geometric roots. If the algebraic count is larger than the
+   retained geometric count, assign local cluster multiplicities by small
+   contour counts.
+
+5. If roots are missing but weak residual-small candidates exist, add local
+   chart centers or escalate chart radii/overlap according to policy.
+
+6. If extraction alone is insufficient, repair the physical spaces with the
+   residual Laurent update and repeat from step 2:
+       X <- orth([X, int zeta^(-k) T(z)^(-1) U_X dz])
+       Y <- orth([Y, int zeta^( k) T(z)^(-H) U_Y dz])
+   where U_X and U_Y are low-rank bases for the physical right/left residual
+   blocks from the current reduced Ritz data.
+```
+
+The central implementation path is currently `ContourChart`, `TrialSpaces`,
+`ReducedExtractorConfig`, `ResidualUpdateConfig`,
+`run_dual_moment_compressed_rii_analytic_iteration`, and
+`run_count_driven_policy_diagnostic`. These are experiment objects, not public
+`FEASTSolver` API.
+
 ## Core Update Formula
 
 Work in a local circular chart
