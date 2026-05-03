@@ -4618,6 +4618,7 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
 
     summaries = NamedTuple[]
     extraction = extract_reduced_nep(ctx, trial, chart, extractor_config)
+    extractions = Any[extraction]
     push!(summaries, merge((iteration=0,), dual_scalar_rii_summary(extraction, expected; residual_tol=residual_tol, match_atol=match_atol)))
     if verbose
         @printf("    iter=0 reduced_count=%d count_error=%.3e\n", extraction.count_estimate, extraction.count_error)
@@ -4668,6 +4669,7 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
             error("unknown analytic RII update_mode: $update_mode")
         end
         extraction = extract_reduced_nep(ctx, trial, chart, extractor_config)
+        push!(extractions, extraction)
         push!(
             summaries,
             merge(
@@ -4711,6 +4713,7 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
     end
     (
         extraction=extraction,
+        extractions=extractions,
         Xbasis=trial.X,
         Ybasis=trial.Y,
         expected=expected,
@@ -6156,6 +6159,8 @@ function run_scalar_sine_scaled_sweep(; radius=10.0, node_values=(16, 24, 32, 48
         end
     end
 end
+
+include("experiment_matrix.jl")
 
 function main()
     run_case("diagonal_linear", diagonal_linear_problem; nodes=16, iterations=3, moment_counts=(1, 2), ranktol=1e-12, residual_tol=1e-10)
