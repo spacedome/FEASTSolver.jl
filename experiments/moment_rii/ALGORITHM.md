@@ -738,6 +738,12 @@ that setting.
   13 with residuals below `1e-8`. This is the better Schrodinger DD stress
   than the small moving-boundary smoke because it exercises a genuinely
   nonlinear Schur complement while preserving a full linear reference spectrum.
+  The companion refinement sweep records the practical boundary: at 64 and 96
+  contour nodes the fused realization has the right rank but the chart is still
+  underresolved after cleanup (`12/13` and `11/13` matched respectively in the
+  current run), while 128 nodes plus reduced `Tred` cleanup recovers all 13.
+  Reduced cleanup is therefore necessary but not a replacement for sufficient
+  contour sampling on this harder rational interface problem.
 - Sparse Schrodinger remote stored-factor smoke: the same realistic sparse
   Schrodinger control runs through persistent worker-owned contour partitions.
   The worker factors and node-local solve buffers are created once on the first

@@ -138,8 +138,11 @@ global block Newton, or rational-coordinate-only fixes.
   interface Schur-complement NEP below the first interior pole, and verifies
   that reduced `Tred` cleanup recovers all 13 target roots on a
   `full_n=207`, `interface_n=15` control after raw fused extraction has large
-  physical residuals. This is enough implementation evidence for now; it is
-  not a benchmark-maxing result.
+  physical residuals. Its refinement sweep records the useful calibration:
+  64 and 96 contour nodes identify the right rank but remain underresolved
+  after cleanup, while 128 nodes plus `Tred` cleanup recovers all targets. This
+  is enough implementation evidence for now; it is not a benchmark-maxing
+  result.
   The experiment deliberately does not yet provide full reusable sparse
   workspaces, broad realistic sparse gallery coverage, or publication-level
   scaling claims.

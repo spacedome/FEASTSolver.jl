@@ -332,3 +332,46 @@ function run_fused_schrodinger_dd_interface_diagnostic(;
         fused_singulars=Float64.(fused_singulars),
     )
 end
+
+function run_fused_schrodinger_dd_interface_refinement_sweep(;
+    nodes_values=(64, 96, 128),
+    moment_count=3,
+    print_rows=true,
+    kwargs...,
+)
+    rows = [
+        run_fused_schrodinger_dd_interface_diagnostic(;
+            nodes=nodes,
+            moment_count=moment_count,
+            print_rows=false,
+            kwargs...,
+        )
+        for nodes in nodes_values
+    ]
+
+    if print_rows
+        println()
+        println("Fused Schrodinger domain-decomposition refinement sweep")
+        println("  tests when reduced Tred cleanup is enough versus when contour quadrature is still underresolved")
+        for (nodes, row) in zip(nodes_values, rows)
+            @printf(
+                "  nodes=%d expected=%d rank=%d raw_good=%d raw_max=%.3e refined_good=%d refined_matched=%d refined_max=%.3e max_corr=%.3e\n",
+                nodes,
+                row.expected,
+                row.rank,
+                row.raw_good,
+                row.raw_max_inside_residual,
+                row.refined_good,
+                row.refined_matched,
+                row.refined_max_inside_residual,
+                row.max_refinement_correction,
+            )
+        end
+    end
+
+    (
+        nodes_values=nodes_values,
+        moment_count=moment_count,
+        rows=rows,
+    )
+end
