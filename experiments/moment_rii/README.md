@@ -793,6 +793,11 @@ residual Laurent repair, and explicit chart policy. It also lists the known
 reductions to FEAST, SS-FEAST, Beyn/SS, and canonical NLFEAST, plus the negative
 boundaries that should not be rediscovered as candidate defaults.
 
+`DERIVATION.md` records the current derivation sketch: Keldysh local resolvent
+form, scalar RII as a circular-chart Laurent correction, the finite
+left/right realization state, and the reductions to linear FEAST, canonical
+NLFEAST, Beyn/SS, and higher-moment NLFEAST.
+
 `AUDIT.md` maps the research objective to concrete artifacts, evidence, and
 remaining gaps. It is the current guardrail against over-claiming completion.
 

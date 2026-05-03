@@ -3,6 +3,9 @@
 This is the current experiment-level algorithm boundary. It is not a public
 `FEASTSolver` API yet.
 
+The derivation sketch is in `DERIVATION.md`; this file summarizes the candidate
+algorithm, evidence, and known boundaries.
+
 ## Candidate Answer
 
 The most defensible solution so far is:
