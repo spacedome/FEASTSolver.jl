@@ -21,6 +21,7 @@ they are curated into tests, benchmarks, or examples.
 Tests use `TestItems.jl`/`TestItemRunner.jl` under Julia's normal `Pkg.test()`
 entrypoint. Run `just test REGEX` to execute only matching test item names, and
 `just test-slow` to include slow tagged items such as the gun cavity NEP case.
+Focused research loops use presets, for example `just test --preset moment-core`.
 
 ## API shape
 

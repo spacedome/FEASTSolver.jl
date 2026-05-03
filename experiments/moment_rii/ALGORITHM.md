@@ -272,24 +272,19 @@ per scalar Ritz value.
 
 Representative tests:
 
-- `just test 'linear SS-FEAST'`
-- `just test 'polynomial bridge agrees'`
-- `just test 'moment RII'`
-- `just test 'analytic block Newton'`
-- `just test 'rational coordinates'`
-- `just test 'adaptive retention score'`
-- `just test 'automatic retention policy'`
-- `just test 'candidate-centered split'`
-- `just test 'residual Laurent update'`
-- `just test 'repairs nonnormal chart cover'`
-- `just test 'canonical NLFEAST limit'`
-- `just test 'near-pole rational'`
-- `just test 'without root oracle'`
-- `just test 'oracle-free nonnormal delay'`
-- `just test 'fully coupled mixed diagnostics'`
-- `just test 'dense multi-delay weak support'`
-- `just test 'oracle-free multiplicity'`
-- `just test 'oracle-free near-pole rational'`
+- `just test --preset moment-core`
+- `just test --preset moment-heavy 'residual Laurent update'`
+- `just test --preset moment-count`
+- `just test --slow 'analytic block Newton'`
+- `just test --slow 'rational coordinates'`
+- `just test --slow 'adaptive retention score'`
+- `just test --slow 'candidate-centered split'`
+- `just test --slow 'near-pole rational'`
+- `just test --slow 'without root oracle'`
+- `just test --slow 'oracle-free nonnormal delay'`
+- `just test --slow 'fully coupled mixed diagnostics'`
+- `just test --slow 'dense multi-delay weak support'`
+- `just test --slow 'oracle-free multiplicity'`
 
 ## Negative Boundaries
 

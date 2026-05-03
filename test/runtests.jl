@@ -5,6 +5,46 @@ function parse_test_tags(text)
     Set(Symbol(strip(part)) for part in split(text, ",") if !isempty(strip(part)))
 end
 
+function union_test_tags(left, right)
+    result = copy(left)
+    union!(result, right)
+    result
+end
+
+function apply_test_preset(
+    name,
+    filter,
+    include_tags,
+    exclude_tags,
+    run_slow,
+    run_torture,
+    only_torture,
+)
+    if name == "moment-core"
+        filter = Regex(
+            "linear SS-FEAST|polynomial bridge agrees|dual reduced extraction|" *
+            "agrees across extractors without root oracle|canonical NLFEAST limit|" *
+            "residual Laurent update",
+        )
+        exclude_tags = union_test_tags(exclude_tags, Set([:moment_heavy]))
+        run_slow = true
+    elseif name == "moment-heavy"
+        filter === nothing && (filter = Regex("moment RII"))
+        include_tags = union_test_tags(include_tags, Set([:moment_heavy]))
+        run_slow = true
+    elseif name == "moment-count"
+        filter === nothing && (filter = Regex("count-driven refinement"))
+        run_slow = true
+    elseif name == "torture"
+        only_torture = true
+        run_torture = true
+        run_slow = true
+    else
+        error("unknown test preset: $name")
+    end
+    filter, include_tags, exclude_tags, run_slow, run_torture, only_torture
+end
+
 function normalize_test_args(args)
     length(args) == 1 || return args
     text = strip(only(args))
@@ -18,7 +58,9 @@ function normalize_test_args(args)
         if token in ("--slow", "--torture", "--only-torture") || startswith(token, "--tags=") ||
                 startswith(token, "--exclude=")
             push!(normalized, String(token))
-        elseif token in ("--tags", "--exclude")
+        elseif startswith(token, "--preset=")
+            push!(normalized, String(token))
+        elseif token in ("--tags", "--exclude", "--preset")
             push!(normalized, String(token))
             index == lastindex(tokens) && error("$token requires a comma-separated value")
             index += 1
@@ -64,6 +106,14 @@ function parse_test_options(args)
             include_tags = parse_test_tags(args[index])
         elseif startswith(arg, "--tags=")
             include_tags = parse_test_tags(arg[8:end])
+        elseif arg == "--preset"
+            index == lastindex(args) && error("--preset requires a preset name")
+            index += 1
+            filter, include_tags, exclude_tags, run_slow, run_torture, only_torture =
+                apply_test_preset(args[index], filter, include_tags, exclude_tags, run_slow, run_torture, only_torture)
+        elseif startswith(arg, "--preset=")
+            filter, include_tags, exclude_tags, run_slow, run_torture, only_torture =
+                apply_test_preset(arg[10:end], filter, include_tags, exclude_tags, run_slow, run_torture, only_torture)
         elseif arg == "--exclude"
             index == lastindex(args) && error("--exclude requires a comma-separated value")
             index += 1

@@ -48,10 +48,11 @@ test harness through `Pkg.test(test_args=...)`. Use `just test REGEX` to run onl
 test items whose names match `REGEX`. Slow tests are tagged `:slow`; include them
 with `just test --slow REGEX` or `just test-slow REGEX`. Torture tests are tagged
 `:torture`; use `just test-torture` to run only that flagged stress suite.
-Use `just test-moment-core` for the focused higher-moment algorithm-family
-checks; this is the shorter loop for the linear FEAST/SS, polynomial companion,
-dual reduced extraction, no-oracle Beyn/SS extractor agreement, canonical
-NLFEAST, and residual-Laurent-update reductions.
+Use `just test --preset moment-core` for the focused higher-moment
+algorithm-family checks; this excludes `:moment_heavy` and is the shorter loop
+for the linear FEAST/SS, polynomial companion, dual reduced extraction,
+no-oracle Beyn/SS extractor agreement, canonical NLFEAST, and
+residual-Laurent-update reductions.
 
 The maintained test options are:
 
@@ -60,3 +61,5 @@ The maintained test options are:
 - `--only-torture`: run only tests tagged `:torture`; this also enables slow tests.
 - `--tags TAGS`: require comma-separated tags, e.g. `just test --tags moment_heavy "moment RII"`.
 - `--exclude TAGS`: exclude comma-separated tags, e.g. `just test --exclude moment_heavy "moment RII"`.
+- `--preset NAME`: apply a maintained test loop. Current presets are
+  `moment-core`, `moment-heavy`, `moment-count`, and `torture`.
