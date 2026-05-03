@@ -3876,6 +3876,82 @@ function run_residual_laurent_compression_diagnostic(;
     )
 end
 
+function run_residual_laurent_low_rank_equivalence_diagnostic(;
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    cases = (scalar_sine_case(), scalar_cosine_case(), scalar_shifted_sine_case())
+    chart = ContourChart(0.0 + 0.0im, 10.0)
+    ctx = analytic_context(cases, chart, similarity_analytic_tools)
+    basis = MomentBasisConfig(moments=4, nodes=8, ranktol=0.5, seed=9911)
+    extractor = ReducedExtractorConfig(;
+        extractor=:loewner_counted,
+        determinant_nodes=512,
+        determinant_capacity=64,
+        reduced_moments=12,
+        reduced_nodes=512,
+        loewner_points=6,
+        loewner_radius=1.3,
+        residual_normalization=:vector,
+    )
+    compressed_update = ResidualUpdateConfig(;
+        moment_count=1,
+        rii_nodes=128,
+        residual_ranktol=1e-10,
+        compression_ranktol=1e-10,
+    )
+    full_update = ResidualUpdateConfig(;
+        moment_count=1,
+        rii_nodes=128,
+        residual_ranktol=0.0,
+        compression_ranktol=1e-10,
+    )
+    trial = initial_dual_trial_spaces(ctx, chart, basis)
+    extraction0 = extract_reduced_nep(ctx, trial, chart, extractor)
+    compressed_trial, compressed_stats = residual_laurent_update(ctx, trial, extraction0, chart, compressed_update)
+    full_trial, full_stats = residual_laurent_update(ctx, trial, extraction0, chart, full_update)
+    compressed_extraction = extract_reduced_nep(ctx, compressed_trial, chart, extractor)
+    full_extraction = extract_reduced_nep(ctx, full_trial, chart, extractor)
+    compressed_summary = dual_scalar_rii_summary(compressed_extraction, ctx.expected; residual_tol=residual_tol, match_atol=match_atol)
+    full_summary = dual_scalar_rii_summary(full_extraction, ctx.expected; residual_tol=residual_tol, match_atol=match_atol)
+    Px = compressed_trial.X * compressed_trial.X' - full_trial.X * full_trial.X'
+    Py = compressed_trial.Y * compressed_trial.Y' - full_trial.Y * full_trial.Y'
+    result = (
+        expected=length(ctx.expected),
+        compressed=compressed_summary,
+        full=full_summary,
+        x_projection_gap=opnorm(Px),
+        y_projection_gap=opnorm(Py),
+        compressed_stats=compressed_stats,
+        full_stats=full_stats,
+        right_candidate_saved=full_stats.right_candidate_cols - compressed_stats.right_candidate_cols,
+        left_candidate_saved=full_stats.left_candidate_cols - compressed_stats.left_candidate_cols,
+    )
+    if print_rows
+        println()
+        println("Residual Laurent low-rank equivalence diagnostic")
+        println("  verifies residual-basis compression preserves the updated physical spaces")
+        @printf(
+            "  expected=%d compressed=%d/%d full=%d/%d projection_gap=(%.3e, %.3e) candidate_saved=(%d,%d) residual_rank=(%d,%d)->(%d,%d)\n",
+            result.expected,
+            result.compressed.matched,
+            result.expected,
+            result.full.matched,
+            result.expected,
+            result.x_projection_gap,
+            result.y_projection_gap,
+            result.right_candidate_saved,
+            result.left_candidate_saved,
+            result.full_stats.right_residual_rank,
+            result.full_stats.left_residual_rank,
+            result.compressed_stats.right_residual_rank,
+            result.compressed_stats.left_residual_rank,
+        )
+    end
+    result
+end
+
 function partitioned_residual_laurent_update(
     ctx,
     trial::TrialSpaces,

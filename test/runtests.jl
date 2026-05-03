@@ -24,7 +24,7 @@ function apply_test_preset(
         filter = Regex(
             "linear SS-FEAST|dual linear RII|polynomial bridge agrees|dual reduced extraction|" *
             "agrees across extractors without root oracle|canonical NLFEAST limit|" *
-            "residual Laurent update",
+            "residual Laurent update|low-rank compression preserves update",
         )
         exclude_tags = union_test_tags(exclude_tags, Set([:moment_heavy]))
         run_slow = true

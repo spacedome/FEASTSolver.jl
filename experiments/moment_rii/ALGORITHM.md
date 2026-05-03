@@ -178,6 +178,11 @@ per scalar Ritz value.
   saved, candidate-column ratios, basis-size gains, low residual-rank
   completeness, and a flag showing scalar-expanded RII is worse despite using
   more candidate columns.
+- Low-rank residual-basis equivalence: on the same analytic chart, compressing
+  residual directions reduces the residual rank and candidate columns while
+  preserving the updated right/left physical spaces to roundoff projection
+  gaps. This pins residual compression as an efficiency transformation, not a
+  numerical branch of the algorithm.
 - Residual-Laurent update ladder: on the radius-20 upper-triangular nonnormal
   analytic chart cover, reduced extraction alone (`iterations=0`) recovers
   `34/44` target roots, one residual-Laurent update recovers `42/44`, and two
@@ -279,6 +284,7 @@ Representative tests:
 
 - `just test --preset moment-core`
 - `just test --slow 'dual linear RII'`
+- `just test --slow 'low-rank compression preserves update'`
 - `just test --preset moment-heavy 'residual Laurent update'`
 - `just test --preset moment-count`
 - `just test --slow 'analytic block Newton'`

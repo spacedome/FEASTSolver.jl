@@ -1067,6 +1067,26 @@ end
     @test result.efficiency.scalar_expanded_worse
 end
 
+@testitem "experimental moment RII: residual Laurent low-rank compression preserves update" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_residual_laurent_low_rank_equivalence_diagnostic(; print_rows=false)
+
+    @test result.expected == 20
+    @test result.compressed.matched == result.expected
+    @test result.full.matched == result.expected
+    @test result.compressed.spurious_good == 0
+    @test result.full.spurious_good == 0
+    @test result.x_projection_gap <= 1e-12
+    @test result.y_projection_gap <= 1e-12
+    @test result.right_candidate_saved > 0
+    @test result.left_candidate_saved > 0
+    @test result.compressed_stats.right_residual_rank < result.full_stats.right_residual_rank
+    @test result.compressed_stats.left_residual_rank < result.full_stats.left_residual_rank
+    @test result.compressed_stats.right_candidate_cols < result.full_stats.right_candidate_cols
+    @test result.compressed_stats.left_candidate_cols < result.full_stats.left_candidate_cols
+end
+
 @testitem "experimental moment RII: residual Laurent update decomposes across contour partitions" tags=[:slow] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 
