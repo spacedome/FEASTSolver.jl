@@ -697,6 +697,120 @@ function run_sparse_stored_factor_residual_laurent_smoke(;
     result
 end
 
+function sparse_quadratic_gallery_moment_context(n, center, radius)
+    roots = ComplexF64.(1:n)
+    A0 = spdiagm(0 => -(roots .^ 2))
+    A1 = spzeros(ComplexF64, n, n)
+    A2 = spdiagm(0 => ones(ComplexF64, n))
+    T = feast_gallery("polynomial", [A0, A1, A2])
+    prototype = operator_prototype(T)
+    T_update = matrix_materializer(T)
+    Isp = spdiagm(0 => ones(ComplexF64, n))
+
+    function Tmatrix(z)
+        M = similar(prototype)
+        T_update(M, z)
+        M
+    end
+
+    expected = ComplexF64[λ for λ in roots if abs(λ - center) <= radius]
+    chart = ContourChart(center, radius)
+    (
+        operator=T,
+        prototype=prototype,
+        T_update=T_update,
+        chart=chart,
+        expected=expected,
+        ctx=(
+            Tmatrix=Tmatrix,
+            Tderivative=z -> 2z * Isp,
+            Tsolve=(z, B) -> Tmatrix(z) \ B,
+            Tadjoint_solve=(z, B) -> Tmatrix(z)' \ B,
+            expected=expected,
+            n=n,
+            component_scales=ones(Float64, n),
+        ),
+    )
+end
+
+function run_sparse_nonlinear_gallery_moment_pipeline_smoke(;
+    n=16,
+    center=3.5 + 0.0im,
+    radius=2.6,
+    basis_moments=2,
+    basis_nodes=32,
+    update_moment_count=1,
+    rii_nodes=96,
+    residual_tol=1e-10,
+    match_atol=1e-8,
+    print_rows=true,
+)
+    problem = sparse_quadratic_gallery_moment_context(n, center, radius)
+    basis = MomentBasisConfig(;
+        moments=basis_moments,
+        nodes=basis_nodes,
+        ranktol=1e-10,
+        seed=44021,
+    )
+    extractor = ReducedExtractorConfig(;
+        extractor=:ss_counted,
+        determinant_nodes=384,
+        determinant_capacity=2n,
+        reduced_moments=10,
+        reduced_nodes=384,
+        residual_normalization=:vector,
+    )
+    update = ResidualUpdateConfig(;
+        moment_count=update_moment_count,
+        rii_nodes=rii_nodes,
+        residual_ranktol=1e-10,
+        compression_ranktol=1e-10,
+    )
+    trial0 = initial_dual_trial_spaces(problem.ctx, problem.chart, basis)
+    extraction0 = extract_reduced_nep(problem.ctx, trial0, problem.chart, extractor)
+    summary0 = dual_scalar_rii_summary(extraction0, problem.expected; residual_tol=residual_tol, match_atol=match_atol)
+    trial1, stats = residual_laurent_update(problem.ctx, trial0, extraction0, problem.chart, update)
+    extraction1 = extract_reduced_nep(problem.ctx, trial1, problem.chart, extractor)
+    summary1 = dual_scalar_rii_summary(extraction1, problem.expected; residual_tol=residual_tol, match_atol=match_atol)
+    result = (
+        expected=length(problem.expected),
+        sparse_matrix=problem.ctx.Tmatrix(center + radius * im) isa AbstractSparseMatrix,
+        prototype_sparse=problem.prototype isa AbstractSparseMatrix,
+        initial=summary0,
+        updated=merge(
+            (
+                right_residual_rank=stats.right_residual_rank,
+                left_residual_rank=stats.left_residual_rank,
+                right_candidate_cols=stats.right_candidate_cols,
+                left_candidate_cols=stats.left_candidate_cols,
+                right_basis_cols=size(trial1.X, 2),
+                left_basis_cols=size(trial1.Y, 2),
+            ),
+            summary1,
+        ),
+    )
+    if print_rows
+        println()
+        println("Sparse nonlinear gallery moment pipeline smoke")
+        println("  sparse quadratic polynomial gallery T(z)=z^2I-D^2; validates nonlinear sparse gallery path")
+        @printf(
+            "  n=%d expected=%d sparse=%s initial_matched=%d/%d updated_matched=%d/%d residual_rank=(%d,%d) basis=(%d,%d)\n",
+            n,
+            result.expected,
+            string(result.sparse_matrix),
+            result.initial.matched,
+            result.expected,
+            result.updated.matched,
+            result.expected,
+            result.updated.right_residual_rank,
+            result.updated.left_residual_rank,
+            result.updated.right_basis_cols,
+            result.updated.left_basis_cols,
+        )
+    end
+    result
+end
+
 function linear_dual_rii_reduction_row(name, A, center, radius; seed, trial_cols, determinant_nodes, rii_nodes)
     n = size(A, 1)
     I_n = Matrix{ComplexF64}(I, n, n)

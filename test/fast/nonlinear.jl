@@ -230,6 +230,21 @@ end
     @test result.cached_stats.left_candidate_cols == result.direct_stats.left_candidate_cols
 end
 
+@testitem "experimental moment RII: sparse nonlinear gallery operator flows through moment pipeline" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_sparse_nonlinear_gallery_moment_pipeline_smoke(; print_rows=false)
+
+    @test result.sparse_matrix
+    @test result.prototype_sparse
+    @test result.expected == 6
+    @test result.updated.matched == result.expected
+    @test result.updated.spurious_good == 0
+    @test result.updated.max_residual <= 1e-10
+    @test result.updated.right_residual_rank <= 2 * result.expected
+    @test result.updated.left_residual_rank <= 2 * result.expected
+end
+
 @testitem "nonlinear FEAST: custom contour on linear pencil" setup=[FEASTTestSetup] begin
     using FEASTSolver
     using LinearAlgebra

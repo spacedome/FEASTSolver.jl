@@ -197,6 +197,12 @@ per scalar Ritz value.
   all eight with residuals near machine precision. This is implementation
   evidence for the generic operator boundary, not a sparse-optimized moment
   solver.
+- Sparse nonlinear gallery smoke: a FEAST-native sparse quadratic polynomial
+  gallery operator `T(z)=z^2I-D^2` flows through the same moment pipeline using
+  a sparse prototype and in-place gallery materializer. The target positive
+  roots are known exactly, and one residual-Laurent update recovers them with
+  strict residuals. This pins the nonlinear sparse gallery boundary without
+  claiming sparse nonlinear worker storage or benchmark performance.
 - Sparse stored-factor smoke: the same sparse linear control caches
   contour-node sparse factorizations for the residual-Laurent update. The
   cached update reproduces the generic sparse update to roundoff projection
@@ -316,6 +322,7 @@ Representative tests:
 - `just test --preset moment-core`
 - `just test --slow 'dual linear RII'`
 - `just test --slow 'low-rank compression preserves update'`
+- `just test --slow 'sparse nonlinear gallery operator'`
 - `just test --tags distributed 'remote contour workers'`
 - `just test --tags distributed 'sparse residual Laurent update runs on remote contour workers'`
 - `just test --tags distributed 'sparse remote workers reuse'`

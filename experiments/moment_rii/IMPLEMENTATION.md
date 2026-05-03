@@ -24,9 +24,12 @@ count-stressed chart refinement rule. `experiment_matrix.jl` contains the
 diagnostic runners that exercise those objects.
 
 The sparse linear smoke confirms that generic sparse `Tmatrix` and sparse
-`Tsolve` can pass through this pipeline. The stored-factor sparse smoke adds
-the next rung: contour-node sparse factorizations can be cached and reused
-across residual-Laurent updates while reproducing the generic sparse update.
+`Tsolve` can pass through this pipeline. The sparse nonlinear gallery smoke
+confirms that a FEAST-native sparse polynomial operator with an in-place
+materializer also passes through the same moment pipeline. The stored-factor
+sparse smoke adds the next rung: contour-node sparse factorizations can be
+cached and reused across residual-Laurent updates while reproducing the generic
+sparse update.
 The sparse remote stored-factor smoke pins the same idea across persistent
 Julia workers: each worker owns a fixed contour-node subset and reuses its
 node-local sparse factors across repeated updates. These are still small
@@ -137,11 +140,16 @@ that a repeated update reuses the same node factors.
 `run_sparse_remote_residual_laurent_worker_smoke` also verifies that sparse
 linear operator closures pass through the same persistent worker boundary and
 records the same lightweight timing shape.
-`run_sparse_remote_stored_factor_worker_smoke` combines those two rungs: a
+`run_sparse_nonlinear_gallery_moment_pipeline_smoke` verifies a sparse
+quadratic polynomial gallery operator with known roots on the generic nonlinear
+sparse pipeline. `run_sparse_remote_stored_factor_worker_smoke` combines the
+linear sparse and remote rungs: a
 sparse linear control runs through persistent worker-owned contour partitions,
 the first update creates the expected node-local sparse factors, and the second
 update reuses those factors while matching the serial residual-Laurent update.
 It does not yet provide symbolic sparse factor reuse, reusable sparse work
-buffers, nonlinear sparse gallery coverage, or benchmark-level performance.
+buffers, sparse nonlinear worker storage, or benchmark-level performance.
 
-Only after that should the prototype move to nonlinear sparse gallery problems.
+The next sparse prototype should combine the nonlinear gallery path with
+worker-local sparse factor ownership, then move to realistic sparse gallery
+problems.
