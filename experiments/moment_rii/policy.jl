@@ -95,6 +95,14 @@ function residual_update_config(numerics::CountDrivenNumericsConfig)
     )
 end
 
+function moment_pipeline_configs(numerics::CountDrivenNumericsConfig; seed=nothing)
+    (
+        basis=moment_basis_config(numerics; seed=seed),
+        extractor=reduced_extractor_config(numerics),
+        update=residual_update_config(numerics),
+    )
+end
+
 function count_stressed_chart_refinement(record, candidate_centers, child_centers; match_atol=1e-6)
     stress = record.good < record.count_estimate ? :count_deficit : :count_error
     refinement_centers = sorted_unique_values(

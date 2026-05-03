@@ -108,6 +108,63 @@ end
     @test :tighten_or_refine_high_residual_charts in high_residual.actions
 end
 
+@testitem "experimental moment RII: numerics config lowers to pipeline configs" begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    numerics = CountDrivenNumericsConfig(;
+        iterations=2,
+        basis_moments=5,
+        basis_nodes=24,
+        update_moment_count=3,
+        rii_nodes=96,
+        basis_ranktol=1e-7,
+        residual_ranktol=1e-8,
+        compression_ranktol=1e-9,
+        determinant_nodes=384,
+        determinant_capacity=21,
+        extractor=:ss_counted,
+        reduced_moments=7,
+        reduced_nodes=192,
+        reduced_ranktol=1e-11,
+        reduced_refinement=:block_newton,
+        refinement_steps=3,
+        loewner_radius=1.4,
+        loewner_phase=0.25,
+        loewner_points=5,
+        residual_normalization=:vector,
+        update_mode=:moment_compressed,
+        biorthogonalize=true,
+    )
+
+    configs = moment_pipeline_configs(numerics; seed=1201)
+    @test configs.basis isa MomentBasisConfig
+    @test configs.extractor isa ReducedExtractorConfig
+    @test configs.update isa ResidualUpdateConfig
+    @test configs.basis.moments == 5
+    @test configs.basis.nodes == 24
+    @test configs.basis.ranktol == 1e-7
+    @test configs.basis.seed == 1201
+    @test configs.basis.biorthogonalize
+    @test configs.extractor.extractor === :ss_counted
+    @test configs.extractor.determinant_nodes == 384
+    @test configs.extractor.determinant_capacity == 21
+    @test configs.extractor.reduced_moments == 7
+    @test configs.extractor.reduced_nodes == 192
+    @test configs.extractor.reduced_ranktol == 1e-11
+    @test configs.extractor.refinement === :block_newton
+    @test configs.extractor.refinement_steps == 3
+    @test configs.extractor.loewner_radius == 1.4
+    @test configs.extractor.loewner_phase == 0.25
+    @test configs.extractor.loewner_points == 5
+    @test configs.extractor.residual_normalization === :vector
+    @test configs.update.moment_count == 3
+    @test configs.update.rii_nodes == 96
+    @test configs.update.residual_ranktol == 1e-8
+    @test configs.update.compression_ranktol == 1e-9
+    @test configs.update.mode === :moment_compressed
+    @test configs.update.biorthogonalize
+end
+
 @testitem "experimental moment RII: linear SS-FEAST reduces to FEAST residual correction" tags=[:slow] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 

@@ -17,6 +17,8 @@ The candidate algorithm is expressed through these experiment objects:
   policy.
 - `CountDrivenNumericsConfig`: numerical realization/extraction/update choices
   lowered into the basis, extractor, and residual-update configs.
+- `moment_pipeline_configs`: the single lowering helper from one numerics
+  object to the `basis`, `extractor`, and `update` pipeline configs.
 
 `pipeline.jl` contains the chart/basis/extractor/update objects. `policy.jl`
 contains the count-driven policy and numerics objects plus the named
