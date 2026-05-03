@@ -859,6 +859,10 @@ form, scalar RII as a circular-chart Laurent correction, the finite
 left/right realization state, and the reductions to linear FEAST, canonical
 NLFEAST, Beyn/SS, and higher-moment NLFEAST.
 
+`THEOREM_SKETCH.md` states the current local theorem target, proof skeleton,
+non-claims, and evidence map. It is the next proof object to refine before any
+publication-level claim.
+
 `AUDIT.md` maps the research objective to concrete artifacts, evidence, and
 remaining gaps. It is the current guardrail against over-claiming completion.
 
