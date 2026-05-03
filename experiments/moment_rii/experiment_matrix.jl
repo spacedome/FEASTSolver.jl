@@ -386,6 +386,92 @@ function run_matrix_polynomial_case(;
     rows
 end
 
+function run_polynomial_family_bridge_diagnostic(;
+    name="many_eigenvalue_nonnormal_polynomial",
+    make_problem=many_eigenvalue_nonnormal_polynomial_problem,
+    nodes=32,
+    iterations=4,
+    basis_moments=5,
+    basis_nodes=16,
+    rii_nodes=128,
+    update_moment_count=2,
+    basis_ranktol=1e-10,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    problem = make_problem()
+    coeffs, center, radius = problem[1], problem[2], problem[3]
+    expected = length(problem) >= 5 ? ComplexF64.(problem[5]) : companion_reference(coeffs, center, radius)
+    C1, C2 = companion_pencil(coeffs)
+    companion_m = min(size(C1, 1), length(expected) + 4)
+    Random.seed!(9907)
+    Xcomp = rand(ComplexF64, size(C1, 1), companion_m)
+    comp_values, comp_vectors, comp_feast_residuals = gen_feast!(
+        Xcomp,
+        C1,
+        C2;
+        nodes=nodes,
+        iter=iterations,
+        c=center,
+        r=radius,
+        ϵ=residual_tol,
+        store=false,
+    )
+    comp_poly_residuals = polynomial_residuals_from_companion_vectors(coeffs, comp_values, comp_vectors)
+    companion_good = FEASTSolver.in_contour(comp_values, center, radius) .& (comp_poly_residuals .<= residual_tol)
+    companion_values = ComplexF64.(comp_values[companion_good])
+    companion_summary = (
+        expected=length(expected),
+        returned=length(comp_values),
+        good=length(companion_values),
+        matched=match_expected_count(companion_values, expected; atol=match_atol),
+        max_feast_residual=isempty(comp_feast_residuals) ? Inf : maximum(comp_feast_residuals),
+        max_poly_residual=isempty(comp_poly_residuals) ? Inf : maximum(comp_poly_residuals),
+        companion_size=size(C1, 1),
+        subspace=companion_m,
+    )
+
+    polynomial_rows = run_matrix_polynomial_case(;
+        name=name,
+        problem_class=:many_root_polynomial,
+        make_problem=make_problem,
+        basis_moments=basis_moments,
+        basis_nodes=basis_nodes,
+        rii_nodes=rii_nodes,
+        update_moment_count=update_moment_count,
+        basis_ranktol=basis_ranktol,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+    )
+    if print_rows
+        println()
+        println("Polynomial family bridge diagnostic")
+        println("  compares companion-pencil FEAST with polynomial-native reduced extraction/update")
+        @printf(
+            "  companion matched=%d/%d good=%d returned=%d max_poly=%.3e\n",
+            companion_summary.matched,
+            companion_summary.expected,
+            companion_summary.good,
+            companion_summary.returned,
+            companion_summary.max_poly_residual,
+        )
+        for row in polynomial_rows
+            @printf(
+                "  %-22s matched=%d/%d good=%d spurious=%d max=%.3e %s\n",
+                string(row.stage),
+                row.matched,
+                row.expected,
+                row.good,
+                row.spurious,
+                row.max_residual,
+                row.success ? "ok" : "check",
+            )
+        end
+    end
+    (companion=companion_summary, polynomial_rows=polynomial_rows)
+end
+
 function run_matrix_analytic_case(;
     name,
     problem_class=:analytic,

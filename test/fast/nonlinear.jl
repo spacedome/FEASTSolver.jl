@@ -89,6 +89,26 @@ end
     @test result.final.pair_residual < result.initial.pair_residual
 end
 
+@testitem "experimental moment RII: polynomial bridge agrees with companion FEAST" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_polynomial_family_bridge_diagnostic(; print_rows=false)
+    companion = result.companion
+    rows = result.polynomial_rows
+
+    @test companion.expected == 20
+    @test companion.companion_size == 32
+    @test companion.matched == companion.expected
+    @test companion.good >= companion.expected
+    @test companion.max_poly_residual <= 1e-8
+    @test length(rows) == 3
+    @test [row.stage for row in rows] == [:initial_extraction, :block_newton_cleanup, :laurent_update]
+    @test all(row.expected == companion.expected for row in rows)
+    @test all(row.matched == companion.expected for row in rows)
+    @test all(row.spurious == 0 for row in rows)
+    @test all(row.max_residual <= 1e-8 for row in rows)
+end
+
 @testitem "nonlinear FEAST: sparse linear polynomial uses sparse path" setup=[FEASTTestSetup] begin
     using FEASTSolver
     using LinearAlgebra

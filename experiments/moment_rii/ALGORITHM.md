@@ -104,7 +104,13 @@ per scalar Ritz value.
   than the physical probe count.
 - Polynomial controls: regular, deficient, many-root low-dimensional, and
   near-multiple polynomial cases are recovered by two-sided reduced extraction;
-  polynomial invariant-pair Newton is useful as a reduced cleanup.
+  polynomial invariant-pair Newton is useful as a reduced cleanup. The
+  polynomial bridge diagnostic now compares the degree-eight nonnormal
+  polynomial against FEAST on the `32 x 32` companion pencil: companion FEAST,
+  polynomial-native initial extraction, reduced block-Newton cleanup, and the
+  residual-Laurent update all recover the same 20 target roots. This pins the
+  polynomial rung between linearized FEAST and the generic analytic charted
+  method.
 - Analytic controls: global many-root charts fail in predictable ways, while
   local chart covers plus residual Laurent updates recover the target roots.
 - Residual-Laurent compression control: on a rank-deficient analytic chart, the
@@ -191,6 +197,7 @@ per scalar Ritz value.
 Representative tests:
 
 - `just test 'linear SS-FEAST'`
+- `just test 'polynomial bridge agrees'`
 - `just test 'moment RII'`
 - `just test 'analytic block Newton'`
 - `just test 'rational coordinates'`
