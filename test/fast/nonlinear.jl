@@ -1490,6 +1490,17 @@ end
     @test result.y_projection_gap <= 1e-12
 end
 
+@testitem "experimental moment RII: positive moments expose finite realization recurrence" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_positive_moment_realization_recurrence_diagnostic(; print_rows=false)
+
+    @test result.expected_rank == 4
+    @test result.hankel_sample_rank == result.expected_rank
+    @test result.max_relative_error <= 1e-12
+    @test result.max_outside_leakage <= 1e-12
+end
+
 @testitem "experimental moment RII: residual Laurent update decomposes across contour partitions" tags=[:slow] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 

@@ -5002,6 +5002,71 @@ function run_residual_laurent_realization_closure_diagnostic(; print_rows=true)
     result
 end
 
+function run_positive_moment_realization_recurrence_diagnostic(;
+    nodes=256,
+    moment_count=6,
+    print_rows=true,
+)
+    center = 0.0 + 0.0im
+    radius = 1.0
+    inside_values = ComplexF64[-0.62 + 0.08im, -0.15 - 0.2im, 0.38 + 0.1im, 0.71 - 0.04im]
+    outside_values = ComplexF64[1.4 + 0.0im, -1.3 + 0.2im]
+    spectrum = vcat(inside_values, outside_values)
+    A = Diagonal(spectrum)
+    n = length(spectrum)
+    Random.seed!(9947)
+    Xprobe = randn(ComplexF64, n, length(inside_values))
+    z_nodes, z_weights = circular_rule(center, radius, nodes)
+    moments = initial_moments_generic_scaled(
+        (z, B) -> (z * I - A) \ B,
+        Xprobe,
+        z_nodes,
+        z_weights,
+        center,
+        radius,
+        moment_count,
+    )
+    interior = 1:length(inside_values)
+    exterior = (length(inside_values) + 1):n
+    alphas = (inside_values .- center) ./ radius
+    C = Xprobe[interior, :]
+    relative_errors = Float64[]
+    outside_leakages = Float64[]
+    for k in 1:moment_count
+        expected = zeros(ComplexF64, n, size(Xprobe, 2))
+        expected[interior, :] .= Diagonal(alphas .^ (k - 1)) * C
+        push!(relative_errors, norm(moments[k] - expected) / max(norm(expected), eps(Float64)))
+        push!(outside_leakages, norm(moments[k][exterior, :]))
+    end
+    H0 = reduce(vcat, moments[1:moment_count])
+    singulars = svdvals(H0)
+    rank = count(singulars ./ singulars[1] .> 1e-10)
+    result = (
+        expected_rank=length(inside_values),
+        hankel_sample_rank=rank,
+        max_relative_error=maximum(relative_errors),
+        max_outside_leakage=maximum(outside_leakages),
+        singulars=singulars,
+        nodes=nodes,
+        moment_count=moment_count,
+    )
+    if print_rows
+        println()
+        println("Positive contour-moment realization recurrence diagnostic")
+        println("  verifies M_k = X*S^(k-1)*C for a diagonal linear transfer realization")
+        @printf(
+            "  expected_rank=%d sample_rank=%d max_relative_error=%.3e max_outside_leakage=%.3e nodes=%d moments=%d\n",
+            result.expected_rank,
+            result.hankel_sample_rank,
+            result.max_relative_error,
+            result.max_outside_leakage,
+            result.nodes,
+            result.moment_count,
+        )
+    end
+    result
+end
+
 function partitioned_residual_laurent_update(
     ctx,
     trial::TrialSpaces,

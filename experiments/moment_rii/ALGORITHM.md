@@ -266,6 +266,11 @@ that setting.
   `T(z)^(-1)` has interior poles. This supports the current proof direction:
   finite update order must be argued through the captured contour realization,
   recurrence/rank, and the exact lower-rung FEAST identities.
+- Positive realization recurrence: a diagonal linear transfer diagnostic
+  verifies that positive contour moments satisfy `M_k = X*S^(k-1)*C`, expose
+  the expected realization rank when enough probe directions are used, and
+  filter outside-contour modes to roundoff. This pins the extraction-moment
+  half of the proof story separately from residual inverse-Laurent enrichment.
 - Exact realization closure: on an exact linear left/right eigenspace, the
   physical residual blocks have zero numerical rank and the residual-Laurent
   update adds no physical directions. The updated `X,Y` spaces have
@@ -443,6 +448,7 @@ Representative tests:
 - `just test --slow 'low-rank compression preserves update'`
 - `just test --slow 'residual-coordinate invariant'`
 - `just test --slow 'scalar Laurent truncation alone'`
+- `just test --slow 'positive moments expose'`
 - `just test --slow 'closes on exact realization'`
 - `just test --slow 'sparse symbolic reuse'`
 - `just test --slow 'sparse nonlinear gallery operator'`
