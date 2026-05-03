@@ -82,6 +82,12 @@ per scalar Ritz value.
 - Linear FEAST: with `T(z)=zI-A`, one moment, and diagonal scalar states, the
   residual Laurent update reduces to the usual FEAST/RII residual-inverse
   correction.
+- Dual FEAST: nonnormal reduced extraction uses independent left and right
+  contour-filtered physical spaces. On the dual-sensitive polynomial control,
+  true dual and biorthogonal dual extraction recover all 12 target roots, while
+  one-sided Galerkin extraction has tiny reduced residuals but zero acceptable
+  original NEP residuals. This pins the Petrov-Galerkin condition as structural
+  evidence, not presentation.
 - SS-FEAST: with `T(z)=zI-A` and higher moments, the same correction acts on a
   finite SS/Hankel realization. This gives effective subspace width larger than
   the number of physical right-hand sides.
@@ -111,6 +117,11 @@ per scalar Ritz value.
   residual-Laurent update all recover the same 20 target roots. This pins the
   polynomial rung between linearized FEAST and the generic analytic charted
   method.
+- Dual extraction control: a dual-sensitive polynomial now records that
+  Galerkin one-sided extraction can produce false reduced Ritz data. The
+  one-sided run returns 13 inside values with reduced residual near
+  `1e-15`, but zero values pass the original residual tolerance, while both
+  true dual variants recover the 12 expected target roots.
 - Analytic controls: global many-root charts fail in predictable ways, while
   local chart covers plus residual Laurent updates recover the target roots.
 - Residual-Laurent compression control: on a rank-deficient analytic chart, the

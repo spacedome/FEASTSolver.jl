@@ -50,7 +50,8 @@ with `just test --slow REGEX` or `just test-slow REGEX`. Torture tests are tagge
 `:torture`; use `just test-torture` to run only that flagged stress suite.
 Use `just test-moment-core` for the focused higher-moment algorithm-family
 checks; this is the shorter loop for the linear FEAST/SS, polynomial companion,
-canonical NLFEAST, and residual-Laurent-update reductions.
+dual reduced extraction, canonical NLFEAST, and residual-Laurent-update
+reductions.
 
 The maintained test options are:
 

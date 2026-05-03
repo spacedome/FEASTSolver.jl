@@ -34,7 +34,7 @@ test-moment filter='moment RII':
 
 # Run the focused moment-RII algorithm-family reduction checks.
 test-moment-core:
-    @just test --slow 'linear SS-FEAST|polynomial bridge agrees|canonical NLFEAST limit|residual Laurent update'
+    @just test --slow 'linear SS-FEAST|polynomial bridge agrees|dual reduced extraction|canonical NLFEAST limit|residual Laurent update'
 
 # Run the expensive moment-RII agreement/policy diagnostics explicitly.
 test-moment-heavy filter='moment RII':

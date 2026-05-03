@@ -5782,6 +5782,7 @@ function run_dual_reduced_polynomial_control(;
     match_atol=1e-6,
     refinement_modes=(:none, :block_newton),
     newton_steps=2,
+    print_rows=true,
 )
     problem = make_problem()
     coeffs, center, radius, n = problem[1], problem[2], problem[3], problem[4]
@@ -5797,13 +5798,16 @@ function run_dual_reduced_polynomial_control(;
     Ybasis, left_singulars = moment_block_basis(left_moments, basis_moments; ranktol=basis_ranktol)
     Xbi, Ybi, cross_singulars = biorthogonalize_bases(Xbasis, Ybasis)
 
-    println()
-    println("Dual reduced polynomial control: $name")
-    println("  reduced polynomial extraction from left/right moment-filtered physical spaces")
-    @printf("  root matching tolerance: %.1e\n", match_atol)
+    print_rows && begin
+        println()
+        println("Dual reduced polynomial control: $name")
+        println("  reduced polynomial extraction from left/right moment-filtered physical spaces")
+        @printf("  root matching tolerance: %.1e\n", match_atol)
+    end
+    rows = NamedTuple[]
     for (label, Xtest, Ytest) in (("dual", Xbasis, Ybasis), ("dual_biorth", Xbi, Ybi), ("galerkin", Xbasis, Xbasis))
         if size(Xtest, 2) == 0 || size(Ytest, 2) == 0 || size(Xtest, 2) != size(Ytest, 2)
-            println("  mode=$label skipped: incompatible reduced basis sizes")
+            print_rows && println("  mode=$label skipped: incompatible reduced basis sizes")
             continue
         end
         for refinement in refinement_modes
@@ -5821,28 +5825,57 @@ function run_dual_reduced_polynomial_control(;
             matched = match_expected_count(extraction.values[good], expected; atol=match_atol)
             spurious_good = max(count(good) - matched, 0)
             ratio_text = isempty(extraction.refinement_ratios) ? "n/a" : join((@sprintf("%.2e", r) for r in extraction.refinement_ratios), ",")
-            @printf(
-                "  mode=%s refinement=%s expected=%d returned_inside=%d good=%d matched=%d spurious_good=%d reduced_max=%.3e original_max=%.3e basis=(%d,%d) newton_ratios=%s\n",
-                label,
-                string(refinement),
-                length(expected),
-                count(inside),
-                count(good),
-                matched,
-                spurious_good,
-                any(inside) ? maximum(extraction.reduced_residuals[inside]) : Inf,
-                any(inside) ? maximum(extraction.residuals[inside]) : Inf,
-                size(Xtest, 2),
-                size(Ytest, 2),
-                ratio_text,
+            reduced_max = any(inside) ? maximum(extraction.reduced_residuals[inside]) : Inf
+            original_max = any(inside) ? maximum(extraction.residuals[inside]) : Inf
+            push!(
+                rows,
+                (
+                    mode=Symbol(label),
+                    refinement=refinement,
+                    expected=length(expected),
+                    returned_inside=count(inside),
+                    good=count(good),
+                    matched=matched,
+                    spurious_good=spurious_good,
+                    reduced_max=reduced_max,
+                    original_max=original_max,
+                    right_basis=size(Xtest, 2),
+                    left_basis=size(Ytest, 2),
+                    newton_ratios=Float64.(extraction.refinement_ratios),
+                ),
             )
+            print_rows && @printf(
+                    "  mode=%s refinement=%s expected=%d returned_inside=%d good=%d matched=%d spurious_good=%d reduced_max=%.3e original_max=%.3e basis=(%d,%d) newton_ratios=%s\n",
+                    label,
+                    string(refinement),
+                    length(expected),
+                    count(inside),
+                    count(good),
+                    matched,
+                    spurious_good,
+                    reduced_max,
+                    original_max,
+                    size(Xtest, 2),
+                    size(Ytest, 2),
+                    ratio_text,
+                )
         end
     end
-    @printf(
-        "    basis singular ratios right=%.3e left=%.3e cross=%.3e\n",
-        isempty(right_singulars) ? NaN : right_singulars[end] / right_singulars[1],
-        isempty(left_singulars) ? NaN : left_singulars[end] / left_singulars[1],
-        isempty(cross_singulars) ? NaN : cross_singulars[end] / cross_singulars[1],
+    singular_ratios = (
+        right=isempty(right_singulars) ? NaN : right_singulars[end] / right_singulars[1],
+        left=isempty(left_singulars) ? NaN : left_singulars[end] / left_singulars[1],
+        cross=isempty(cross_singulars) ? NaN : cross_singulars[end] / cross_singulars[1],
+    )
+    print_rows && @printf(
+            "    basis singular ratios right=%.3e left=%.3e cross=%.3e\n",
+            singular_ratios.right,
+            singular_ratios.left,
+            singular_ratios.cross,
+        )
+    (
+        rows=rows,
+        expected=length(expected),
+        singular_ratios=singular_ratios,
     )
 end
 

@@ -109,6 +109,32 @@ end
     @test all(row.max_residual <= 1e-8 for row in rows)
 end
 
+@testitem "experimental moment RII: dual reduced extraction rejects one-sided false Ritz data" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_dual_reduced_polynomial_control(;
+        name="dual_sensitive",
+        make_problem=dual_sensitive_polynomial_problem,
+        residual_tol=1e-6,
+        match_atol=1e-3,
+        print_rows=false,
+    )
+
+    dual = result.rows[findfirst(row -> row.mode === :dual && row.refinement === :none, result.rows)]
+    biorth = result.rows[findfirst(row -> row.mode === :dual_biorth && row.refinement === :none, result.rows)]
+    galerkin = result.rows[findfirst(row -> row.mode === :galerkin && row.refinement === :none, result.rows)]
+
+    @test result.expected == 12
+    @test dual.matched == result.expected
+    @test biorth.matched == result.expected
+    @test dual.spurious_good == 0
+    @test galerkin.returned_inside > result.expected
+    @test galerkin.matched == 0
+    @test galerkin.good == 0
+    @test galerkin.reduced_max <= 1e-12
+    @test galerkin.original_max > 1e-3
+end
+
 @testitem "nonlinear FEAST: sparse linear polynomial uses sparse path" setup=[FEASTTestSetup] begin
     using FEASTSolver
     using LinearAlgebra
