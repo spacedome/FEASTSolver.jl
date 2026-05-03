@@ -136,8 +136,10 @@ global block Newton, or rational-coordinate-only fixes.
 The goal is not complete. We have a strong candidate algorithm family with
 test-backed boundaries, and the oracle-free count-driven branch is now covered
 across several analytic problem classes, including a nonnormal weak-support
-stress. This is not yet a decisive final solver or proof. The next productive
-steps are:
+stress. `just test-moment-core` is now the focused reduction gate for the
+FEAST/SS, Beyn/SS, dual extraction, canonical NLFEAST, and residual-Laurent
+update story. This is not yet a decisive final solver or proof. The next
+productive steps are:
 
 1. Continue tightening the experiment interface around a small set of stable
    objects: chart, extractor, update, policy, and diagnostic. `CountDrivenPolicyConfig`
@@ -147,8 +149,14 @@ steps are:
    now pass these extractor/update objects through directly. Older helper
    harnesses still expose many loose keywords and should be migrated
    opportunistically.
-2. Continue the broader literature pass before making novelty claims, focusing
-   on whether any published contour method iterates a finite realization by a
-   residual-inverse moment correction.
-3. Only after those pass, consider extracting stable pieces from the experiment
+2. Add performance/implementation evidence for the candidate update beyond
+   dense toy controls. The current compression diagnostic shows why the
+   low-rank residual Laurent update is better than scalar-expanded RII, but
+   sparse/distributed moment-NLFEAST and benchmark-level performance are still
+   open rungs.
+3. Continue publication-level novelty review before making final claims. The
+   current literature and NEP-PACK implementation checks did not find the exact
+   residual-Laurent finite-realization iteration, but they are not an exhaustive
+   publication review.
+4. Only after those pass, consider extracting stable pieces from the experiment
    into a real implementation plan.
