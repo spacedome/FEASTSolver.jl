@@ -624,6 +624,21 @@ end
     @test diagnostic.diagnostic.final.retained == result.count.count_estimate
 end
 
+@testitem "experimental moment RII: count-driven refinement agrees across extractors without root oracle" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_delay_count_driven_extractor_agreement(; print_rows=false)
+
+    @test result.summary.extractors == 2
+    @test result.summary.target_count == 3
+    @test result.summary.supported == result.summary.target_count
+    @test result.summary.success
+    @test all(row.stop_reason === :target_count_complete for row in result.rows)
+    @test all(row.retained == result.summary.target_count for row in result.rows)
+    @test all(row.algebraic_retained == result.summary.target_count for row in result.rows)
+    @test all(row.count_error <= 1e-8 for row in result.rows)
+end
+
 @testitem "experimental moment RII: count-driven refinement handles oracle-free nonnormal delay" tags=[:slow] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 

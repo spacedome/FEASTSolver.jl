@@ -148,6 +148,12 @@ per scalar Ritz value.
 - Loewner/extractor agreement: the radius-20 three-function analytic solve is
   stable across Loewner layouts and across Loewner vs counted SS/Hankel
   extraction after adaptive chart refinement.
+- No-oracle extractor agreement: the scalar delay control now compares
+  Loewner-counted and counted SS/Hankel extraction under the same count-driven
+  policy without supplying exact roots. Both extractors retain three values,
+  the cross-extractor supported set has size three, and the target count is the
+  full-operator argument-principle count. This pins Beyn/SS/Loewner as
+  interchangeable reduced-extraction coordinates on a small solver-like rung.
 - Retention policy: the current scorecard separates support thresholds, target
   membership, residual size, local count stress, layout agreement, and extractor
   agreement; the policy returns explicit retained roots and chart-refinement

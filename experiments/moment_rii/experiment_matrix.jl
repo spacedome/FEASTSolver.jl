@@ -2375,6 +2375,121 @@ function run_delay_count_driven_adaptive_refinement(;
     )
 end
 
+function run_delay_count_driven_extractor_agreement(;
+    extractors=(:loewner_counted, :ss_counted),
+    outer_radius=6.0,
+    base_spacing=1.8,
+    target_support=2,
+    chart_radii=(1.2, 2.0),
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    policy = CountDrivenPolicyConfig(;
+        base_spacing=base_spacing,
+        target_support=target_support,
+        chart_radii=chart_radii,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+    )
+    rows = NamedTuple[]
+    entries = NamedTuple[]
+    diagnostics = Any[]
+    target_count = 0
+    for (extractor_index, extractor) in pairs(extractors)
+        numerics = CountDrivenNumericsConfig(;
+            basis_moments=6,
+            basis_nodes=48,
+            determinant_capacity=64,
+            extractor=extractor,
+            reduced_moments=12,
+            reduced_nodes=512,
+            component_scaling=:none,
+        )
+        diagnostic = run_count_driven_policy_diagnostic(;
+            label="Delay $(extractor) count-driven refinement",
+            cases=(scalar_delay_case(),),
+            outer_radius=outer_radius,
+            policy=policy,
+            numerics=numerics,
+            print_rows=false,
+            diagnostic_label="extractor diagnostic",
+        )
+        push!(diagnostics, diagnostic)
+        result = diagnostic.result
+        target_count = result.count.count_estimate
+        retained = ComplexF64.(result.refined.support2_global_found)
+        push!(
+            rows,
+            (
+                extractor=extractor,
+                target_count=target_count,
+                count_error=result.count.count_error,
+                stop_reason=result.stop_reason,
+                retained=length(retained),
+                algebraic_retained=result.algebraic_retained_count,
+            ),
+        )
+        extractor_id = ComplexF64(extractor_index, 0.0)
+        append!(
+            entries,
+            [
+                (
+                    value=value,
+                    residual=0.0,
+                    right_residual=0.0,
+                    left_residual=0.0,
+                    center=extractor_id,
+                    radius=Float64(extractor_index),
+                    extractor=extractor,
+                )
+                for value in retained
+            ],
+        )
+    end
+    clusters = loewner_layout_clusters(entries; atol=match_atol)
+    supported_values = loewner_supported_cluster_values(clusters; min_support=length(extractors))
+    summary = (
+        extractors=length(extractors),
+        target_count=target_count,
+        supported=length(supported_values),
+        success=target_count > 0 &&
+            length(supported_values) == target_count &&
+            all(row.stop_reason === :target_count_complete for row in rows) &&
+            all(row.retained == target_count for row in rows),
+    )
+    if print_rows
+        println()
+        println("Delay count-driven reduced-extractor agreement")
+        println("  no exact roots supplied; compares retained sets across reduced extractors")
+        @printf("  %-18s %8s %8s %12s %10s\n", "extractor", "target", "retained", "count_error", "stop")
+        for row in rows
+            @printf(
+                "  %-18s %8d %8d %12.3e %s\n",
+                string(row.extractor),
+                row.target_count,
+                row.retained,
+                row.count_error,
+                string(row.stop_reason),
+            )
+        end
+        @printf(
+            "  cross-extractor support=%d/%d status=%s\n",
+            summary.supported,
+            summary.target_count,
+            summary.success ? "ok" : "check",
+        )
+    end
+    (
+        extractors=extractors,
+        rows=rows,
+        diagnostics=diagnostics,
+        clusters=clusters,
+        supported_values=supported_values,
+        summary=summary,
+    )
+end
+
 function run_multi_delay_count_driven_adaptive_refinement(;
     coupling=5.0,
     outer_radius=6.0,

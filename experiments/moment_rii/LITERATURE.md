@@ -959,3 +959,10 @@ Interpretation:
 - The residual Laurent update should therefore continue to repair both `X` and
   `Y`. A one-sided moment update may be useful as a negative diagnostic, but it
   should not be promoted as the general algorithmic rung.
+- The new no-oracle extractor-agreement diagnostic separates this dual
+  requirement from the choice of realization coordinates. On the scalar delay
+  control, Loewner-counted and counted SS/Hankel extraction both complete the
+  same argument-principle target count and agree on the retained set without
+  exact roots. Thus Loewner/SS are interchangeable extractor coordinates in
+  this small solve, while the left/right Petrov-Galerkin condition remains
+  non-negotiable.
