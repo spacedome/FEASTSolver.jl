@@ -233,6 +233,11 @@ per scalar Ritz value.
   spaces to roundoff projection gaps. This pins fixed-node sparse factor
   ownership across the process boundary without claiming symbolic sparse reuse
   or benchmark-level performance.
+- Sparse nonlinear remote stored-factor worker smoke: the same worker-owned
+  factor cache also runs on the sparse quadratic polynomial gallery control.
+  This verifies that nonlinear sparse gallery materialization, residual
+  Laurent repair, and persistent worker-owned contour factors compose correctly
+  on a known-root NEP.
 - Adjacent implementation recheck: RSRR, SLEPc CISS, and Riesz-projection
   methods all support the current separation between contour-node solves,
   reduced extraction, and selection/observability policy. They do not appear to
@@ -326,6 +331,7 @@ Representative tests:
 - `just test --tags distributed 'remote contour workers'`
 - `just test --tags distributed 'sparse residual Laurent update runs on remote contour workers'`
 - `just test --tags distributed 'sparse remote workers reuse'`
+- `just test --tags distributed 'sparse nonlinear remote workers reuse'`
 - `just test --preset moment-heavy 'residual Laurent update'`
 - `just test --preset moment-count`
 - `just test --slow 'analytic block Newton'`

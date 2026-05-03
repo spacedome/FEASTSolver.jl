@@ -147,9 +147,10 @@ linear sparse and remote rungs: a
 sparse linear control runs through persistent worker-owned contour partitions,
 the first update creates the expected node-local sparse factors, and the second
 update reuses those factors while matching the serial residual-Laurent update.
+`run_sparse_nonlinear_remote_stored_factor_worker_smoke` repeats that
+stored-factor worker path on the nonlinear sparse quadratic gallery control.
 It does not yet provide symbolic sparse factor reuse, reusable sparse work
-buffers, sparse nonlinear worker storage, or benchmark-level performance.
+buffers, realistic sparse gallery coverage, or benchmark-level performance.
 
-The next sparse prototype should combine the nonlinear gallery path with
-worker-local sparse factor ownership, then move to realistic sparse gallery
-problems.
+The next sparse prototype should move from this diagonal known-root nonlinear
+control to realistic sparse gallery problems.

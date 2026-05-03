@@ -245,6 +245,31 @@ end
     @test result.updated.left_residual_rank <= 2 * result.expected
 end
 
+@testitem "experimental moment RII: sparse nonlinear remote workers reuse stored contour factors" tags=[:slow, :distributed] begin
+    if !isdefined(Main, :run_sparse_nonlinear_remote_stored_factor_worker_smoke)
+        Base.include(Main, joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+    end
+
+    result = Main.run_sparse_nonlinear_remote_stored_factor_worker_smoke(; worker_count=2, print_rows=false)
+
+    @test result.sparse_matrix
+    @test result.prototype_sparse
+    @test result.expected == 6
+    @test length(result.workers) == 2
+    @test result.serial.matched == result.expected
+    @test result.remote.matched == result.expected
+    @test result.remote.spurious_good == 0
+    @test result.x_projection_gap <= 5e-12
+    @test result.y_projection_gap <= 5e-12
+    @test result.repeat_x_projection_gap <= 5e-12
+    @test result.repeat_y_projection_gap <= 5e-12
+    @test sum(length, result.assignments) == 96
+    @test result.first_worker_factorizations == 192
+    @test result.second_worker_factorizations == result.first_worker_factorizations
+    @test result.first_worker_solves == 192
+    @test result.second_worker_solves == 2 * result.first_worker_solves
+end
+
 @testitem "nonlinear FEAST: custom contour on linear pencil" setup=[FEASTTestSetup] begin
     using FEASTSolver
     using LinearAlgebra
