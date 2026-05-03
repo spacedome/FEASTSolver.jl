@@ -197,6 +197,12 @@ per scalar Ritz value.
   all eight with residuals near machine precision. This is implementation
   evidence for the generic operator boundary, not a sparse-optimized moment
   solver.
+- Sparse stored-factor smoke: the same sparse linear control caches
+  contour-node sparse factorizations for the residual-Laurent update. The
+  cached update reproduces the generic sparse update to roundoff projection
+  gaps, and a repeated update reuses the same node factors. This pins the
+  stored-factor implementation rung without claiming benchmark-level sparse
+  performance.
 - Partitioned residual-Laurent update: splitting the residual-update contour
   nodes into four independent partitions, summing the partial Laurent blocks,
   and recompressing produces the same physical right/left trial spaces as the

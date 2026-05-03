@@ -24,7 +24,10 @@ count-stressed chart refinement rule. `experiment_matrix.jl` contains the
 diagnostic runners that exercise those objects.
 
 The sparse linear smoke confirms that generic sparse `Tmatrix` and sparse
-`Tsolve` can pass through this pipeline, but it is not sparse optimized.
+`Tsolve` can pass through this pipeline. The stored-factor sparse smoke adds
+the next rung: contour-node sparse factorizations can be cached and reused
+across residual-Laurent updates while reproducing the generic sparse update.
+This is still a small control problem, not a sparse benchmark.
 
 ## Sparse Rung
 
@@ -34,7 +37,8 @@ operator boundary with reusable sparse storage:
 1. Accept `T_update!(Tz, z)` and a sparse prototype, matching the existing
    nonlinear FEAST gallery path.
 2. Reuse symbolic factorization when `store=false` and the sparsity pattern is
-   fixed.
+   fixed. The current stored-factor smoke only caches complete sparse
+   factorizations at fixed contour nodes; symbolic-only reuse remains open.
 3. Store node-local sparse factorizations when memory allows.
 4. Keep reduced extraction dense; only contour solves and residual materializers
    should be sparse.
@@ -124,9 +128,12 @@ residual-update calls. It also records per-stage timing metadata as a
 profiling smoke check. The next implementation step is to add worker-local
 buffers and sparse/factorization storage, then benchmark against the serial and
 one-shot remote paths.
-`run_sparse_remote_residual_laurent_worker_smoke` also verifies that sparse
-linear operator closures pass through the same persistent worker boundary and
-records the same lightweight timing shape. It does not yet reuse symbolic
-sparse factorizations or keep sparse work buffers node-local.
+`run_sparse_stored_factor_residual_laurent_smoke` verifies cached contour-node
+sparse factorizations reproduce the generic sparse residual-Laurent update and
+that a repeated update reuses the same node factors. `run_sparse_remote_residual_laurent_worker_smoke`
+also verifies that sparse linear operator closures pass through the same
+persistent worker boundary and records the same lightweight timing shape. It
+does not yet combine remote workers with node-local sparse factor caches, reuse
+symbolic sparse factorizations, or keep sparse work buffers node-local.
 
 Only after that should the prototype move to nonlinear sparse gallery problems.

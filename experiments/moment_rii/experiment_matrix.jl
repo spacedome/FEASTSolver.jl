@@ -565,6 +565,138 @@ function run_sparse_linear_moment_pipeline_smoke(;
     result
 end
 
+function run_sparse_stored_factor_residual_laurent_smoke(;
+    n=24,
+    center=4.5 + 0.0im,
+    radius=4.1,
+    residual_tol=1e-10,
+    match_atol=1e-8,
+    print_rows=true,
+)
+    A = spdiagm(0 => ComplexF64.(1:n))
+    Isp = sparse(I, n, n)
+    Tmatrix(z) = z * Isp - A
+    Tderivative(z) = Isp
+    direct_solve(z, B) = Tmatrix(z) \ B
+    direct_adjoint_solve(z, B) = Tmatrix(z)' \ B
+    expected = ComplexF64[λ for λ in 1:n if abs(λ - center) <= radius]
+    chart = ContourChart(center, radius)
+    direct_ctx = (
+        Tmatrix=Tmatrix,
+        Tderivative=Tderivative,
+        Tsolve=direct_solve,
+        Tadjoint_solve=direct_adjoint_solve,
+        expected=expected,
+        n=n,
+        component_scales=ones(Float64, n),
+    )
+    right_factors = Dict{ComplexF64, Any}()
+    left_factors = Dict{ComplexF64, Any}()
+    cache_stats = Ref((right_factorizations=0, left_factorizations=0, right_solves=0, left_solves=0))
+    function cached_factor_solve!(factors, z, B; adjoint=false)
+        key = ComplexF64(z)
+        if !haskey(factors, key)
+            factors[key] = lu(adjoint ? Tmatrix(z)' : Tmatrix(z))
+            old = cache_stats[]
+            cache_stats[] = adjoint ?
+                merge(old, (left_factorizations=old.left_factorizations + 1,)) :
+                merge(old, (right_factorizations=old.right_factorizations + 1,))
+        end
+        old = cache_stats[]
+        cache_stats[] = adjoint ?
+            merge(old, (left_solves=old.left_solves + 1,)) :
+            merge(old, (right_solves=old.right_solves + 1,))
+        factors[key] \ B
+    end
+    cached_ctx = (
+        Tmatrix=Tmatrix,
+        Tderivative=Tderivative,
+        Tsolve=(z, B) -> cached_factor_solve!(right_factors, z, B; adjoint=false),
+        Tadjoint_solve=(z, B) -> cached_factor_solve!(left_factors, z, B; adjoint=true),
+        expected=expected,
+        n=n,
+        component_scales=ones(Float64, n),
+    )
+    basis = MomentBasisConfig(;
+        moments=2,
+        nodes=24,
+        ranktol=1e-10,
+        seed=44001,
+    )
+    extractor = ReducedExtractorConfig(;
+        extractor=:ss_counted,
+        determinant_nodes=256,
+        determinant_capacity=n,
+        reduced_moments=8,
+        reduced_nodes=256,
+        residual_normalization=:vector,
+    )
+    update = ResidualUpdateConfig(;
+        moment_count=1,
+        rii_nodes=64,
+        residual_ranktol=1e-10,
+        compression_ranktol=1e-10,
+    )
+    trial = initial_dual_trial_spaces(direct_ctx, chart, basis)
+    extraction0 = extract_reduced_nep(direct_ctx, trial, chart, extractor)
+    direct_trial, direct_stats = residual_laurent_update(direct_ctx, trial, extraction0, chart, update)
+    cached_trial, cached_stats = residual_laurent_update(cached_ctx, trial, extraction0, chart, update)
+    after_first = cache_stats[]
+    cached_trial2, cached_stats2 = residual_laurent_update(cached_ctx, trial, extraction0, chart, update)
+    after_second = cache_stats[]
+    direct_extraction = extract_reduced_nep(direct_ctx, direct_trial, chart, extractor)
+    cached_extraction = extract_reduced_nep(direct_ctx, cached_trial, chart, extractor)
+    direct_summary = dual_scalar_rii_summary(direct_extraction, expected; residual_tol=residual_tol, match_atol=match_atol)
+    cached_summary = dual_scalar_rii_summary(cached_extraction, expected; residual_tol=residual_tol, match_atol=match_atol)
+    Px = direct_trial.X * direct_trial.X' - cached_trial.X * cached_trial.X'
+    Py = direct_trial.Y * direct_trial.Y' - cached_trial.Y * cached_trial.Y'
+    Px2 = cached_trial.X * cached_trial.X' - cached_trial2.X * cached_trial2.X'
+    Py2 = cached_trial.Y * cached_trial.Y' - cached_trial2.Y * cached_trial2.Y'
+    result = (
+        expected=length(expected),
+        sparse_matrix=Tmatrix(center + radius * im) isa AbstractSparseMatrix,
+        direct=direct_summary,
+        cached=cached_summary,
+        x_projection_gap=opnorm(Px),
+        y_projection_gap=opnorm(Py),
+        repeat_x_projection_gap=opnorm(Px2),
+        repeat_y_projection_gap=opnorm(Py2),
+        direct_stats=direct_stats,
+        cached_stats=cached_stats,
+        cached_stats_second=cached_stats2,
+        after_first=after_first,
+        after_second=after_second,
+        factorization_reuse=(
+            right_factorizations_constant=after_second.right_factorizations == after_first.right_factorizations,
+            left_factorizations_constant=after_second.left_factorizations == after_first.left_factorizations,
+            right_second_solves=after_second.right_solves - after_first.right_solves,
+            left_second_solves=after_second.left_solves - after_first.left_solves,
+        ),
+    )
+    if print_rows
+        println()
+        println("Sparse stored-factor residual Laurent smoke")
+        println("  sparse diagonal T(z)=zI-A; validates cached contour-node factorizations reproduce generic sparse update")
+        @printf(
+            "  expected=%d direct=%d/%d cached=%d/%d projection_gap=(%.3e, %.3e) factors=(%d,%d)->(%d,%d) second_solves=(%d,%d)\n",
+            result.expected,
+            result.direct.matched,
+            result.expected,
+            result.cached.matched,
+            result.expected,
+            result.x_projection_gap,
+            result.y_projection_gap,
+            result.after_first.right_factorizations,
+            result.after_first.left_factorizations,
+            result.after_second.right_factorizations,
+            result.after_second.left_factorizations,
+            result.factorization_reuse.right_second_solves,
+            result.factorization_reuse.left_second_solves,
+        )
+    end
+    result
+end
+
 function linear_dual_rii_reduction_row(name, A, center, radius; seed, trial_cols, determinant_nodes, rii_nodes)
     n = size(A, 1)
     I_n = Matrix{ComplexF64}(I, n, n)

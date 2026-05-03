@@ -206,6 +206,30 @@ end
     @test result.updated.left_residual_rank <= result.expected
 end
 
+@testitem "experimental moment RII: sparse stored factors reproduce residual Laurent update" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_sparse_stored_factor_residual_laurent_smoke(; print_rows=false)
+
+    @test result.sparse_matrix
+    @test result.expected == 8
+    @test result.direct.matched == result.expected
+    @test result.cached.matched == result.expected
+    @test result.cached.spurious_good == 0
+    @test result.x_projection_gap <= 1e-12
+    @test result.y_projection_gap <= 1e-12
+    @test result.repeat_x_projection_gap <= 1e-12
+    @test result.repeat_y_projection_gap <= 1e-12
+    @test result.after_first.right_factorizations == 64
+    @test result.after_first.left_factorizations == 64
+    @test result.factorization_reuse.right_factorizations_constant
+    @test result.factorization_reuse.left_factorizations_constant
+    @test result.factorization_reuse.right_second_solves == 64
+    @test result.factorization_reuse.left_second_solves == 64
+    @test result.cached_stats.right_candidate_cols == result.direct_stats.right_candidate_cols
+    @test result.cached_stats.left_candidate_cols == result.direct_stats.left_candidate_cols
+end
+
 @testitem "nonlinear FEAST: custom contour on linear pencil" setup=[FEASTTestSetup] begin
     using FEASTSolver
     using LinearAlgebra
