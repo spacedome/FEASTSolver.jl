@@ -57,6 +57,7 @@ Base.@kwdef struct ReducedExtractorConfig
     residual_normalization::Symbol = :operator
     refinement::Symbol = :none
     refinement_steps::Int = 4
+    refinement_nodes::Int = 256
 end
 
 Base.@kwdef struct ResidualUpdateConfig
@@ -136,6 +137,7 @@ function extract_reduced_nep(ctx, trial::TrialSpaces, chart::ContourChart, confi
         residual_normalization=config.residual_normalization,
         refinement=config.refinement,
         refinement_steps=config.refinement_steps,
+        refinement_nodes=config.refinement_nodes,
     )
 end
 

@@ -102,6 +102,31 @@ Its implementation points to several concepts we should reuse deliberately.
   and filter function shape materially affect extraction quality; our local
   chart cover is consistent with that warning.
   Source: https://doi.org/10.1016/j.cam.2015.07.012
+- Liu, Roman, and Shao use infinite GMRES inside contour-integral nonlinear
+  eigensolvers to avoid expensive factorizations at every quadrature node. This
+  is relevant to sparse/distributed future work and inner linear solves, but it
+  does not replace the outer realization/update policy. Our residual Laurent
+  update should be compatible with such an inner solve layer because both are
+  organized around contour-node linear systems.
+  Source: https://doi.org/10.1137/24M1650375
+- Sakurai, Futamura, and Tadano discuss parameter estimation and implementation
+  for contour-integral eigensolvers, including parallel scalability and the
+  practical importance of method parameters. This reinforces that chart radius,
+  support threshold, contour-node count, and rank/count estimates are algorithm
+  parameters that need diagnostics, not constants hidden in the implementation.
+  Source: https://doi.org/10.1260/1748-3018.7.3.249
+- Jarlebring, Koskela, and Mele reinterpret residual inverse iteration and
+  related NEP methods as quasi-Newton methods through Keldysh theory. This
+  supports our boundary that scalar RII is the `K=1` local correction model,
+  while the moment version needs a realization or invariant-pair state rather
+  than scalar diagonal updates.
+  Source: https://doi.org/10.1007/s11075-017-0438-2
+- Guo, Huang, and Lin use an extended argument principle and contour integrals
+  to determine algebraic multiplicities of NEP eigenvalues in a region. This is
+  directly aligned with our distinction between geometric retained support and
+  algebraic contour count: local cluster counts are a principled lower-rung
+  multiplicity diagnostic, not an ad-hoc duplicate-root patch.
+  Source: https://doi.org/10.1016/j.amc.2015.09.024
 
 ## Current Design Implications
 
@@ -119,6 +144,14 @@ Its implementation points to several concepts we should reuse deliberately.
 - Treat deflation as an escalation rung, not the main algorithm. Deflation is
   established and useful, but our failures so far are better explained by chart
   quality, observability, nonnormality, and reduced extraction.
+- Separate outer update geometry from inner linear-solve acceleration. NLEIGS,
+  rational Krylov, and infinite-GMRES contour work inform sparse/large-scale
+  implementation, but the missing moment-NLFEAST piece remains the outer
+  charted realization update and retention policy.
+- Keep algebraic count separate from geometric support. The extended argument
+  principle literature supports using contour counts to determine algebraic
+  multiplicity, while retained values should remain geometric clusters unless a
+  higher-rung Jordan/derivative state is explicitly needed.
 
 ## Reading Priority Before API Work
 
@@ -132,6 +165,11 @@ Its implementation points to several concepts we should reuse deliberately.
    two-sided block Rayleigh functionals.
 5. NLEIGS rational interpolation, especially scaling and rational coordinate
    choices for target regions.
+6. Infinite-GMRES / rational Krylov contour implementations, but only after the
+   dense outer algorithm is stable; these primarily affect solve cost and
+   memory, not the moment update geometry.
+7. Argument-principle multiplicity papers, to decide when local cluster counts
+   are enough and when a derivative/Jordan retained state is justified.
 
 ## Open Literature Questions
 
@@ -280,6 +318,27 @@ Source: C. Effenberger, "Robust Successive Computation of Eigenpairs for
 Nonlinear Eigenvalue Problems", SIAM Journal on Matrix Analysis and
 Applications 34(3), 2013, 1231--1256.
 DOI: https://doi.org/10.1137/120885644.
+
+### Focused Online Recheck: No Hidden Residual-Moment Method Found
+
+A fresh targeted search for "higher moments residual inverse iteration",
+"two-sided nonlinear FEAST", and "residual inverse iteration contour moments"
+mostly returns the same nearby references already in this file. Neumaier's
+residual inverse iteration is the scalar local correction model used by
+NLFEAST, while Brennan/Embree/Gugercin support Loewner as a realization and
+interpolation layer. The search did not reveal a named method that performs the
+specific residual Laurent-moment repair of left/right physical trial spaces
+before reduced NEP re-extraction.
+
+Sources checked:
+
+- A. Neumaier, "Residual Inverse Iteration for the Nonlinear Eigenvalue
+  Problem", SIAM Journal on Numerical Analysis 22(5), 1985, 914--923.
+  DOI: https://doi.org/10.1137/0722055.
+- M. C. Brennan, M. Embree, and S. Gugercin, "Contour Integral Methods for
+  Nonlinear Eigenvalue Problems: A Systems Theoretic Approach", SIAM Review
+  65(2), 2023, 439--470.
+  DOI: https://doi.org/10.1137/20M1389303.
 
 ## Actionable Design After Focused Pass
 
@@ -605,6 +664,25 @@ Implemented first pass in `experiments/moment_rii/run.jl`:
   focused global in-target Loewner artifact: single-layout residual-small values
   are marked unsafe, and the accepted retained set is the cross-layout
   support-2 cluster.
+- `run_delay_count_driven_adaptive_refinement` removes the analytic root oracle
+  from the count-driven path. The delay scalar NEP reports no exact roots to
+  the harness; completion is decided only by support matching the full-operator
+  argument-principle count.
+- `run_multi_delay_count_driven_adaptive_refinement` checks the same no-oracle
+  completion rule in a nonnormal dimension-three setting: three distinct delay
+  components are coupled by an upper-triangular operator and retained by
+  support/count evidence alone.
+- `run_near_pole_rational_count_driven_adaptive_refinement` checks the same
+  no-oracle rule for rational components with exterior poles close to the
+  contour. The gap-`0.01` case is a clean regression; the gap-`0.005` probe is
+  retained as a reminder that near-contour singularities stress
+  argument-principle quadrature reliability. The intended behavior there is
+  diagnosis, not forced recovery: the count-driven policy should reject the
+  contour as unreliable and ask for a safer chart.
+- `run_duplicate_delay_count_driven_adaptive_refinement` applies the same
+  oracle-free condition to the algebraic multiplicity branch. Duplicate delay
+  components with triangular nonnormal coupling are retained as three
+  geometric clusters whose local contour counts sum to the algebraic count six.
 
 Initial behavior:
 

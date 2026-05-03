@@ -694,6 +694,60 @@ function run_exponential_hankel_variant_sweep(;
     rows
 end
 
+function find_hankel_variant_row(rows, label)
+    for row in rows
+        row.label == label && return row
+    end
+    error("missing Hankel variant row: $label")
+end
+
+function run_rational_coordinate_boundary_diagnostic(; print_rows=true)
+    rows = run_exponential_hankel_variant_sweep(; print_rows=false)
+    loewner = find_hankel_variant_row(rows, "loewner_counted")
+    inverse = find_hankel_variant_row(rows, "hankel_inverse_o0")
+    mobius_plus = find_hankel_variant_row(rows, "hankel_mobius_p25")
+    mobius_minus = find_hankel_variant_row(rows, "hankel_mobius_m25")
+    shifted_mobius = find_hankel_variant_row(rows, "shifted_mobius_p25")
+    chebyshev_mobius = find_hankel_variant_row(rows, "chebyshev_mobius_p25")
+
+    if print_rows
+        println()
+        println("Rational coordinate boundary diagnostic")
+        println("  same exponential chart and trial spaces; asks whether inverse/Mobius coordinates replace Loewner/local charts")
+        @printf(
+            "  loewner=%d/%d spurious=%d inverse=%d/%d mobius(+)= %d/%d spurious=%d mobius(-)= %d/%d spurious=%d\n",
+            loewner.matched,
+            loewner.expected,
+            loewner.spurious,
+            inverse.matched,
+            inverse.expected,
+            mobius_plus.matched,
+            mobius_plus.expected,
+            mobius_plus.spurious,
+            mobius_minus.matched,
+            mobius_minus.expected,
+            mobius_minus.spurious,
+        )
+        @printf(
+            "  shifted_mobius=%d/%d chebyshev_mobius=%d/%d conclusion=%s\n",
+            shifted_mobius.matched,
+            shifted_mobius.expected,
+            chebyshev_mobius.matched,
+            chebyshev_mobius.expected,
+            loewner.success && !mobius_plus.success && !mobius_minus.success ? "rational_coordinates_are_diagnostics" : "check",
+        )
+    end
+    (
+        rows=rows,
+        loewner=loewner,
+        inverse=inverse,
+        mobius_plus=mobius_plus,
+        mobius_minus=mobius_minus,
+        shifted_mobius=shifted_mobius,
+        chebyshev_mobius=chebyshev_mobius,
+    )
+end
+
 function loewner_sweep_row(label, phase, rho, stage, extraction, expected; residual_tol, match_atol, notes="")
     summary = dual_scalar_rii_summary(extraction, expected; residual_tol=residual_tol, match_atol=match_atol)
     good = extraction.inside .& (extraction.residuals .<= residual_tol)
@@ -1432,6 +1486,567 @@ function run_adaptive_grid_loewner_refinement(;
     )
 end
 
+function count_driven_refinement_row(stage, result, center_count, added_count, target_count, target_count_error; match_atol)
+    support2_global = ComplexF64.(result.support2_global_found)
+    validation_matched = match_expected_count(support2_global, result.expected; atol=match_atol)
+    (
+        stage=stage,
+        centers=center_count,
+        added=added_count,
+        target_count=target_count,
+        target_count_error=target_count_error,
+        retained=length(support2_global),
+        count_complete=length(support2_global) == target_count,
+        expected=length(result.expected),
+        validation_matched=validation_matched,
+        validation_success=validation_matched == length(result.expected) &&
+            length(support2_global) == length(result.expected),
+    )
+end
+
+function local_cluster_multiplicity_estimates(
+    cases,
+    values;
+    outer_center=0.0 + 0.0im,
+    outer_radius,
+    operator_builder=similarity_analytic_tools,
+    component_scaling=:none,
+    component_scaling_nodes=64,
+    local_radius=0.08,
+    determinant_nodes=2048,
+    determinant_capacity=16,
+)
+    isempty(values) && return NamedTuple[]
+    chart = ContourChart(
+        outer_center,
+        outer_radius;
+        component_scaling=component_scaling,
+        component_scaling_nodes=component_scaling_nodes,
+    )
+    ctx = analytic_context(cases, chart, operator_builder)
+    retained = ComplexF64.(values)
+    rows = NamedTuple[]
+    for (index, value) in pairs(retained)
+        nearest = length(retained) == 1 ? Inf :
+            minimum(abs(value - retained[j]) for j in eachindex(retained) if j != index)
+        boundary_room = outer_radius - abs(value - outer_center)
+        radius = min(local_radius, 0.35 * nearest)
+        boundary_room > 0 && (radius = min(radius, 0.45 * boundary_room))
+        radius = max(radius, 100 * eps(Float64) * max(1.0, abs(value)))
+        _, count_estimate, sums = determinant_power_sums(
+            ctx.Tmatrix,
+            ctx.Tderivative;
+            center=value,
+            radius=radius,
+            nodes=determinant_nodes,
+            capacity=determinant_capacity,
+        )
+        push!(
+            rows,
+            (
+                value=value,
+                radius=radius,
+                multiplicity=count_estimate,
+                count_error=abs(sums[1] - count_estimate),
+            ),
+        )
+    end
+    rows
+end
+
+function run_count_driven_adaptive_grid_refinement(;
+    label="Count-driven adaptive grid refinement",
+    cases=(scalar_sine_case(), scalar_cosine_case(), scalar_shifted_sine_case(), scalar_expm1_case()),
+    outer_center=0.0 + 0.0im,
+    outer_radius=10.0,
+    operator_builder=similarity_analytic_tools,
+    operator_label="similarity",
+    base_spacing=2.4,
+    target_support=2,
+    max_refinement_rounds=4,
+    loewner_radius=1.3,
+    loewner_phase=0.0,
+    loewner_points=6,
+    chart_radii=(1.2, 2.0),
+    iterations=1,
+    basis_moments=4,
+    basis_nodes=16,
+    rii_nodes=128,
+    basis_ranktol=1e-8,
+    determinant_nodes=512,
+    determinant_capacity=32,
+    extractor=:loewner_counted,
+    reduced_moments=8,
+    reduced_nodes=512,
+    reduced_ranktol=1e-10,
+    reduced_refinement=:none,
+    refinement_steps=4,
+    residual_normalization=:vector,
+    component_scaling=:none,
+    component_scaling_nodes=64,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    count_error_tol=1e-2,
+    refine_inside_target_only=true,
+    print_rows=true,
+)
+    count = full_operator_count_estimate(
+        cases;
+        outer_center=outer_center,
+        outer_radius=outer_radius,
+        operator_builder=operator_builder,
+        component_scaling=component_scaling,
+        component_scaling_nodes=component_scaling_nodes,
+        determinant_nodes=max(2048, determinant_nodes),
+        determinant_capacity=max(128, determinant_capacity),
+    )
+    centers = disk_grid_centers(outer_center, outer_radius, base_spacing)
+    results = Any[]
+    rows = NamedTuple[]
+    added_by_round = Vector{ComplexF64}[]
+    stop_reason = :max_rounds
+    multiplicity_rows = NamedTuple[]
+    algebraic_retained_count = 0
+
+    for round in 0:max_refinement_rounds
+        result = run_dual_local_chart_sweep_analytic(;
+            cases=cases,
+            outer_center=outer_center,
+            outer_radius=outer_radius,
+            operator_builder=operator_builder,
+            operator_label=operator_label,
+            centers=centers,
+            radii=chart_radii,
+            iterations=iterations,
+            basis_moments=basis_moments,
+            basis_nodes=basis_nodes,
+            rii_nodes=rii_nodes,
+            basis_ranktol=basis_ranktol,
+            determinant_nodes=determinant_nodes,
+            determinant_capacity=determinant_capacity,
+            extractor=extractor,
+            reduced_moments=reduced_moments,
+            reduced_nodes=reduced_nodes,
+            reduced_ranktol=reduced_ranktol,
+            reduced_refinement=reduced_refinement,
+            refinement_steps=refinement_steps,
+            loewner_points=loewner_points,
+            loewner_radius=loewner_radius,
+            loewner_phase=loewner_phase,
+            residual_normalization=residual_normalization,
+            component_scaling=component_scaling,
+            component_scaling_nodes=component_scaling_nodes,
+            residual_tol=residual_tol,
+            match_atol=match_atol,
+            selection=:residual,
+            skip_empty_expected=false,
+            print_charts=false,
+        )
+        push!(results, result)
+        stage = round == 0 ? :base_grid : Symbol("count_refined_$round")
+        added_count = round == 0 ? 0 : length(added_by_round[end])
+        row = count_driven_refinement_row(
+            stage,
+            result,
+            length(centers),
+            added_count,
+            count.count_estimate,
+            count.count_error;
+            match_atol=match_atol,
+        )
+        push!(rows, row)
+
+        if count.count_error > count_error_tol
+            stop_reason = :target_count_unreliable
+            break
+        elseif row.count_complete
+            # Simple-root lower rung: unique support already satisfies the
+            # algebraic target count, so no local multiplicity probes are
+            # needed.
+            multiplicity_rows = NamedTuple[]
+            algebraic_retained_count = row.retained
+            stop_reason = :target_count_complete
+            break
+        else
+            multiplicity_rows = local_cluster_multiplicity_estimates(
+                cases,
+                result.support2_global_found;
+                outer_center=outer_center,
+                outer_radius=outer_radius,
+                operator_builder=operator_builder,
+                component_scaling=component_scaling,
+                component_scaling_nodes=component_scaling_nodes,
+                determinant_nodes=max(2048, determinant_nodes),
+                determinant_capacity=max(16, determinant_capacity),
+            )
+            algebraic_retained_count = sum(item.multiplicity for item in multiplicity_rows; init=0)
+            if algebraic_retained_count == count.count_estimate &&
+                    all(item.count_error <= count_error_tol for item in multiplicity_rows)
+                stop_reason = :target_algebraic_count_complete
+                break
+            end
+        end
+        if round == max_refinement_rounds
+            stop_reason = :max_rounds
+            break
+        end
+
+        weak_values = sorted_unique_values(
+            ComplexF64[cluster.value for cluster in result.support_clusters if cluster.support < target_support];
+            atol=match_atol,
+        )
+        if refine_inside_target_only
+            weak_values = ComplexF64[
+                value for value in weak_values
+                if abs(value - outer_center) <= outer_radius + 10 * match_atol
+            ]
+        end
+        added = ComplexF64[
+            value for value in weak_values if all(abs(value - center) > match_atol for center in centers)
+        ]
+        if isempty(added)
+            push!(added_by_round, ComplexF64[])
+            stop_reason = if length(result.support2_global_found) < count.count_estimate &&
+                    algebraic_retained_count == count.count_estimate &&
+                    all(item.count_error <= count_error_tol for item in multiplicity_rows)
+                :target_algebraic_count_complete
+            elseif length(result.support2_global_found) < count.count_estimate
+                :count_multiplicity_or_unresolved_defect
+            else
+                :no_new_weak_target_centers
+            end
+            break
+        end
+        push!(added_by_round, ComplexF64.(added))
+        centers = sorted_unique_values(vcat(ComplexF64.(centers), added); atol=match_atol)
+    end
+
+    if print_rows
+        println()
+        println(label)
+        println("  stops from the full-operator argument-principle count, not from known roots")
+        @printf(
+            "  %-18s %8s %8s %12s %12s %12s %12s %8s\n",
+            "stage",
+            "centers",
+            "added",
+            "retained",
+            "target",
+            "count_ok",
+            "valid_ok",
+            "status",
+        )
+        for row in rows
+            @printf(
+                "  %-18s %8d %8d %8d %4d/%-7d %11s %4d/%-7d %s\n",
+                string(row.stage),
+                row.centers,
+                row.added,
+                row.retained,
+                row.retained,
+                row.target_count,
+                string(row.count_complete),
+                row.validation_matched,
+                row.expected,
+                row.validation_success ? "ok" : "check",
+            )
+        end
+        @printf(
+            "  stop=%s target_count_error=%.3e algebraic_retained=%d\n",
+            string(stop_reason),
+            count.count_error,
+            algebraic_retained_count,
+        )
+    end
+
+    (
+        rows=rows,
+        results=results,
+        base=first(results),
+        refined=last(results),
+        count=count,
+        stop_reason=stop_reason,
+        multiplicities=multiplicity_rows,
+        algebraic_retained_count=algebraic_retained_count,
+        added_centers=isempty(added_by_round) ? ComplexF64[] : reduce(vcat, added_by_round),
+        added_by_round=added_by_round,
+    )
+end
+
+function run_three_function_count_driven_adaptive_refinement(;
+    outer_radius=20.0,
+    base_spacing=3.0,
+    target_support=2,
+    max_refinement_rounds=4,
+    loewner_radius=1.3,
+    loewner_phase=0.0,
+    loewner_points=6,
+    chart_radii=(1.5, 2.4),
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    run_count_driven_adaptive_grid_refinement(;
+        label="Three-function count-driven adaptive refinement",
+        cases=(scalar_sine_case(), scalar_cosine_case(), scalar_shifted_sine_case()),
+        outer_radius=outer_radius,
+        base_spacing=base_spacing,
+        target_support=target_support,
+        max_refinement_rounds=max_refinement_rounds,
+        loewner_radius=loewner_radius,
+        loewner_phase=loewner_phase,
+        loewner_points=loewner_points,
+        chart_radii=chart_radii,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=print_rows,
+    )
+end
+
+function run_triangular_count_driven_adaptive_refinement(;
+    coupling=10.0,
+    outer_radius=6.0,
+    base_spacing=2.4,
+    target_support=2,
+    max_refinement_rounds=4,
+    chart_radii=(1.2, 1.8),
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    run_count_driven_adaptive_grid_refinement(;
+        label="Triangular count-driven adaptive refinement",
+        cases=(scalar_sine_case(), scalar_cosine_case(), scalar_shifted_sine_case(), scalar_expm1_case()),
+        outer_radius=outer_radius,
+        operator_builder=triangular_operator_builder(; coupling=coupling),
+        operator_label="triangular(coupling=$coupling)",
+        base_spacing=base_spacing,
+        target_support=target_support,
+        max_refinement_rounds=max_refinement_rounds,
+        chart_radii=chart_radii,
+        iterations=2,
+        basis_nodes=24,
+        rii_nodes=128,
+        determinant_nodes=256,
+        determinant_capacity=96,
+        reduced_nodes=256,
+        residual_normalization=:operator,
+        component_scaling=:contour_max,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=print_rows,
+    )
+end
+
+function run_squared_sine_count_driven_adaptive_refinement(;
+    outer_radius=10.0,
+    base_spacing=2.4,
+    target_support=2,
+    max_refinement_rounds=4,
+    chart_radii=(1.5, 2.4),
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    run_count_driven_adaptive_grid_refinement(;
+        label="Squared-sine count-driven adaptive refinement",
+        cases=(scalar_squared_sine_case(),),
+        outer_radius=outer_radius,
+        base_spacing=base_spacing,
+        target_support=target_support,
+        max_refinement_rounds=max_refinement_rounds,
+        chart_radii=chart_radii,
+        basis_moments=8,
+        basis_nodes=64,
+        determinant_nodes=512,
+        determinant_capacity=64,
+        reduced_moments=16,
+        reduced_nodes=512,
+        component_scaling=:contour_max,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=print_rows,
+    )
+end
+
+function run_delay_count_driven_adaptive_refinement(;
+    outer_radius=6.0,
+    base_spacing=1.8,
+    target_support=2,
+    max_refinement_rounds=4,
+    chart_radii=(1.2, 2.0),
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    run_count_driven_adaptive_grid_refinement(;
+        label="Delay count-driven adaptive refinement",
+        cases=(scalar_delay_case(),),
+        outer_radius=outer_radius,
+        base_spacing=base_spacing,
+        target_support=target_support,
+        max_refinement_rounds=max_refinement_rounds,
+        chart_radii=chart_radii,
+        basis_moments=6,
+        basis_nodes=48,
+        determinant_nodes=512,
+        determinant_capacity=64,
+        reduced_moments=12,
+        reduced_nodes=512,
+        component_scaling=:none,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=print_rows,
+    )
+end
+
+function run_multi_delay_count_driven_adaptive_refinement(;
+    coupling=5.0,
+    outer_radius=6.0,
+    base_spacing=1.8,
+    target_support=2,
+    max_refinement_rounds=4,
+    chart_radii=(1.2, 2.0),
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    run_count_driven_adaptive_grid_refinement(;
+        label="Multi-delay count-driven adaptive refinement",
+        cases=(
+            scalar_delay_case(; a=0.4, b=2.0, tau=1.0),
+            scalar_delay_case(; a=-0.2, b=1.4, tau=0.8),
+            scalar_delay_case(; a=0.9, b=2.5, tau=1.2),
+        ),
+        outer_radius=outer_radius,
+        operator_builder=triangular_operator_builder(; coupling=coupling),
+        operator_label="triangular multi delay(coupling=$coupling)",
+        base_spacing=base_spacing,
+        target_support=target_support,
+        max_refinement_rounds=max_refinement_rounds,
+        chart_radii=chart_radii,
+        iterations=2,
+        basis_moments=6,
+        basis_nodes=48,
+        determinant_nodes=512,
+        determinant_capacity=128,
+        reduced_moments=12,
+        reduced_nodes=512,
+        residual_normalization=:operator,
+        component_scaling=:contour_max,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=print_rows,
+    )
+end
+
+function run_two_delay_count_driven_adaptive_refinement(;
+    outer_radius=6.0,
+    base_spacing=1.8,
+    target_support=2,
+    max_refinement_rounds=4,
+    chart_radii=(1.2, 2.0),
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    run_count_driven_adaptive_grid_refinement(;
+        label="Two-delay count-driven adaptive refinement",
+        cases=(scalar_two_delay_case(),),
+        outer_radius=outer_radius,
+        base_spacing=base_spacing,
+        target_support=target_support,
+        max_refinement_rounds=max_refinement_rounds,
+        chart_radii=chart_radii,
+        basis_moments=8,
+        basis_nodes=64,
+        determinant_nodes=768,
+        determinant_capacity=96,
+        reduced_moments=16,
+        reduced_nodes=768,
+        component_scaling=:none,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=print_rows,
+    )
+end
+
+function run_duplicate_delay_count_driven_adaptive_refinement(;
+    coupling=5.0,
+    outer_radius=6.0,
+    base_spacing=1.8,
+    target_support=2,
+    max_refinement_rounds=4,
+    chart_radii=(1.2, 2.0),
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    delay = scalar_delay_case(; a=0.4, b=2.0, tau=1.0)
+    run_count_driven_adaptive_grid_refinement(;
+        label="Duplicate-delay count-driven adaptive refinement",
+        cases=(delay, delay),
+        outer_radius=outer_radius,
+        operator_builder=triangular_operator_builder(; coupling=coupling),
+        operator_label="triangular duplicate delay(coupling=$coupling)",
+        base_spacing=base_spacing,
+        target_support=target_support,
+        max_refinement_rounds=max_refinement_rounds,
+        chart_radii=chart_radii,
+        iterations=2,
+        basis_moments=6,
+        basis_nodes=48,
+        determinant_nodes=512,
+        determinant_capacity=96,
+        reduced_moments=12,
+        reduced_nodes=512,
+        residual_normalization=:operator,
+        component_scaling=:contour_max,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=print_rows,
+    )
+end
+
+function run_near_pole_rational_count_driven_adaptive_refinement(;
+    gap=0.01,
+    coupling=5.0,
+    outer_radius=1.0,
+    base_spacing=0.35,
+    target_support=2,
+    max_refinement_rounds=4,
+    chart_radii=(0.28, 0.45),
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    count_error_tol=1e-6,
+    print_rows=true,
+)
+    run_count_driven_adaptive_grid_refinement(;
+        label="Near-pole rational count-driven adaptive refinement",
+        cases=oracle_free_near_pole_rational_cases(; gap=gap),
+        outer_radius=outer_radius,
+        operator_builder=triangular_operator_builder(; coupling=coupling),
+        operator_label="triangular near-pole rational(coupling=$coupling,gap=$gap)",
+        base_spacing=base_spacing,
+        target_support=target_support,
+        max_refinement_rounds=max_refinement_rounds,
+        chart_radii=chart_radii,
+        iterations=2,
+        basis_moments=6,
+        basis_nodes=48,
+        determinant_nodes=512,
+        determinant_capacity=64,
+        reduced_moments=12,
+        reduced_nodes=512,
+        residual_normalization=:operator,
+        component_scaling=:contour_max,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        count_error_tol=count_error_tol,
+        print_rows=print_rows,
+    )
+end
+
 function run_exponential_adaptive_grid_loewner_refinement(;
     base_spacing=2.4,
     target_support=2,
@@ -1530,9 +2145,13 @@ function adaptive_retention_score_summary(
     outer_radius,
     match_atol=1e-6,
     count_error_tol=1e-2,
+    target_count_estimate=nothing,
+    target_count_error=nothing,
 )
     final = result.refined
     expected = final.expected
+    target_count = target_count_estimate === nothing ? length(expected) : Int(target_count_estimate)
+    target_count_err = target_count_error === nothing ? 0.0 : Float64(target_count_error)
     clusters = final.support_clusters
     support1_global = globally_supported_cluster_values(
         clusters,
@@ -1561,24 +2180,163 @@ function adaptive_retention_score_summary(
     ]
     usable_records = [record for record in final.records if !record.failed]
     good_records = [record for record in usable_records if record.good > 0]
+    selected_records = hasproperty(final, :selected_records) ? final.selected_records : final.records
+    usable_selected_records = [record for record in selected_records if !record.failed]
+    good_selected_records = [record for record in usable_selected_records if record.good > 0]
     (
         expected=length(expected),
+        target_count_estimate=target_count,
+        target_count_error=target_count_err,
+        target_count_reliable=target_count_err <= count_error_tol,
         support1_global=length(support1_global),
         support1_global_matched=match_expected_count(support1_global, expected; atol=match_atol),
         support2_global=length(support2_global),
         support2_global_matched=match_expected_count(support2_global, expected; atol=match_atol),
+        support2_count_complete=length(support2_global) == target_count,
         support3_global=length(support3_global),
         support3_global_matched=match_expected_count(support3_global, expected; atol=match_atol),
+        support3_count_complete=length(support3_global) == target_count,
         weak_inside_clusters=count(cluster -> cluster.support < 2, inside_clusters),
         inside_cluster_count=length(inside_clusters),
         usable_records=length(usable_records),
         good_records=length(good_records),
+        selected_usable_records=length(usable_selected_records),
+        selected_good_records=length(good_selected_records),
         count_error_bad=count(record -> record.count_error > count_error_tol, good_records),
         count_deficit_records=count(record -> record.good < record.count_estimate, good_records),
+        selected_count_error_bad=count(record -> record.count_error > count_error_tol, good_selected_records),
+        selected_count_deficit_records=count(record -> record.good < record.count_estimate, good_selected_records),
         max_count_error=isempty(good_records) ? Inf : maximum(record.count_error for record in good_records),
         max_record_residual=isempty(good_records) ? Inf : maximum(record.max_residual for record in good_records),
         exact_support2_global=length(support2_global) == length(expected) &&
             match_expected_count(support2_global, expected; atol=match_atol) == length(expected),
+    )
+end
+
+function full_operator_count_estimate(
+    cases;
+    outer_center=0.0 + 0.0im,
+    outer_radius,
+    operator_builder=similarity_analytic_tools,
+    component_scaling=:none,
+    component_scaling_nodes=64,
+    determinant_nodes=2048,
+    determinant_capacity=128,
+)
+    chart = ContourChart(
+        outer_center,
+        outer_radius;
+        component_scaling=component_scaling,
+        component_scaling_nodes=component_scaling_nodes,
+    )
+    ctx = analytic_context(cases, chart, operator_builder)
+    _, count_estimate, sums = determinant_power_sums(
+        ctx.Tmatrix,
+        ctx.Tderivative;
+        center=outer_center,
+        radius=outer_radius,
+        nodes=determinant_nodes,
+        capacity=determinant_capacity,
+    )
+    (
+        count_estimate=count_estimate,
+        count_error=abs(sums[1] - count_estimate),
+        expected=length(ctx.expected),
+    )
+end
+
+function chart_policy_plan(
+    result,
+    summary;
+    outer_center=0.0 + 0.0im,
+    outer_radius,
+    match_atol=1e-6,
+    count_error_tol=1e-2,
+)
+    final = result.refined
+    retained = globally_supported_cluster_values(
+        final.support_clusters,
+        outer_center,
+        outer_radius;
+        min_support=2,
+        boundary_margin=10 * match_atol,
+    )
+    weak_target_centers = sorted_unique_values(
+        ComplexF64[
+            cluster.value for cluster in final.support_clusters
+            if cluster.support < 2 && abs(cluster.value - outer_center) <= outer_radius + 10 * match_atol
+        ];
+        atol=match_atol,
+    )
+    selected_records = hasproperty(final, :selected_records) ? final.selected_records : final.records
+    count_stressed = [
+        record for record in selected_records
+        if !record.failed && record.good > 0 &&
+            (record.good < record.count_estimate || record.count_error > count_error_tol)
+    ]
+    split_records = NamedTuple[]
+    for record in count_stressed
+        child_radius = record.radius / 2
+        # Four overlapping child charts preserve the disk geometry while
+        # reducing local realization size around count-stressed regions.
+        child_centers = ComplexF64[
+            record.center + child_radius / 2,
+            record.center - child_radius / 2,
+            record.center + im * child_radius / 2,
+            record.center - im * child_radius / 2,
+        ]
+        candidate_centers = sorted_unique_values(
+            ComplexF64[
+                entry.value for entry in final.found_entries
+                if abs(entry.center - record.center) <= match_atol &&
+                    abs(entry.radius - record.radius) <= 10 * eps(Float64) * max(1.0, record.radius)
+            ];
+            atol=match_atol,
+        )
+        refinement_centers = sorted_unique_values(
+            vcat(candidate_centers, ComplexF64[record.center], child_centers);
+            atol=match_atol,
+        )
+        stress = record.good < record.count_estimate ? :count_deficit : :count_error
+        candidate_radii = stress === :count_deficit ?
+            (record.radius / 4, 3 * record.radius / 8, 5 * record.radius / 8) :
+            (record.radius / 2, 2 * record.radius / 3, record.radius)
+        push!(
+            split_records,
+            (
+                center=record.center,
+                radius=record.radius,
+                child_radius=child_radius,
+                child_centers=child_centers,
+                candidate_centers=candidate_centers,
+                refinement_centers=refinement_centers,
+                candidate_radii=candidate_radii,
+                selected=true,
+                stress=stress,
+                good=record.good,
+                count_estimate=record.count_estimate,
+                count_error=record.count_error,
+                max_residual=record.max_residual,
+            ),
+        )
+    end
+    (
+        retained=retained,
+        retained_count=length(retained),
+        retained_expected=summary.expected,
+        target_count_estimate=summary.target_count_estimate,
+        target_count_error=summary.target_count_error,
+        weak_target_centers=weak_target_centers,
+        weak_target_count=length(weak_target_centers),
+        count_stressed_records=split_records,
+        count_stressed_count=length(split_records),
+        actions=(
+            isempty(weak_target_centers) ? :no_weak_target_centers : :add_weak_target_candidate_centers,
+            isempty(split_records) ? :no_count_stressed_charts : :split_or_shrink_count_stressed_charts,
+            !summary.support3_count_complete ?
+                :do_not_raise_support_threshold_without_cover_density :
+                :support_threshold_can_be_reconsidered,
+        ),
     )
 end
 
@@ -1606,8 +2364,23 @@ function run_three_function_retention_score_diagnostic(;
         match_atol=match_atol,
         print_rows=false,
     )
+    count = full_operator_count_estimate(
+        (scalar_sine_case(), scalar_cosine_case(), scalar_shifted_sine_case());
+        outer_radius=outer_radius,
+        determinant_nodes=2048,
+        determinant_capacity=128,
+    )
     summary = adaptive_retention_score_summary(
         result;
+        outer_radius=outer_radius,
+        match_atol=match_atol,
+        count_error_tol=count_error_tol,
+        target_count_estimate=count.count_estimate,
+        target_count_error=count.count_error,
+    )
+    plan = chart_policy_plan(
+        result,
+        summary;
         outer_radius=outer_radius,
         match_atol=match_atol,
         count_error_tol=count_error_tol,
@@ -1630,6 +2403,7 @@ function run_three_function_retention_score_diagnostic(;
     ) : nothing
     evidence = (
         support_and_target=summary.exact_support2_global,
+        oracle_free_count_complete=summary.target_count_reliable && summary.support2_count_complete,
         local_count_warning=summary.count_deficit_records > 0 || summary.count_error_bad > 0,
         residual_ok=summary.max_record_residual <= 10 * residual_tol,
         layout_agreement=layout_agreement === nothing ? missing : layout_agreement.summary.success,
@@ -1640,8 +2414,10 @@ function run_three_function_retention_score_diagnostic(;
         println("Three-function adaptive retention-score diagnostic")
         println("  reports support thresholds, target-domain weak clusters, and local count-estimator stress")
         @printf(
-            "  expected=%d support1_global=%d/%d support2_global=%d/%d support3_global=%d/%d weak_inside=%d\n",
+            "  expected=%d target_count=%d count_error=%.3e support1_global=%d/%d support2_global=%d/%d support3_global=%d/%d weak_inside=%d\n",
             summary.expected,
+            summary.target_count_estimate,
+            summary.target_count_error,
             summary.support1_global_matched,
             summary.support1_global,
             summary.support2_global_matched,
@@ -1651,23 +2427,369 @@ function run_three_function_retention_score_diagnostic(;
             summary.weak_inside_clusters,
         )
         @printf(
-            "  local records usable=%d good=%d count_error_bad=%d count_deficit=%d max_count_error=%.3e max_residual=%.3e status=%s\n",
+            "  local records usable=%d good=%d selected_good=%d count_error_bad=%d count_deficit=%d selected_count_deficit=%d max_count_error=%.3e max_residual=%.3e status=%s\n",
             summary.usable_records,
             summary.good_records,
+            summary.selected_good_records,
             summary.count_error_bad,
             summary.count_deficit_records,
+            summary.selected_count_deficit_records,
             summary.max_count_error,
             summary.max_record_residual,
             summary.exact_support2_global ? "ok" : "check",
         )
         println("  evidence=", evidence)
+        println("  plan=", plan.actions)
     end
     (
         result=result,
         summary=summary,
+        plan=plan,
         evidence=evidence,
         layout_agreement=layout_agreement,
         extractor_agreement=extractor_agreement,
+    )
+end
+
+function run_count_stressed_split_probe(;
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    diagnostic = run_three_function_retention_score_diagnostic(;
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=false,
+    )
+    isempty(diagnostic.plan.count_stressed_records) && error("no count-stressed charts available to probe")
+    rows = NamedTuple[]
+    for record in diagnostic.plan.count_stressed_records
+        naive_child = run_dual_local_chart_sweep_analytic(;
+            cases=(scalar_sine_case(), scalar_cosine_case(), scalar_shifted_sine_case()),
+            outer_center=record.center,
+            outer_radius=record.radius,
+            centers=record.child_centers,
+            radii=(record.child_radius,),
+            iterations=1,
+            extractor=:loewner_counted,
+            loewner_points=6,
+            loewner_radius=1.3,
+            residual_normalization=:vector,
+            component_scaling=:none,
+            selection=:residual,
+            skip_empty_expected=false,
+            print_charts=false,
+        )
+        candidate_child = run_dual_local_chart_sweep_analytic(;
+            cases=(scalar_sine_case(), scalar_cosine_case(), scalar_shifted_sine_case()),
+            outer_center=record.center,
+            outer_radius=record.radius,
+            centers=record.refinement_centers,
+            radii=record.candidate_radii,
+            iterations=2,
+            extractor=:loewner_counted,
+            loewner_points=6,
+            loewner_radius=1.3,
+            residual_normalization=:vector,
+            component_scaling=:none,
+            selection=:residual,
+            skip_empty_expected=false,
+            print_charts=false,
+        )
+        push!(
+            rows,
+            (
+                parent=record,
+                naive_child=naive_child,
+                candidate_child=candidate_child,
+                expected=length(candidate_child.expected),
+            ),
+        )
+    end
+    record = rows[1].parent
+    naive_child = rows[1].naive_child
+    candidate_child = rows[1].candidate_child
+    if print_rows
+        println()
+        println("Count-stressed split/shrink probe")
+        println("  compares blind geometric children with residual candidates plus overlapping cover anchors")
+        for row in rows
+            @printf(
+                "  parent_center=%.6g%+.6gi parent_r=%.3g parent_good=%d parent_count=%d naive=%d/%d refined=%d/%d refined_support2=%d/%d\n",
+                real(row.parent.center),
+                imag(row.parent.center),
+                row.parent.radius,
+                row.parent.good,
+                row.parent.count_estimate,
+                row.naive_child.matched,
+                row.expected,
+                row.candidate_child.matched,
+                row.expected,
+                row.candidate_child.support2_global_matched,
+                row.expected,
+            )
+        end
+    end
+    (
+        base=diagnostic,
+        rows=rows,
+        parent=record,
+        naive_child=naive_child,
+        candidate_child=candidate_child,
+        child_centers=record.child_centers,
+        child_radius=record.child_radius,
+        candidate_centers=record.candidate_centers,
+        refinement_centers=record.refinement_centers,
+        candidate_radii=record.candidate_radii,
+    )
+end
+
+function run_triangular_count_error_split_probe(;
+    coupling=10.0,
+    outer_radius=6.0,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    result = run_triangular_adaptive_grid_loewner_refinement(;
+        coupling=coupling,
+        outer_radius=outer_radius,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=false,
+    )
+    summary = adaptive_retention_score_summary(
+        (refined=result.refined,);
+        outer_radius=outer_radius,
+        match_atol=match_atol,
+    )
+    plan = chart_policy_plan(
+        (refined=result.refined,),
+        summary;
+        outer_radius=outer_radius,
+        match_atol=match_atol,
+    )
+    record_index = findfirst(record -> record.stress === :count_error, plan.count_stressed_records)
+    record_index === nothing && error("no count-error-only triangular chart available to probe")
+    record = plan.count_stressed_records[record_index]
+    common = (
+        cases=(scalar_sine_case(), scalar_cosine_case(), scalar_shifted_sine_case(), scalar_expm1_case()),
+        operator_builder=triangular_operator_builder(; coupling=coupling),
+        operator_label="triangular(coupling=$coupling)",
+        outer_center=record.center,
+        outer_radius=record.radius,
+        centers=record.refinement_centers,
+        iterations=2,
+        basis_nodes=24,
+        rii_nodes=128,
+        determinant_nodes=256,
+        determinant_capacity=96,
+        reduced_nodes=256,
+        extractor=:loewner_counted,
+        loewner_points=6,
+        loewner_radius=1.3,
+        residual_normalization=:operator,
+        component_scaling=:contour_max,
+        selection=:residual,
+        skip_empty_expected=false,
+        print_charts=false,
+    )
+    shrink_child = run_dual_local_chart_sweep_analytic(;
+        common...,
+        radii=(record.radius / 4, 3 * record.radius / 8, 5 * record.radius / 8),
+    )
+    policy_child = run_dual_local_chart_sweep_analytic(;
+        common...,
+        radii=record.candidate_radii,
+    )
+    if print_rows
+        println()
+        println("Triangular count-error split/shrink probe")
+        println("  count-error-only nonnormal charts preserve the parent radius instead of shrinking aggressively")
+        @printf(
+            "  parent_center=%.6g%+.6gi parent_r=%.3g count_error=%.3e shrink=%d/%d support2=%d/%d policy=%d/%d support2=%d/%d\n",
+            real(record.center),
+            imag(record.center),
+            record.radius,
+            record.count_error,
+            shrink_child.matched,
+            length(shrink_child.expected),
+            shrink_child.support2_global_matched,
+            length(shrink_child.expected),
+            policy_child.matched,
+            length(policy_child.expected),
+            policy_child.support2_global_matched,
+            length(policy_child.expected),
+        )
+    end
+    (
+        base=result,
+        summary=summary,
+        plan=plan,
+        parent=record,
+        shrink_child=shrink_child,
+        policy_child=policy_child,
+    )
+end
+
+function near_pole_rational_cases(; gap=0.005)
+    radius = 1.0 + Float64(gap)
+    (
+        scalar_rational_case(; root=-0.45, pole=radius, name="rat1"),
+        scalar_rational_case(; root=-0.10 + 0.20im, pole=radius * exp(0.15im), name="rat2"),
+        scalar_rational_case(; root=0.20 - 0.15im, pole=radius * exp(-0.12im), name="rat3"),
+        scalar_rational_case(; root=0.48 + 0.10im, pole=radius * exp(0.05im), name="rat4"),
+        scalar_rational_case(; root=0.68 - 0.05im, pole=radius * exp(-0.08im), name="rat5"),
+    )
+end
+
+function oracle_free_near_pole_rational_cases(; gap=0.01)
+    Tuple(
+        merge(case, (roots=(center, radius) -> ComplexF64[],))
+        for case in near_pole_rational_cases(; gap=gap)
+    )
+end
+
+function run_near_pole_rational_boundary_diagnostic(;
+    gap=0.005,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    cases = near_pole_rational_cases(; gap=gap)
+    configs = (
+        (component_scaling=:none, residual_normalization=:operator, extractor=:loewner_counted),
+        (component_scaling=:none, residual_normalization=:operator, extractor=:ss_counted),
+        (component_scaling=:none, residual_normalization=:vector, extractor=:loewner_counted),
+        (component_scaling=:contour_max, residual_normalization=:vector, extractor=:ss_counted),
+    )
+    rows = NamedTuple[]
+    for config in configs
+        append!(
+            rows,
+            run_matrix_analytic_case(;
+                name="near_pole_rational_gap_$(gap)",
+                problem_class=:rational_nep,
+                cases=cases,
+                radius=1.0,
+                iterations=1,
+                basis_moments=3,
+                basis_nodes=32,
+                rii_nodes=128,
+                basis_ranktol=1e-10,
+                determinant_nodes=512,
+                determinant_capacity=32,
+                extractor=config.extractor,
+                loewner_points=6,
+                loewner_radius=1.3,
+                reduced_moments=8,
+                reduced_nodes=512,
+                component_scaling=config.component_scaling,
+                residual_normalization=config.residual_normalization,
+                residual_tol=residual_tol,
+                match_atol=match_atol,
+            ),
+        )
+    end
+    success = all(row.success for row in rows)
+    if print_rows
+        println()
+        println("Near-pole rational boundary diagnostic")
+        println("  poles sit just outside the target contour; checks whether rational singularities need a special chart policy")
+        for row in rows
+            @printf(
+                "  %-18s %-14s %-15s %-18s matched=%d/%d good=%d spurious=%d max=%.3e near=%.3e %s\n",
+                string(row.problem),
+                string(row.stage),
+                string(row.problem_class),
+                row.notes,
+                row.matched,
+                row.expected,
+                row.good,
+                row.spurious,
+                row.max_residual,
+                row.nearest_expected,
+                row.success ? "ok" : "check",
+            )
+        end
+    end
+    (rows=rows, success=success, gap=gap)
+end
+
+function run_residual_laurent_compression_diagnostic(;
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    common = (
+        cases=(scalar_sine_case(), scalar_cosine_case(), scalar_shifted_sine_case()),
+        radius=10.0,
+        basis_moments=4,
+        basis_nodes=8,
+        rii_nodes=128,
+        update_moment_count=1,
+        iterations=1,
+        basis_ranktol=0.5,
+        determinant_nodes=512,
+        determinant_capacity=64,
+        extractor=:loewner_counted,
+        loewner_points=6,
+        loewner_radius=1.3,
+        reduced_moments=12,
+        reduced_nodes=512,
+        residual_normalization=:vector,
+        component_scaling=:none,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        verbose=false,
+    )
+    compressed = run_dual_moment_compressed_rii_analytic_iteration(;
+        common...,
+        update_mode=:moment_compressed,
+    )
+    scalar = run_dual_moment_compressed_rii_analytic_iteration(;
+        common...,
+        update_mode=:scalar_expanded,
+    )
+    compressed_initial = compressed.summaries[1]
+    compressed_updated = compressed.summaries[end]
+    scalar_initial = scalar.summaries[1]
+    scalar_updated = scalar.summaries[end]
+    if print_rows
+        println()
+        println("Residual Laurent compression diagnostic")
+        println("  compares moment-realization update with scalar expanded RII on the same rank-deficient analytic chart")
+        @printf(
+            "  initial inside=%d good=%d max=%.3e; compressed matched=%d/%d candidates=(%d,%d) basis=(%d,%d) residual_rank=(%d,%d); scalar matched=%d/%d candidates=(%d,%d) basis=(%d,%d) residual_rank=(%d,%d)\n",
+            compressed_initial.inside,
+            compressed_initial.good,
+            compressed_initial.max_residual,
+            compressed_updated.matched,
+            length(compressed.expected),
+            compressed_updated.right_candidate_cols,
+            compressed_updated.left_candidate_cols,
+            compressed_updated.right_basis_cols,
+            compressed_updated.left_basis_cols,
+            compressed_updated.right_residual_rank,
+            compressed_updated.left_residual_rank,
+            scalar_updated.matched,
+            length(scalar.expected),
+            scalar_updated.right_candidate_cols,
+            scalar_updated.left_candidate_cols,
+            scalar_updated.right_basis_cols,
+            scalar_updated.left_basis_cols,
+            scalar_updated.right_residual_rank,
+            scalar_updated.left_residual_rank,
+        )
+    end
+    (
+        compressed=compressed,
+        scalar=scalar,
+        compressed_initial=compressed_initial,
+        compressed_updated=compressed_updated,
+        scalar_initial=scalar_initial,
+        scalar_updated=scalar_updated,
+        expected=length(compressed.expected),
     )
 end
 
@@ -1678,20 +2800,29 @@ function retention_policy_decision(
     extractor_agreement=missing,
 )
     actions = Symbol[]
-    if summary.exact_support2_global
+    target_count_ok = summary.target_count_reliable && summary.support2_count_complete
+    if target_count_ok
         push!(actions, :retain_support2_global)
     else
         push!(actions, :refine_weak_target_support)
     end
+    if summary.weak_inside_clusters > 0
+        push!(actions, :add_weak_target_candidate_centers)
+    end
+    if target_count_ok && !summary.support3_count_complete
+        push!(actions, :do_not_raise_support_threshold_without_cover_density)
+    end
+    summary.target_count_reliable || push!(actions, :tighten_target_count_estimator)
     local_count_warning = summary.count_deficit_records > 0 || summary.count_error_bad > 0
     if local_count_warning
         push!(actions, :treat_local_count_errors_as_chart_warnings)
+        push!(actions, :split_or_shrink_count_stressed_charts_before_strict_acceptance)
     end
     if summary.max_record_residual > 10 * residual_tol
         push!(actions, :tighten_or_refine_high_residual_charts)
     end
     if layout_agreement === missing
-        if local_count_warning || !summary.exact_support2_global
+        if local_count_warning || !target_count_ok
             push!(actions, :request_loewner_layout_agreement)
         end
     elseif !layout_agreement
@@ -1700,7 +2831,7 @@ function retention_policy_decision(
         push!(actions, :layout_agreement_certified)
     end
     if extractor_agreement === missing
-        if local_count_warning || !summary.exact_support2_global
+        if local_count_warning || !target_count_ok
             push!(actions, :request_reduced_extractor_agreement)
         end
     elseif !extractor_agreement
@@ -1710,7 +2841,7 @@ function retention_policy_decision(
     end
 
     residual_ok = summary.max_record_residual <= 10 * residual_tol
-    support_ok = summary.exact_support2_global
+    support_ok = target_count_ok
     layout_ok = layout_agreement === missing ? !local_count_warning : Bool(layout_agreement)
     extractor_ok = extractor_agreement === missing ? !local_count_warning : Bool(extractor_agreement)
     status = if support_ok && residual_ok && layout_ok && extractor_ok && !local_count_warning
@@ -1726,7 +2857,9 @@ function retention_policy_decision(
         status=status,
         retain_support=2,
         retained=summary.support2_global,
-        expected=summary.expected,
+        expected=summary.target_count_estimate,
+        validation_expected=summary.expected,
+        target_count_error=summary.target_count_error,
         support_ok=support_ok,
         residual_ok=residual_ok,
         local_count_warning=local_count_warning,
@@ -1811,6 +2944,82 @@ function run_three_function_automatic_retention_policy(;
         final_decision=final_decision,
         layout_agreement=layout_agreement,
         extractor_agreement=extractor_agreement,
+    )
+end
+
+function find_refinement_row(result, stage, refinement)
+    for row in result.rows
+        row.stage === stage && row.refinement === refinement && return row
+    end
+    error("missing refinement row for stage=$stage refinement=$refinement")
+end
+
+function run_analytic_block_newton_boundary_diagnostic(; print_rows=true)
+    small = run_reduced_analytic_refinement_comparison(;
+        cases=(scalar_sine_case(), scalar_cosine_case()),
+        radius=4.0,
+        extractor=:ss_counted,
+        determinant_nodes=512,
+        reduced_nodes=256,
+        refinement_modes=(:none, :scalar_newton, :block_newton),
+        refinement_steps=1,
+        refinement_nodes=128,
+        print_rows=print_rows,
+    )
+    large = run_reduced_analytic_refinement_comparison(;
+        radius=20.0,
+        extractor=:ss_counted,
+        determinant_nodes=512,
+        reduced_nodes=256,
+        refinement_modes=(:none, :scalar_newton, :block_newton),
+        refinement_steps=1,
+        refinement_nodes=128,
+        print_rows=print_rows,
+    )
+    small_block_initial = find_refinement_row(small, :initial, :block_newton)
+    small_none_updated = find_refinement_row(small, :updated, :none)
+    small_block_updated = find_refinement_row(small, :updated, :block_newton)
+    large_none_updated = find_refinement_row(large, :updated, :none)
+    large_scalar_updated = find_refinement_row(large, :updated, :scalar_newton)
+    large_block_updated = find_refinement_row(large, :updated, :block_newton)
+
+    if print_rows
+        println()
+        println("Analytic invariant-pair block-Newton boundary diagnostic")
+        println("  true contour-residual block Newton is a reduced local refinement, not a large-chart retention policy")
+        @printf(
+            "  small radius-4: initial block ratio=%s updated none=%d/%d max=%.3e updated block=%d/%d max=%.3e\n",
+            isempty(small_block_initial.newton_ratios) ? "n/a" : @sprintf("%.2e", first(small_block_initial.newton_ratios)),
+            small_none_updated.matched,
+            small.expected,
+            small_none_updated.max_residual,
+            small_block_updated.matched,
+            small.expected,
+            small_block_updated.max_residual,
+        )
+        @printf(
+            "  large radius-20: updated none=%d/%d max=%.3e scalar=%d/%d max=%.3e block=%d/%d max=%.3e block_ratio=%s\n",
+            large_none_updated.matched,
+            large.expected,
+            large_none_updated.max_residual,
+            large_scalar_updated.matched,
+            large.expected,
+            large_scalar_updated.max_residual,
+            large_block_updated.matched,
+            large.expected,
+            large_block_updated.max_residual,
+            isempty(large_block_updated.newton_ratios) ? "n/a" : @sprintf("%.2e", first(large_block_updated.newton_ratios)),
+        )
+    end
+    (
+        small=small,
+        large=large,
+        small_block_initial=small_block_initial,
+        small_none_updated=small_none_updated,
+        small_block_updated=small_block_updated,
+        large_none_updated=large_none_updated,
+        large_scalar_updated=large_scalar_updated,
+        large_block_updated=large_block_updated,
     )
 end
 

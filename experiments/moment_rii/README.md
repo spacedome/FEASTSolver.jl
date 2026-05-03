@@ -215,7 +215,10 @@ with diagnostics good enough to choose the right chart in ordinary cases.
   FEAST with twelve columns converges to machine precision. Projected SS-FEAST
   with four right-hand sides and `K=3` also recovers all ten eigenvalues,
   showing that the moment realization gives the same effective subspace width
-  without tripling the number of linear-solve right-hand sides.
+  without tripling the number of linear-solve right-hand sides. The slow
+  regression `just test 'linear SS-FEAST'` now pins this reduction: same-probe
+  FEAST returns four values, wide FEAST returns ten, and projected SS-FEAST
+  converges all ten with final residual around `3e-13`.
 - On a nonnormal Grcar control region with eight eigenvalues, projected
   SS-FEAST with `K=2` refines from `4e-9` initial scalar residuals to machine
   precision. This gives a clean linear baseline for the nonlinear moment
@@ -558,6 +561,47 @@ with diagnostics good enough to choose the right chart in ordinary cases.
   Loewner layout is unsafe, the policy refuses single-layout residual-small
   values and retains only cross-layout support-2 candidates, again recovering
   exactly 18/18.
+- Count-stressed charts now have a concrete split/shrink refinement rung. The
+  policy acts only on selected best-radius chart records, because diagnostic
+  records from non-selected radii do not correspond to accepted chart entries.
+  On the radius-20 three-function cover, blind half-radius child charts fail on
+  both selected count-stressed parents. Reusing the parent chart's
+  residual-small values as candidate centers recovers the local roots, but one
+  parent still has weak support because root-centered charts do not overlap
+  enough. Adding the parent center and four half-radius child cover anchors
+  gives overlapping evidence and support-certifies the local roots on both
+  count-stressed parents (`5/5` and `4/4`). This turns split/shrink from a
+  loose suggestion into a reproducible adaptive-chart rung while preserving the
+  geometric support policy.
+- A nonnormal triangular count-error-only chart forced a sharper distinction.
+  The selected chart at radius `1.8` has four residual-small values and a count
+  estimate of four, but the argument-principle count error is still large. The
+  count-deficit shrink radii `r/4, 3r/8, 5r/8` recover only one of the four
+  local roots because the smaller nonnormal charts lose quality. For this
+  stress type the policy now keeps the parent radius as a candidate alongside
+  overlap anchors, recovering and support-certifying all four local roots. The
+  refinement ladder is therefore not just "always shrink": count deficits and
+  count errors are different chart diagnoses.
+- A near-pole rational control adds a different analytic class. Five scalar
+  rational components have simple roots inside the unit contour and poles only
+  `0.005` outside it. The reduced contour solve recovers all five roots with no
+  residual-small spurious values across Loewner vs counted-SS extraction,
+  operator vs vector residual normalization, and with/without contour-max
+  component scaling. This is useful negative evidence: nearby exterior
+  rational singularities can stress quadrature and conditioning, but in this
+  dense reduced setting they do not require a new moment update or chart-policy
+  branch.
+- A residual-Laurent compression control now pins the efficiency story. On a
+  rank-deficient radius-10 three-function analytic chart, the initial reduced
+  extraction has four inside values and no residual-small roots. The
+  moment-realization update uses a rank-two residual basis, builds only three
+  candidate columns per side, preserves a three-dimensional physical
+  left/right realization, and recovers all twenty roots. The scalar expanded
+  RII path sees the same residual rank but forms four per-Ritz candidate
+  columns, compresses back to a two-dimensional physical basis, and recovers no
+  roots. Thus residual Laurent moments are not just a memory optimization over
+  scalar RII; they are the compact realization geometry needed to keep the
+  many-root nonlinear state observable.
 - A focused literature pass on the missing iteration step did not turn up an
   existing method that is simply "Loewner FEAST" or "SS RII". The nearest
   established machinery is invariant-pair/block Newton refinement, polynomial
@@ -579,6 +623,19 @@ with diagnostics good enough to choose the right chart in ordinary cases.
   It also increases residual-small spurious values, so it is a cleanup/refinement
   rung only; it must be paired with count, contour, matching, and spurious
   diagnostics rather than treated as convergence by itself.
+- The generic analytic reduced extractor now also has a true invariant-pair
+  block-Newton prototype. Its residual is the contour integral
+  `∮ Tred(z) X (zI-S)^-1 dz`, and its Newton matrix uses the corresponding
+  Fréchet derivative in `(X,S)` plus the lifted-pair gauge constraint. This is
+  the geometrically correct analytic analogue of the polynomial invariant-pair
+  Newton step, but the first boundary diagnostic is deliberately conservative:
+  on a small radius-4 `sin/cos` chart it accepts a residual-reducing step and
+  preserves the exact post-Laurent root set; on the large radius-20
+  three-function chart it rejects an improving step after the Laurent update and
+  badly degrades the residual-small retained set. The conclusion is that
+  analytic block Newton is a local reduced-pair refinement/check, not a
+  replacement for chart splitting, support evidence, or residual Laurent
+  trial/test-space repair.
 - The local-chart triangular analytic comparison reinforces that distinction.
   On the radius-6 triangular coupling-10 control, supervised local charts with
   no Laurent updates recover 10 of 11 roots whether or not scalar Newton cleanup
@@ -730,6 +787,15 @@ returns structured rows for:
 - Multiple-root analytic diagnostics.
 - Nonnormal triangular local-chart support diagnostics.
 
+`ALGORITHM.md` records the current candidate generalized moment-NLFEAST
+boundary: local dual contour realization, reduced Petrov-Galerkin extraction,
+residual Laurent repair, and explicit chart policy. It also lists the known
+reductions to FEAST, SS-FEAST, Beyn/SS, and canonical NLFEAST, plus the negative
+boundaries that should not be rediscovered as candidate defaults.
+
+`AUDIT.md` maps the research objective to concrete artifacts, evidence, and
+remaining gaps. It is the current guardrail against over-claiming completion.
+
 Current first-pass matrix result:
 
 - The matrix now spans physical dimensions `n=1,3,4,5,6,8,15`. This is
@@ -767,6 +833,14 @@ Current first-pass matrix result:
   shifted, and Chebyshev shifted realizations recover only a small subset of the
   roots on this global chart. Loewner is the only clean global realization in
   the current sweep.
+- Rational coordinate variants do not repair that global chart. The inverse
+  coordinate loses all 18 roots, Möbius Hankel coordinates recover 17/18 or
+  18/18 depending on shift but keep residual-small spurious candidates, and
+  shifted/Chebyshev Möbius variants recover only a few roots. On the same
+  physical trial/test spaces, `loewner_counted` returns exactly 18/18 with no
+  spurious values. The practical conclusion is that rational coordinates remain
+  a chart diagnostic/escalation rung, while Loewner realization or local chart
+  splitting is the cleaner response for oversized analytic charts.
 - Local charts change the picture. Supervised root-centered local charts with
   radii `1.2` and `2.0` recover all 18 exponential roots with both counted SS
   and Loewner; requiring support from at least two chart centers prunes the
@@ -801,6 +875,64 @@ Current first-pass matrix result:
   reduced-extractor agreement. This confirms that support threshold, local count
   consistency, residual quality, chart geometry, and extractor/layout agreement
   are distinct diagnostics; none should be promoted to a standalone pruning law.
+- The three-function retention policy now has an oracle-free completion check.
+  The target count is computed from the full analytic operator by the argument
+  principle, and support-2 retention is complete only when the retained
+  target-domain count matches that reliable contour count. Exact roots are
+  still used in the experiment after the decision, as validation that the
+  retained values are the intended ones.
+- The same idea now drives an adaptive stopping diagnostic. Starting from the
+  coarse radius-20 three-function grid, the count-driven loop adds weak
+  target-domain candidate centers until support-2 retained values match the
+  full-operator contour count. It stops after the same two refinements as the
+  fixed-round prototype and validates against 38/38 known roots, but the stop
+  condition itself uses only computed count/support evidence.
+- A scalar delay control removes the exact-root oracle entirely. The harness
+  deliberately returns an empty known-root list for
+  `f(z)=z + 0.4 - 2exp(-z)`, while the full-operator argument-principle count
+  on the radius-6 contour is three. The count-driven loop retains three
+  support-certified values and stops by count completion, so this path now has
+  a real oracle-free numerical control rather than only "exact roots used after
+  the fact" validation.
+- A three-component delay control pushes the same no-oracle path into a
+  nonnormal left/right setting. The components use different delay parameters
+  and are coupled by an upper-triangular operator. On the radius-6 contour the
+  full-operator argument-principle count is nine, support retention returns
+  nine values, and the loop stops without exact-root validation or local
+  multiplicity probes.
+- A near-pole rational control extends oracle-free count completion to a
+  different analytic class. Five rational components have poles just outside
+  the unit contour and are coupled through the same triangular nonnormal model.
+  At pole gap `0.01`, the full-operator argument-principle count is reliable,
+  support retention returns five values, and the loop stops without exact-root
+  validation or local multiplicity probes. The stricter gap `0.005` remains a
+  useful boundary stress for quadrature reliability rather than a clean
+  oracle-free regression: with the stricter count tolerance used by this
+  diagnostic, the policy reports `:target_count_unreliable` instead of
+  accepting a contour placed too close to an exterior pole.
+- A duplicate-delay triangular control removes the exact-root oracle from the
+  multiplicity branch as well. Two identical copies of
+  `f(z)=z + 0.4 - 2exp(-z)` with nonnormal upper-triangular coupling have full
+  contour count six on the radius-6 contour, but only three geometric retained
+  values. Local cluster counts assign multiplicity two to each retained value,
+  so the algebraic count is satisfied without exact roots or explicit
+  Jordan-chain data. This is the first oracle-free evidence that the
+  algebraic/geometric retained-count distinction is not just an artifact of
+  analytic validation lists.
+- Applying the count-driven loop to the nonnormal triangular control exposes
+  and resolves an important algebraic/geometric distinction. The full
+  determinant count is algebraic and returns 12, while the support-2
+  target-domain clusters contain 11 unique values because two scalar components
+  share a root. Small local contour counts around each retained cluster assign
+  multiplicity two to the coincident root, so the multiplicity-weighted retained
+  count satisfies the algebraic count without duplicating scalar values.
+  These local multiplicity probes are only used on the algebraic/unique
+  mismatch branch; simple-root count completion skips them.
+- The same multiplicity rule also works on a true repeated-root analytic
+  control. For `sin(z)^2` on the radius-10 contour, the full determinant count
+  is 14 while the retained set contains seven unique roots. Local cluster counts
+  assign multiplicity two to every retained root, giving algebraic completion
+  without requiring explicit Jordan-chain extraction in the lower rung.
 
 ## Nonlinear Experiment Plan
 
@@ -853,29 +985,57 @@ Current first-pass matrix result:
    membership removes supported local-chart candidates that are valid nearby
    roots but outside the requested domain. A three-layout Loewner-radius sweep
    on the repaired radius-20 three-function cover gives exact cross-layout
-   support, and a Loewner-vs-counted-SS rerun gives exact cross-extractor
-   support, so the retained set is not an artifact of one interpolation circle
-   or one reduced-extractor algebra. A first automatic retention wrapper now
-   escalates exact-but-count-stressed support-2 retained sets to those agreement
-   checks and then returns `:accept_with_chart_warnings` when both pass; the
-   global in-target Loewner artifact follows the complementary branch and
-   requires cross-layout support before accepting residual-small values. The next
-   reduced-extraction boundary is to replace the hard-coded escalation ladder
-   with chart split/shrink and layout/extractor selection rules driven by rank
-   gaps, local count errors, residual magnitudes, and chart geometry.
+  support, and a Loewner-vs-counted-SS rerun gives exact cross-extractor
+  support, so the retained set is not an artifact of one interpolation circle
+  or one reduced-extractor algebra. A first automatic retention wrapper now
+  escalates exact-but-count-stressed support-2 retained sets to those agreement
+  checks and then returns `:accept_with_chart_warnings` when both pass; the
+  global in-target Loewner artifact follows the complementary branch and
+  requires cross-layout support before accepting residual-small values. The
+  policy now also records chart-specific actions: do not raise a support
+  threshold unless the cover is dense enough, add weak target candidate centers
+  when target-domain support is missing, and split or shrink count-stressed
+  charts before strict acceptance. The radius-20 three-function path now uses
+  the full-operator argument-principle count for target completion and for a
+  first count-driven adaptive stopping diagnostic rather than the known-root
+  list. This is still an experiment policy, but it
+  turns the escalation ladder into explicit chart actions rather than hidden
+  post-processing. The score diagnostic now returns a concrete `plan` object:
+  retained support-2 target roots, weak target centers to add, and count-stressed
+  chart records with four overlapping child-chart suggestions at half radius.
+  This is deliberately conservative; it makes chart refinement reproducible. A
+  blind half-radius child split fails on the first count-stressed radius-20
+  chart, but a candidate-centered split that reuses the parent chart's
+  residual-small values as centers recovers the parent's five locally counted
+  roots, with four of them receiving support from at least two child centers.
+  A nonnormal triangular count-driven run now pins the complementary algebraic
+  multiplicity rule: count completion is not the same as unique-root support
+  when roots coincide, but small local contour counts can attach multiplicity
+  to retained clusters. The same rule handles `sin(z)^2`, so it is not merely a
+  coincident-component workaround. The scalar delay control complements this by
+  exercising the same count-completion path with no exact-root oracle at all;
+  the multi-delay triangular control exercises that path with nonnormal
+  left/right spaces, the near-pole rational control exercises it with exterior
+  rational singularities, and the duplicate-delay triangular control does the
+  same for the multiplicity branch.
 9. In progress: add the invariant-pair/block-Newton refinement rung explicitly for
    reduced polynomial and small dense analytic problems. This should be treated
    as a local refinement/check on a reduced NEP, not as a replacement for the
    FEAST-style residual Laurent update. The polynomial reduced-companion path
-   now has an invariant-pair Newton rung. The generic analytic path has a
-   two-sided scalar Newton cleanup; a true analytic block/invariant-pair
-   refinement still needs divided differences or Fréchet derivatives of
-   `Tred(S)`.
-10. Next: formalize the role of local rational coordinates. The companion
-   problem suggests why finite polynomial problems behave better: the enlarged
-   linear state gives a global finite coordinate system. Analytic NEPs with
-   infinitely many roots need local finite realizations, so nested contours or
-   rational bases may be the natural replacement for one global companion.
+   now has an invariant-pair Newton rung. The generic analytic path has both a
+   two-sided scalar Newton cleanup and a true contour-residual invariant-pair
+   Newton prototype. The analytic block step is useful as a local check, but the
+   current boundary diagnostic rules it out as a large-chart retention/update
+   mechanism.
+10. Done for the first exponential control: formalize the role of local rational
+   coordinates. The companion problem suggests why finite polynomial problems
+   behave better: the enlarged linear state gives a global finite coordinate
+   system. Analytic NEPs with infinitely many roots need local finite
+   realizations, so nested contours or rational bases may be the natural
+   replacement for one global companion. The first rational-coordinate boundary
+   diagnostic says inverse/Möbius moment coordinates are useful probes but not a
+   clean replacement for Loewner/local-chart realization on an oversized global
+   analytic chart.
 11. Later: add invariant-pair deflation after roots or clusters are reliable
    enough that reconvergence is the actual problem. Treat scalar residual-based
    deflation as a fallback, not the main method.
