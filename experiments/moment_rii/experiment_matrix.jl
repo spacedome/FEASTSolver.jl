@@ -1846,6 +1846,57 @@ function run_count_driven_radius_ladder(;
     )
 end
 
+function run_count_driven_policy_diagnostic(;
+    outer_center=0.0 + 0.0im,
+    outer_radius,
+    match_atol=1e-6,
+    print_rows=true,
+    diagnostic_label="policy diagnostic",
+    kwargs...,
+)
+    result = run_count_driven_adaptive_grid_refinement(;
+        outer_center=outer_center,
+        outer_radius=outer_radius,
+        match_atol=match_atol,
+        print_rows=print_rows,
+        kwargs...,
+    )
+    diagnostic = count_driven_chart_diagnostic_summary(
+        result;
+        outer_center=outer_center,
+        outer_radius=outer_radius,
+        match_atol=match_atol,
+    )
+    if print_rows
+        println("  $diagnostic_label:")
+        @printf(
+            "    base union=%d retained=%d weak=%d count_warnings=%d max_count_error=%.3e target=%d\n",
+            diagnostic.base.union_good,
+            diagnostic.base.retained,
+            diagnostic.base.weak_inside_clusters,
+            diagnostic.base.selected_count_error_bad,
+            diagnostic.base.max_selected_count_error,
+            result.count.count_estimate,
+        )
+        @printf(
+            "    final union=%d retained=%d weak=%d count_warnings=%d\n",
+            diagnostic.final.union_good,
+            diagnostic.final.retained,
+            diagnostic.final.weak_inside_clusters,
+            diagnostic.final.selected_count_error_bad,
+        )
+    end
+    (
+        result=result,
+        diagnostic=diagnostic,
+        rows=result.rows,
+        count=result.count,
+        stop_reason=result.stop_reason,
+        algebraic_retained_count=result.algebraic_retained_count,
+        added_centers=result.added_centers,
+    )
+end
+
 function run_canonical_nlfeast_limit_diagnostic(;
     center=0.0 + 0.0im,
     radius=1.2,
@@ -2287,7 +2338,7 @@ function run_coupled_two_delay_mixed_policy_stress(;
     match_atol=1e-6,
     print_rows=true,
 )
-    result = run_count_driven_adaptive_grid_refinement(;
+    run_count_driven_policy_diagnostic(;
         label="Coupled two-delay mixed policy stress",
         cases=coupled_two_delay_cases(),
         outer_radius=outer_radius,
@@ -2309,38 +2360,7 @@ function run_coupled_two_delay_mixed_policy_stress(;
         residual_tol=residual_tol,
         match_atol=match_atol,
         print_rows=print_rows,
-    )
-    diagnostic = count_driven_chart_diagnostic_summary(
-        result;
-        outer_radius=outer_radius,
-        match_atol=match_atol,
-    )
-    if print_rows
-        println("  mixed diagnostic:")
-        @printf(
-            "    base union=%d retained=%d weak=%d count_warnings=%d max_count_error=%.3e\n",
-            diagnostic.base.union_good,
-            diagnostic.base.retained,
-            diagnostic.base.weak_inside_clusters,
-            diagnostic.base.selected_count_error_bad,
-            diagnostic.base.max_selected_count_error,
-        )
-        @printf(
-            "    final union=%d retained=%d weak=%d count_warnings=%d\n",
-            diagnostic.final.union_good,
-            diagnostic.final.retained,
-            diagnostic.final.weak_inside_clusters,
-            diagnostic.final.selected_count_error_bad,
-        )
-    end
-    (
-        result=result,
-        diagnostic=diagnostic,
-        rows=result.rows,
-        count=result.count,
-        stop_reason=result.stop_reason,
-        algebraic_retained_count=result.algebraic_retained_count,
-        added_centers=result.added_centers,
+        diagnostic_label="mixed diagnostic",
     )
 end
 
@@ -2354,7 +2374,7 @@ function run_dense_multi_delay_weak_support_stress(;
     match_atol=1e-6,
     print_rows=true,
 )
-    result = run_count_driven_adaptive_grid_refinement(;
+    run_count_driven_policy_diagnostic(;
         label="Dense multi-delay weak-support stress",
         cases=dense_multi_delay_cases(),
         outer_radius=outer_radius,
@@ -2376,36 +2396,7 @@ function run_dense_multi_delay_weak_support_stress(;
         residual_tol=residual_tol,
         match_atol=match_atol,
         print_rows=print_rows,
-    )
-    diagnostic = count_driven_chart_diagnostic_summary(
-        result;
-        outer_radius=outer_radius,
-        match_atol=match_atol,
-    )
-    if print_rows
-        println("  dense diagnostic:")
-        @printf(
-            "    base union=%d retained=%d weak=%d target=%d\n",
-            diagnostic.base.union_good,
-            diagnostic.base.retained,
-            diagnostic.base.weak_inside_clusters,
-            result.count.count_estimate,
-        )
-        @printf(
-            "    final union=%d retained=%d weak=%d\n",
-            diagnostic.final.union_good,
-            diagnostic.final.retained,
-            diagnostic.final.weak_inside_clusters,
-        )
-    end
-    (
-        result=result,
-        diagnostic=diagnostic,
-        rows=result.rows,
-        count=result.count,
-        stop_reason=result.stop_reason,
-        algebraic_retained_count=result.algebraic_retained_count,
-        added_centers=result.added_centers,
+        diagnostic_label="dense diagnostic",
     )
 end
 
