@@ -966,3 +966,64 @@ Interpretation:
   exact roots. Thus Loewner/SS are interchangeable extractor coordinates in
   this small solve, while the left/right Petrov-Galerkin condition remains
   non-negotiable.
+
+## Broader Adjacent Contour-Iteration Search, 2026-05-03
+
+Search scope: `"nonlinear FEAST" "higher moments"`, `"residual inverse"
+"Sakurai" "nonlinear eigenvalue"`, `"contour integral" "Newton" "nonlinear
+eigenvalue" "Beyn"`, `"Rayleigh-Ritz" "contour integral" "nonlinear
+eigenvalue" "residual"`, and follow-up searches for the recent
+region-partitioning and infinite-GMRES contour papers.
+
+Findings:
+
+- **Contour invariant pairs.** A contour integral approach to invariant pairs
+  adapts Sakurai--Sugiura moments to matrix polynomial invariant pairs and
+  studies Newton refinement, multiplicities, and the relation to linearization.
+  This is close to our earlier invariant-pair experiments and supports the
+  view that block/invariant-pair Newton is a reduced cleanup or escalation
+  rung. It does not appear to provide a FEAST-style residual Laurent update of
+  physical left/right spaces. DOI: <https://doi.org/10.1016/j.tcs.2017.03.024>.
+- **Resolvent sampling Rayleigh--Ritz.** RSRR constructs an approximate
+  eigenspace from resolvent samples on the contour and applies Rayleigh--Ritz,
+  explicitly aiming to avoid unreliability from high-order moments. This is an
+  important warning for global monomial Hankel charts and supports our local
+  chart/Loewner stance. It is still an extraction/projection method, not a
+  residual-space iteration. DOI: <https://doi.org/10.1016/j.cma.2016.06.018>.
+- **Riesz projection / weighted contour methods.** Riesz-projection methods
+  process contour-integral information with application-dependent weights and
+  small nonlinear systems to prioritize physically relevant eigenpairs. These
+  are relevant to future retention/scoring policies but not the finite
+  realization residual update. DOI: <https://doi.org/10.1016/j.jcp.2020.109678>.
+- **Region partitioning.** A 2026 Numerical Linear Algebra with Applications
+  paper combines Beyn's method with recursive integral/region partitioning to
+  improve robustness for regions with many eigenvalues, singularities, or
+  accumulation behavior. This is adjacent to our chart policy/radius-ladder
+  work, but it is a region-selection wrapper around Beyn-style extraction, not
+  an NLFEAST moment update. DOI: <https://doi.org/10.1002/nla.70072>.
+- **Infinite-GMRES contour solves.** The 2025 SIAM SISC paper on improving
+  contour-integral NEP solvers with infinite GMRES addresses the linear-system
+  bottleneck and memory footprint by avoiding costly factorizations at every
+  quadrature node. This is directly relevant to future sparse/distributed
+  implementation rungs, but it does not change the extraction/update geometry.
+  DOI: <https://doi.org/10.1137/24M1650375>.
+- **Algebraic multiplicity by contour counts.** Numerical contour methods for
+  algebraic multiplicity in NEPs support the experiment's choice to separate
+  geometric retained values from algebraic contour counts and to use local
+  counts as an escalation rung rather than forcing duplicate Ritz values. DOI:
+  <https://doi.org/10.1016/j.amc.2015.09.024>.
+
+Interpretation:
+
+- The literature contains three neighboring families: extraction/projection
+  methods (Beyn, SS, Loewner, RSRR, Riesz projection), chart/region selection
+  methods (partitioning/RIM-style), and local refinement methods (Newton,
+  invariant-pair refinement, residual inverse iteration).
+- The current experiment is best understood as an explicit composition of
+  those families in FEAST language: local dual realization extraction, then
+  residual-inverse Laurent repair of the physical trial/test spaces, then
+  count/support/agreement chart policy.
+- This pass still did not find a published method that iterates a finite
+  two-sided contour realization by low-rank residual Laurent moments. That is
+  not a novelty claim yet, but it narrows what a publication-level review must
+  check.
