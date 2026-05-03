@@ -243,11 +243,12 @@ that setting.
   observable physical realization than scalar expanded RII, which fails. The
   diagnostic now returns an explicit efficiency scorecard: candidate columns
   saved, candidate-column ratios, basis-size gains, low residual-rank
-  completeness, and a flag showing scalar-expanded RII is worse despite using
-  more candidate columns. This is evidence about the update geometry, not only
-  allocation count: scalar-expanded RII fixes a bad scalar gauge for the finite
-  realization, while residual-Laurent repair acts on the low-rank physical
-  residual subspace.
+  completeness, residual improvement above `1e8`, and a flag showing
+  scalar-expanded RII is worse despite using more candidate columns. This is
+  evidence about the update geometry, not only allocation count:
+  scalar-expanded RII fixes a bad scalar gauge for the finite realization,
+  while residual-Laurent repair acts on the low-rank physical residual
+  subspace.
 - Low-rank residual-basis equivalence: on the same analytic chart, compressing
   residual directions reduces the residual rank and candidate columns while
   preserving the updated right/left physical spaces to roundoff projection

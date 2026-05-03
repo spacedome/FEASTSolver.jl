@@ -1427,6 +1427,7 @@ end
     @test result.compressed_updated.right_basis_cols > result.scalar_updated.right_basis_cols
     @test result.efficiency.right_candidate_saved > 0
     @test result.efficiency.left_candidate_saved > 0
+    @test result.efficiency.residual_improvement >= 1e8
     @test result.efficiency.right_candidate_ratio < 1
     @test result.efficiency.left_candidate_ratio < 1
     @test result.efficiency.right_basis_gain > 0

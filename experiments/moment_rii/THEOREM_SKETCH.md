@@ -89,6 +89,12 @@ right/left subspace projection gaps are near roundoff before the update, but
 the physical residuals improve by more than `1e4` after one residual-Laurent
 enrichment and re-extraction.
 
+The rank-deficient analytic compression diagnostic pins the same behavior in
+the nonlinear setting: initial extraction has residuals of order one and no
+accepted roots, while one compressed residual-Laurent enrichment improves the
+residual scale by more than `1e8` and recovers the full target set. This is the
+main numerical clue for the analytic local correction estimate.
+
 ## Proof Skeleton
 
 1. **Realization layer.** Use Keldysh plus contour integration to show positive

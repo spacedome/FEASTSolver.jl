@@ -4633,6 +4633,7 @@ function run_residual_laurent_compression_diagnostic(;
     scalar_initial = scalar.summaries[1]
     scalar_updated = scalar.summaries[end]
     efficiency = (
+        residual_improvement=compressed_initial.max_residual / max(compressed_updated.max_residual, eps(Float64)),
         right_candidate_saved=scalar_updated.right_candidate_cols - compressed_updated.right_candidate_cols,
         left_candidate_saved=scalar_updated.left_candidate_cols - compressed_updated.left_candidate_cols,
         right_candidate_ratio=compressed_updated.right_candidate_cols / max(scalar_updated.right_candidate_cols, 1),
@@ -4650,12 +4651,14 @@ function run_residual_laurent_compression_diagnostic(;
         println("Residual Laurent compression diagnostic")
         println("  compares moment-realization update with scalar expanded RII on the same rank-deficient analytic chart")
         @printf(
-            "  initial inside=%d good=%d max=%.3e; compressed matched=%d/%d candidates=(%d,%d) basis=(%d,%d) residual_rank=(%d,%d); scalar matched=%d/%d candidates=(%d,%d) basis=(%d,%d) residual_rank=(%d,%d)\n",
+        "  initial inside=%d good=%d max=%.3e; compressed matched=%d/%d max=%.3e improvement=%.3e candidates=(%d,%d) basis=(%d,%d) residual_rank=(%d,%d); scalar matched=%d/%d candidates=(%d,%d) basis=(%d,%d) residual_rank=(%d,%d)\n",
             compressed_initial.inside,
             compressed_initial.good,
             compressed_initial.max_residual,
             compressed_updated.matched,
             length(compressed.expected),
+            compressed_updated.max_residual,
+            efficiency.residual_improvement,
             compressed_updated.right_candidate_cols,
             compressed_updated.left_candidate_cols,
             compressed_updated.right_basis_cols,
