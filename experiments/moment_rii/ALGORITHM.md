@@ -293,6 +293,17 @@ The next concrete steps are:
    the expected basis/gauge transformations. This directly tests the original
    motivation: the inner reduced contour solve is wasted information.
 
+   Current status: `run_fused_contour_sample_realization_diagnostic` pins the
+   first version on a diagonal sine/cosine/shifted-sine chart with eight roots
+   in a three-dimensional physical problem. The fused projected Hankel path
+   recovers all eight roots from the original contour samples, and the
+   redundant path that forms `Tred` and performs an inner reduced SS contour
+   extraction recovers the same set. The focused test is:
+
+   ```text
+   just test --slow 'fused contour samples'
+   ```
+
 3. **Make extraction linear by construction.** The extractor should consume a
    small moment/Loewner sequence and return a small linear pencil or equivalent
    finite realization. Direct solution of `Y^H T(lambda) X` should be a

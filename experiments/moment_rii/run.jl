@@ -2517,6 +2517,149 @@ function reduced_analytic_ss_extraction(
     )
 end
 
+function run_fused_contour_sample_realization_diagnostic(;
+    center=0.0 + 0.0im,
+    radius=4.0,
+    basis_nodes=256,
+    moment_count=5,
+    seed=20260503,
+    ranktol=1e-10,
+    basis_ranktol=0.1,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    cases = (scalar_sine_case(), scalar_cosine_case(), scalar_shifted_sine_case())
+    expected = sorted_unique_values(
+        reduce(vcat, (case.roots(center, radius) for case in cases));
+        atol=match_atol,
+    )
+    n = length(cases)
+
+    function Tmatrix(z)
+        Diagonal(ComplexF64[case.f(z) for case in cases])
+    end
+    function Tderivative(z)
+        Diagonal(ComplexF64[case.df(z) for case in cases])
+    end
+    function Tsolve(z, B)
+        denom = ComplexF64[case.f(z) for case in cases]
+        B ./ denom
+    end
+    function Tadjoint_solve(z, B)
+        denom = conj.(ComplexF64[case.f(z) for case in cases])
+        B ./ denom
+    end
+
+    Random.seed!(seed)
+    Xprobe = rand(ComplexF64, n, n)
+    Wprobe = rand(ComplexF64, n, n)
+    z_nodes, z_weights = circular_rule(center, radius, basis_nodes)
+
+    # One original contour-sample set supplies both the physical moments and
+    # the small projected transfer moments W' T(z)^(-1) Xprobe.
+    right_moments = initial_moments_generic_scaled(
+        Tsolve,
+        Xprobe,
+        z_nodes,
+        z_weights,
+        center,
+        radius,
+        moment_count,
+    )
+    left_moments = initial_adjoint_moments_generic_scaled(
+        Tadjoint_solve,
+        Wprobe,
+        z_nodes,
+        z_weights,
+        center,
+        radius,
+        moment_count,
+    )
+
+    Xfused, Sfused, fused_rank, fused_singulars = projected_hankel_pair_identity(
+        right_moments,
+        Wprobe,
+        moment_count;
+        ranktol=ranktol,
+        maxrank=length(expected),
+    )
+    Ffused = eigen(Sfused)
+    fused_values = center .+ radius .* ComplexF64.(Ffused.values)
+    fused_vectors = Xfused * Ffused.vectors
+    normalize_columns_local!(fused_vectors)
+    fused_residuals = matrix_vector_residuals(Tmatrix, fused_values, fused_vectors)
+    fused_inside = FEASTSolver.in_contour(fused_values, center, radius)
+    fused_good = fused_inside .& (fused_residuals .<= residual_tol)
+    fused_matched = match_expected_count(fused_values[fused_good], expected; atol=match_atol)
+
+    # Redundant path: build physical trial/test spaces, then resample and solve
+    # the projected nonlinear problem with an inner SS contour extraction.
+    Xbasis, right_singulars = moment_block_basis(right_moments, moment_count; ranktol=basis_ranktol)
+    Ybasis, left_singulars = moment_block_basis(left_moments, moment_count; ranktol=basis_ranktol)
+    d = min(size(Xbasis, 2), size(Ybasis, 2))
+    old = reduced_analytic_ss_extraction(
+        Tmatrix,
+        Tderivative,
+        Xbasis[:, 1:d],
+        Ybasis[:, 1:d],
+        center,
+        radius;
+        reduced_moments=moment_count,
+        reduced_nodes=basis_nodes,
+        ranktol=ranktol,
+        maxrank=length(expected),
+        count_estimate=length(expected),
+        residual_normalization=:operator,
+        refinement=:none,
+    )
+    old_good = old.inside .& (old.residuals .<= residual_tol)
+    old_matched = match_expected_count(old.values[old_good], expected; atol=match_atol)
+    cross_match = match_expected_count(fused_values[fused_good], old.values[old_good]; atol=match_atol)
+
+    if print_rows
+        println("Fused contour-sample realization diagnostic")
+        println("  problem=sin/cos/shifted-sin diagonal; center=$center radius=$radius")
+        println("  compares one original contour sample cache against redundant inner reduced SS")
+        @printf(
+            "  expected=%d fused(rank=%d good=%d matched=%d maxres=%.3e) old(good=%d matched=%d maxres=%.3e) cross=%d\n",
+            length(expected),
+            fused_rank,
+            count(fused_good),
+            fused_matched,
+            any(fused_good) ? maximum(fused_residuals[fused_good]) : Inf,
+            count(old_good),
+            old_matched,
+            any(old_good) ? maximum(old.residuals[old_good]) : Inf,
+            cross_match,
+        )
+        @printf(
+            "  basis_dims=(%d,%d) basis_sigma=(%.3e, %.3e) fused_sigma=%.3e\n",
+            size(Xbasis, 2),
+            size(Ybasis, 2),
+            isempty(right_singulars) ? NaN : right_singulars[end] / right_singulars[1],
+            isempty(left_singulars) ? NaN : left_singulars[end] / left_singulars[1],
+            isempty(fused_singulars) ? NaN : fused_singulars[min(end, fused_rank)] / fused_singulars[1],
+        )
+    end
+
+    (
+        expected=length(expected),
+        fused_values=fused_values,
+        fused_residuals=fused_residuals,
+        fused_good=count(fused_good),
+        fused_matched=fused_matched,
+        fused_rank=fused_rank,
+        old_values=old.values,
+        old_residuals=old.residuals,
+        old_good=count(old_good),
+        old_matched=old_matched,
+        cross_match=cross_match,
+        basis_dims=(right=size(Xbasis, 2), left=size(Ybasis, 2)),
+        fused_singulars=Float64.(fused_singulars),
+    )
+end
+
 function loewner_interpolation_points(count; radius=1.6, phase=0.0)
     ComplexF64[radius * exp(im * (phase + 2pi * (j - 1) / count)) for j in 1:count]
 end

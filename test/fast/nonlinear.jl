@@ -63,6 +63,20 @@ end
     @test result.history[end].rank == length(expected)
 end
 
+@testitem "experimental moment RII: fused contour samples replace inner reduced SS" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_fused_contour_sample_realization_diagnostic(; print_rows=false)
+
+    @test result.expected > result.basis_dims.right
+    @test result.fused_rank == result.expected
+    @test result.fused_good == result.expected
+    @test result.fused_matched == result.expected
+    @test result.old_matched == result.expected
+    @test result.cross_match == result.expected
+    @test maximum(result.fused_residuals) <= 1e-8
+end
+
 @testitem "experimental moment RII: retention policy exposes acceptance contract" begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 

@@ -40,6 +40,7 @@ function apply_test_preset(
     if name == "moment-core"
         filter = Regex(
             "linear SS-FEAST|dual linear RII|polynomial bridge agrees|dual reduced extraction|" *
+            "fused contour samples|" *
             "agrees across extractors without root oracle|canonical NLFEAST limit|" *
             "residual Laurent update|low-rank compression preserves update|" *
             "scalar Laurent truncation alone|positive moments expose",
