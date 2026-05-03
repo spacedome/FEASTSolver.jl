@@ -225,6 +225,13 @@ function supported_cluster_values(clusters; min_support=2)
     ComplexF64[cluster.value for cluster in clusters if cluster.support >= min_support]
 end
 
+function globally_supported_cluster_values(clusters, center, radius; min_support=2, boundary_margin=0.0)
+    ComplexF64[
+        cluster.value for cluster in clusters
+        if cluster.support >= min_support && abs(cluster.value - center) <= radius + boundary_margin
+    ]
+end
+
 function support_sweep_counts(result; max_support=5, atol=1e-6)
     [
         (

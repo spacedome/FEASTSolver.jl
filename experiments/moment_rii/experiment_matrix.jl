@@ -694,6 +694,343 @@ function run_exponential_hankel_variant_sweep(;
     rows
 end
 
+function loewner_sweep_row(label, phase, rho, stage, extraction, expected; residual_tol, match_atol, notes="")
+    summary = dual_scalar_rii_summary(extraction, expected; residual_tol=residual_tol, match_atol=match_atol)
+    good = extraction.inside .& (extraction.residuals .<= residual_tol)
+    singular_ratio = hasproperty(extraction, :singular_values) && !isempty(extraction.singular_values) ?
+        extraction.singular_values[min(length(extraction.singular_values), max(summary.inside, 1))] / extraction.singular_values[1] : NaN
+    (
+        label=String(label),
+        phase=Float64(phase),
+        rho=Float64(rho),
+        stage=stage,
+        expected=length(expected),
+        inside=summary.inside,
+        good=summary.good,
+        matched=summary.matched,
+        spurious=summary.spurious_good,
+        max_residual=summary.max_residual,
+        nearest_expected=nearest_expected_distance(ComplexF64.(extraction.values[good]), expected),
+        count_estimate=hasproperty(extraction, :count_estimate) ? extraction.count_estimate : length(extraction.values),
+        singular_ratio=singular_ratio,
+        success=summary.matched == length(expected) && summary.spurious_good == 0,
+        notes=notes,
+    )
+end
+
+function loewner_layout_entries(extraction, rho, phase; residual_tol)
+    extraction === nothing && return NamedTuple[]
+    good = extraction.inside .& (extraction.residuals .<= residual_tol)
+    layout_id = ComplexF64(rho, phase)
+    [
+        (
+            value=ComplexF64(extraction.values[j]),
+            residual=Float64(extraction.residuals[j]),
+            right_residual=Float64(extraction.right_residuals[j]),
+            left_residual=Float64(extraction.left_residuals[j]),
+            center=layout_id,
+            radius=Float64(rho),
+            phase=Float64(phase),
+        )
+        for j in eachindex(extraction.values) if good[j]
+    ]
+end
+
+function loewner_layout_clusters(entries; atol=1e-6)
+    raw_clusters = Vector{Vector{Any}}()
+    for entry in entries
+        index = findfirst(cluster -> minimum(abs.(entry.value .- [item.value for item in cluster])) <= atol, raw_clusters)
+        if index === nothing
+            push!(raw_clusters, Any[entry])
+        else
+            push!(raw_clusters[index], entry)
+        end
+    end
+    map(raw_clusters) do cluster
+        centers = unique_values([entry.center for entry in cluster]; atol=0.0)
+        values = [entry.value for entry in cluster]
+        residuals = [entry.residual for entry in cluster]
+        (
+            value=sum(values) / length(values),
+            support=length(centers),
+            observations=length(cluster),
+            best_residual=minimum(residuals),
+            spread=maximum(abs.(values .- (sum(values) / length(values)))),
+        )
+    end
+end
+
+function loewner_supported_cluster_values(clusters; min_support=2)
+    ComplexF64[cluster.value for cluster in clusters if cluster.support >= min_support]
+end
+
+function loewner_layout_support_summary(entries, expected; match_atol, max_support=6)
+    clusters = loewner_layout_clusters(entries; atol=match_atol)
+    [
+        (
+            support=support,
+            count=length(loewner_supported_cluster_values(clusters; min_support=support)),
+            matched=match_expected_count(loewner_supported_cluster_values(clusters; min_support=support), expected; atol=match_atol),
+            spurious=max(
+                length(loewner_supported_cluster_values(clusters; min_support=support)) -
+                match_expected_count(loewner_supported_cluster_values(clusters; min_support=support), expected; atol=match_atol),
+                0,
+            ),
+        )
+        for support in 1:min(max_support, length(unique_values([entry.center for entry in entries]; atol=0.0)))
+    ]
+end
+
+function print_loewner_layout_support(label, summaries)
+    isempty(summaries) && return
+    println("  layout support $(label):")
+    for row in summaries
+        @printf(
+            "    support>=%d count=%d matched=%d spurious=%d\n",
+            row.support,
+            row.count,
+            row.matched,
+            row.spurious,
+        )
+    end
+end
+
+function print_loewner_interpolation_sweep(rows; initial_support=NamedTuple[], updated_support=NamedTuple[])
+    println()
+    println("Loewner interpolation-point sweep")
+    println("  same reduced NEP and trial spaces; varies outside-circle interpolation radius/phase")
+    @printf(
+        "  %-18s %-10s %6s %7s %8s %8s %8s %8s %10s %10s %10s  %s\n",
+        "case",
+        "stage",
+        "rho",
+        "phase",
+        "matched",
+        "good",
+        "inside",
+        "spurious",
+        "max_res",
+        "near",
+        "sigma",
+        "notes",
+    )
+    for row in rows
+        max_text = isfinite(row.max_residual) ? @sprintf("%.2e", row.max_residual) : string(row.max_residual)
+        near_text = isfinite(row.nearest_expected) ? @sprintf("%.2e", row.nearest_expected) : string(row.nearest_expected)
+        sigma_text = isfinite(row.singular_ratio) ? @sprintf("%.2e", row.singular_ratio) : string(row.singular_ratio)
+        matched_text = @sprintf("%d/%d", row.matched, row.expected)
+        @printf(
+            "  %-18s %-10s %6.2f %7.3f %8s %8d %8d %8d %10s %10s %10s  %s %s\n",
+            row.label,
+            string(row.stage),
+            row.rho,
+            row.phase,
+            matched_text,
+            row.good,
+            row.inside,
+            row.spurious,
+            max_text,
+            near_text,
+            sigma_text,
+            row.success ? "ok" : "check",
+            row.notes,
+        )
+    end
+    print_loewner_layout_support("initial", initial_support)
+    print_loewner_layout_support("updated", updated_support)
+end
+
+function run_loewner_interpolation_sweep(;
+    radii=(1.15, 1.3, 1.6, 2.0),
+    phase_fractions=(0.0, 0.125, 0.25, 0.375),
+    loewner_points=6,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    # The hard exponential global chart is where interpolation placement matters most.
+    ctx, chart, trial = exponential_hankel_sweep_trial(; component_scaling=:none)
+    expected = ctx.expected
+    rows = NamedTuple[]
+    initial_entries = NamedTuple[]
+    updated_entries = NamedTuple[]
+    initial_best = nothing
+    initial_best_score = (-1, -1, Inf)
+    for rho in radii, fraction in phase_fractions
+        phase = 2pi * fraction / loewner_points
+        config = ReducedExtractorConfig(
+            extractor=:loewner_counted,
+            determinant_nodes=768,
+            determinant_capacity=96,
+            reduced_moments=16,
+            reduced_nodes=768,
+            reduced_ranktol=1e-10,
+            loewner_points=loewner_points,
+            loewner_radius=rho,
+            loewner_phase=phase,
+            residual_normalization=:vector,
+        )
+        try
+            extraction = extract_reduced_nep(ctx, trial, chart, config)
+            append!(initial_entries, loewner_layout_entries(extraction, rho, phase; residual_tol=residual_tol))
+            row = loewner_sweep_row("exp_global", phase, rho, :initial, extraction, expected; residual_tol=residual_tol, match_atol=match_atol)
+            push!(rows, row)
+            score = (row.matched, -row.spurious, -row.max_residual)
+            if score > initial_best_score
+                initial_best = extraction
+                initial_best_score = score
+            end
+        catch err
+            push!(
+                rows,
+                (
+                    label="exp_global",
+                    phase=Float64(phase),
+                    rho=Float64(rho),
+                    stage=:initial,
+                    expected=length(expected),
+                    inside=0,
+                    good=0,
+                    matched=0,
+                    spurious=0,
+                    max_residual=Inf,
+                    nearest_expected=Inf,
+                    count_estimate=0,
+                    singular_ratio=NaN,
+                    success=false,
+                    notes="$(typeof(err)): $err",
+                ),
+            )
+        end
+    end
+    if initial_best !== nothing
+        update_config = ResidualUpdateConfig(moment_count=1, rii_nodes=128, residual_ranktol=1e-10, compression_ranktol=1e-10)
+        updated_trial, stats = residual_laurent_update(ctx, trial, initial_best, chart, update_config)
+        for rho in radii, fraction in phase_fractions
+            phase = 2pi * fraction / loewner_points
+            config = ReducedExtractorConfig(
+                extractor=:loewner_counted,
+                determinant_nodes=768,
+                determinant_capacity=96,
+                reduced_moments=16,
+                reduced_nodes=768,
+                reduced_ranktol=1e-10,
+                loewner_points=loewner_points,
+                loewner_radius=rho,
+                loewner_phase=phase,
+                residual_normalization=:vector,
+            )
+            try
+                extraction = extract_reduced_nep(ctx, updated_trial, chart, config)
+                append!(updated_entries, loewner_layout_entries(extraction, rho, phase; residual_tol=residual_tol))
+                push!(
+                    rows,
+                    loewner_sweep_row(
+                        "exp_global",
+                        phase,
+                        rho,
+                        :updated,
+                        extraction,
+                        expected;
+                        residual_tol=residual_tol,
+                        match_atol=match_atol,
+                        notes=@sprintf("residual ranks=(%d,%d)", stats.right_residual_rank, stats.left_residual_rank),
+                    ),
+                )
+            catch err
+                push!(
+                    rows,
+                    (
+                        label="exp_global",
+                        phase=Float64(phase),
+                        rho=Float64(rho),
+                        stage=:updated,
+                        expected=length(expected),
+                        inside=0,
+                        good=0,
+                        matched=0,
+                        spurious=0,
+                        max_residual=Inf,
+                        nearest_expected=Inf,
+                        count_estimate=0,
+                        singular_ratio=NaN,
+                        success=false,
+                        notes="$(typeof(err)): $err",
+                    ),
+                )
+            end
+        end
+    end
+    initial_support = loewner_layout_support_summary(initial_entries, expected; match_atol=match_atol)
+    updated_support = loewner_layout_support_summary(updated_entries, expected; match_atol=match_atol)
+    print_rows && print_loewner_interpolation_sweep(rows; initial_support=initial_support, updated_support=updated_support)
+    (rows=rows, initial_support=initial_support, updated_support=updated_support)
+end
+
+function run_global_loewner_interior_artifact_diagnostic(;
+    radii=(1.15, 1.3, 1.6),
+    phase_fractions=(0.0, 0.25),
+    loewner_points=6,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    result = run_loewner_interpolation_sweep(;
+        radii=radii,
+        phase_fractions=phase_fractions,
+        loewner_points=loewner_points,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=false,
+    )
+    bad_rows = [row for row in result.rows if row.good > 0 && row.spurious > 0]
+    support1_initial = result.initial_support[1]
+    support2_initial = result.initial_support[2]
+    support1_updated = result.updated_support[1]
+    support2_updated = result.updated_support[2]
+    summary = (
+        expected=support2_updated.matched,
+        layouts=length(radii) * length(phase_fractions),
+        bad_single_layouts=length(bad_rows),
+        worst_nearest_expected=isempty(bad_rows) ? 0.0 : maximum(row.nearest_expected for row in bad_rows),
+        worst_bad_residual=isempty(bad_rows) ? 0.0 : maximum(row.max_residual for row in bad_rows),
+        worst_bad_singular_ratio=isempty(bad_rows) ? 0.0 : maximum(row.singular_ratio for row in bad_rows),
+        initial_support1_spurious=support1_initial.spurious,
+        initial_support2_spurious=support2_initial.spurious,
+        updated_support1_spurious=support1_updated.spurious,
+        updated_support2_spurious=support2_updated.spurious,
+        updated_support2_matched=support2_updated.matched,
+        updated_support2_count=support2_updated.count,
+        support2_prunes_artifacts=support2_initial.spurious == 0 &&
+            support2_updated.spurious == 0 &&
+            support2_updated.matched == support2_updated.count,
+    )
+    if print_rows
+        println()
+        println("Global Loewner in-target artifact diagnostic")
+        println("  one oversized chart; residual-small values are already inside the target contour")
+        @printf(
+            "  layouts=%d bad_single_layouts=%d worst_nearest=%.3e worst_residual=%.3e worst_sigma=%.3e\n",
+            summary.layouts,
+            summary.bad_single_layouts,
+            summary.worst_nearest_expected,
+            summary.worst_bad_residual,
+            summary.worst_bad_singular_ratio,
+        )
+        @printf(
+            "  support initial: s1 spurious=%d s2 spurious=%d; updated: s1 spurious=%d s2=%d/%d spurious=%d status=%s\n",
+            summary.initial_support1_spurious,
+            summary.initial_support2_spurious,
+            summary.updated_support1_spurious,
+            summary.updated_support2_matched,
+            summary.updated_support2_count,
+            summary.updated_support2_spurious,
+            summary.support2_prunes_artifacts ? "ok" : "check",
+        )
+    end
+    (result=result, bad_rows=bad_rows, summary=summary)
+end
+
 function run_exponential_local_chart_diagnostic(;
     extractors=(:ss_counted, :loewner_counted),
     radii=(1.2, 2.0),
@@ -756,6 +1093,972 @@ function run_exponential_local_chart_diagnostic(;
         end
     end
     rows
+end
+
+function run_exponential_local_chart_loewner_layout_sweep(;
+    loewner_radii=(1.15, 1.3, 1.6),
+    phase_fractions=(0.0, 0.25),
+    loewner_points=6,
+    chart_radii=(1.2, 2.0),
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    rows = NamedTuple[]
+    for rho in loewner_radii, fraction in phase_fractions
+        phase = 2pi * fraction / loewner_points
+        result = run_dual_local_chart_sweep_analytic(;
+            cases=exponential_many_root_cases(),
+            outer_radius=10.0,
+            radii=chart_radii,
+            iterations=1,
+            basis_moments=4,
+            basis_nodes=16,
+            rii_nodes=128,
+            basis_ranktol=1e-8,
+            determinant_nodes=512,
+            determinant_capacity=32,
+            extractor=:loewner_counted,
+            reduced_moments=8,
+            reduced_nodes=512,
+            reduced_ranktol=1e-10,
+            loewner_points=loewner_points,
+            loewner_radius=rho,
+            loewner_phase=phase,
+            residual_normalization=:vector,
+            component_scaling=:none,
+            residual_tol=residual_tol,
+            match_atol=match_atol,
+            print_charts=false,
+        )
+        support_rows = support_sweep_counts(result; atol=match_atol)
+        support1 = isempty(support_rows) ? (count=length(result.found), matched=result.matched) : support_rows[1]
+        support2 = length(support_rows) >= 2 ? support_rows[2] : (count=length(result.support2_found), matched=result.support2_matched)
+        push!(
+            rows,
+            (
+                rho=Float64(rho),
+                phase=Float64(phase),
+                expected=length(result.expected),
+                union=length(result.found),
+                union_matched=result.matched,
+                support1=support1.count,
+                support1_matched=support1.matched,
+                support2=support2.count,
+                support2_matched=support2.matched,
+                success=result.support2_matched == length(result.expected) && length(result.support2_found) == length(result.expected),
+            ),
+        )
+    end
+    if print_rows
+        println()
+        println("Exponential local-chart Loewner-layout sweep")
+        println("  supervised root-centered charts; varies Loewner outside interpolation layout inside each local chart")
+        @printf("  %6s %7s %8s %8s %10s %10s %8s\n", "rho", "phase", "union", "matched", "support2", "support2_ok", "status")
+        for row in rows
+            @printf(
+                "  %6.2f %7.3f %8d %4d/%-3d %8d %4d/%-5d %s\n",
+                row.rho,
+                row.phase,
+                row.union,
+                row.union_matched,
+                row.expected,
+                row.support2,
+                row.support2_matched,
+                row.expected,
+                row.success ? "ok" : "check",
+            )
+        end
+    end
+    rows
+end
+
+function run_exponential_grid_chart_loewner_spacing_sweep(;
+    spacings=(2.4, 1.8, 1.2),
+    loewner_radius=1.3,
+    loewner_phase=0.0,
+    loewner_points=6,
+    chart_radii=(1.2, 2.0),
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    rows = NamedTuple[]
+    for spacing in spacings
+        result = run_dual_grid_chart_cover_analytic(;
+            cases=exponential_many_root_cases(),
+            outer_radius=10.0,
+            spacing=spacing,
+            chart_radii=chart_radii,
+            iterations=1,
+            basis_moments=4,
+            basis_nodes=16,
+            rii_nodes=128,
+            basis_ranktol=1e-8,
+            determinant_nodes=512,
+            determinant_capacity=32,
+            extractor=:loewner_counted,
+            reduced_moments=8,
+            reduced_nodes=512,
+            reduced_ranktol=1e-10,
+            loewner_points=loewner_points,
+            loewner_radius=loewner_radius,
+            loewner_phase=loewner_phase,
+            residual_normalization=:vector,
+            component_scaling=:none,
+            residual_tol=residual_tol,
+            match_atol=match_atol,
+        )
+        support_rows = support_sweep_counts(result; atol=match_atol)
+        support1 = isempty(support_rows) ? (count=length(result.found), matched=result.matched) : support_rows[1]
+        support2 = length(support_rows) >= 2 ? support_rows[2] : (count=length(result.support2_found), matched=result.support2_matched)
+        support3 = length(support_rows) >= 3 ? support_rows[3] : (count=0, matched=0)
+        push!(
+            rows,
+            (
+                spacing=Float64(spacing),
+                centers=length(result.centers),
+                expected=length(result.expected),
+                union=length(result.found),
+                union_matched=result.matched,
+                support1=support1.count,
+                support1_matched=support1.matched,
+                support2=support2.count,
+                support2_matched=support2.matched,
+                support3=support3.count,
+                support3_matched=support3.matched,
+                success_union=result.matched == length(result.expected),
+                success_support2=result.support2_matched == length(result.expected) && length(result.support2_found) == length(result.expected),
+            ),
+        )
+    end
+    if print_rows
+        println()
+        println("Exponential grid-chart Loewner spacing sweep")
+        println("  unsupervised Cartesian grid centers; varies grid spacing while keeping local radii and Loewner layout fixed")
+        @printf(
+            "  %7s %8s %8s %8s %10s %10s %10s %8s\n",
+            "spacing",
+            "centers",
+            "union",
+            "matched",
+            "support2",
+            "support2_ok",
+            "support3_ok",
+            "status",
+        )
+        for row in rows
+            @printf(
+                "  %7.3f %8d %8d %4d/%-3d %8d %4d/%-5d %4d/%-5d %s\n",
+                row.spacing,
+                row.centers,
+                row.union,
+                row.union_matched,
+                row.expected,
+                row.support2,
+                row.support2_matched,
+                row.expected,
+                row.support3_matched,
+                row.expected,
+                row.success_union ? (row.success_support2 ? "ok" : "union-only") : "check",
+            )
+        end
+    end
+    rows
+end
+
+function adaptive_grid_refinement_row(stage, result, center_count, added_count; match_atol)
+    support_rows = support_sweep_counts(result; atol=match_atol)
+    support2 = length(support_rows) >= 2 ? support_rows[2] : (count=length(result.support2_found), matched=result.support2_matched)
+    support3 = length(support_rows) >= 3 ? support_rows[3] : (count=0, matched=0)
+    (
+        stage=stage,
+        centers=center_count,
+        added=added_count,
+        expected=length(result.expected),
+        union=length(result.found),
+        union_matched=result.matched,
+        support2=support2.count,
+        support2_matched=support2.matched,
+        support2_global=length(result.support2_global_found),
+        support2_global_matched=result.support2_global_matched,
+        support3=support3.count,
+        support3_matched=support3.matched,
+        success_support2=support2.matched == length(result.expected) && support2.count == length(result.expected),
+        success_support2_global=result.support2_global_matched == length(result.expected) &&
+            length(result.support2_global_found) == length(result.expected),
+    )
+end
+
+function run_adaptive_grid_loewner_refinement(;
+    label="Adaptive grid Loewner refinement",
+    cases=(scalar_sine_case(), scalar_cosine_case(), scalar_shifted_sine_case(), scalar_expm1_case()),
+    outer_center=0.0 + 0.0im,
+    outer_radius=10.0,
+    operator_builder=similarity_analytic_tools,
+    operator_label="similarity",
+    base_spacing=2.4,
+    target_support=2,
+    refinement_rounds=1,
+    loewner_radius=1.3,
+    loewner_phase=0.0,
+    loewner_points=6,
+    chart_radii=(1.2, 2.0),
+    iterations=1,
+    basis_moments=4,
+    basis_nodes=16,
+    rii_nodes=128,
+    basis_ranktol=1e-8,
+    determinant_nodes=512,
+    determinant_capacity=32,
+    extractor=:loewner_counted,
+    reduced_moments=8,
+    reduced_nodes=512,
+    reduced_ranktol=1e-10,
+    reduced_refinement=:none,
+    refinement_steps=4,
+    residual_normalization=:vector,
+    component_scaling=:none,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    refine_inside_target_only=true,
+    print_rows=true,
+)
+    centers = disk_grid_centers(outer_center, outer_radius, base_spacing)
+    results = Any[]
+    rows = NamedTuple[]
+    added_by_round = Vector{ComplexF64}[]
+
+    for round in 0:refinement_rounds
+        result = run_dual_local_chart_sweep_analytic(;
+            cases=cases,
+            outer_center=outer_center,
+            outer_radius=outer_radius,
+            operator_builder=operator_builder,
+            operator_label=operator_label,
+            centers=centers,
+            radii=chart_radii,
+            iterations=iterations,
+            basis_moments=basis_moments,
+            basis_nodes=basis_nodes,
+            rii_nodes=rii_nodes,
+            basis_ranktol=basis_ranktol,
+            determinant_nodes=determinant_nodes,
+            determinant_capacity=determinant_capacity,
+            extractor=extractor,
+            reduced_moments=reduced_moments,
+            reduced_nodes=reduced_nodes,
+            reduced_ranktol=reduced_ranktol,
+            reduced_refinement=reduced_refinement,
+            refinement_steps=refinement_steps,
+            loewner_points=loewner_points,
+            loewner_radius=loewner_radius,
+            loewner_phase=loewner_phase,
+            residual_normalization=residual_normalization,
+            component_scaling=component_scaling,
+            residual_tol=residual_tol,
+            match_atol=match_atol,
+            selection=:residual,
+            skip_empty_expected=false,
+            print_charts=false,
+        )
+        push!(results, result)
+        stage = round == 0 ? :base_grid : Symbol("candidate_refined_$round")
+        added_count = round == 0 ? 0 : length(added_by_round[end])
+        push!(rows, adaptive_grid_refinement_row(stage, result, length(centers), added_count; match_atol=match_atol))
+
+        round == refinement_rounds && break
+        weak_values = sorted_unique_values(
+            ComplexF64[cluster.value for cluster in result.support_clusters if cluster.support < target_support];
+            atol=match_atol,
+        )
+        if refine_inside_target_only
+            weak_values = ComplexF64[
+                value for value in weak_values
+                if abs(value - outer_center) <= outer_radius + 10 * match_atol
+            ]
+        end
+        added = ComplexF64[
+            value for value in weak_values if all(abs(value - center) > match_atol for center in centers)
+        ]
+        new_centers = sorted_unique_values(vcat(ComplexF64.(centers), added); atol=match_atol)
+        push!(added_by_round, ComplexF64.(added))
+        centers = new_centers
+        isempty(added) && break
+    end
+
+    if print_rows
+        println()
+        println(label)
+        println("  starts from a coarse grid, then adds residual-small weak-support candidate values as new chart centers")
+        @printf(
+            "  %-20s %8s %8s %8s %8s %10s %10s %12s %8s\n",
+            "stage",
+            "centers",
+            "added",
+            "union",
+            "matched",
+            "support2",
+            "support2_ok",
+            "global2_ok",
+            "status",
+        )
+        for row in rows
+            @printf(
+                "  %-20s %8d %8d %8d %4d/%-3d %8d %4d/%-5d %4d/%-7d %s\n",
+                string(row.stage),
+                row.centers,
+                row.added,
+                row.union,
+                row.union_matched,
+                row.expected,
+                row.support2,
+                row.support2_matched,
+                row.expected,
+                row.support2_global_matched,
+                row.expected,
+                row.success_support2_global ? "ok" : (row.success_support2 ? "supported-extra" : "check"),
+            )
+        end
+    end
+
+    (
+        rows=rows,
+        results=results,
+        base=first(results),
+        refined=last(results),
+        added_centers=isempty(added_by_round) ? ComplexF64[] : reduce(vcat, added_by_round),
+        added_by_round=added_by_round,
+    )
+end
+
+function run_exponential_adaptive_grid_loewner_refinement(;
+    base_spacing=2.4,
+    target_support=2,
+    loewner_radius=1.3,
+    loewner_phase=0.0,
+    loewner_points=6,
+    chart_radii=(1.2, 2.0),
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    run_adaptive_grid_loewner_refinement(;
+        label="Exponential adaptive grid Loewner refinement",
+        cases=exponential_many_root_cases(),
+        outer_radius=10.0,
+        base_spacing=base_spacing,
+        target_support=target_support,
+        refinement_rounds=1,
+        loewner_radius=loewner_radius,
+        loewner_phase=loewner_phase,
+        loewner_points=loewner_points,
+        chart_radii=chart_radii,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=print_rows,
+    )
+end
+
+function run_triangular_adaptive_grid_loewner_refinement(;
+    coupling=10.0,
+    outer_radius=6.0,
+    base_spacing=2.4,
+    target_support=2,
+    refinement_rounds=2,
+    chart_radii=(1.2, 1.8),
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    run_adaptive_grid_loewner_refinement(;
+        label="Triangular adaptive grid Loewner refinement",
+        outer_radius=outer_radius,
+        operator_builder=triangular_operator_builder(; coupling=coupling),
+        operator_label="triangular(coupling=$coupling)",
+        base_spacing=base_spacing,
+        target_support=target_support,
+        refinement_rounds=refinement_rounds,
+        chart_radii=chart_radii,
+        iterations=2,
+        basis_nodes=24,
+        rii_nodes=128,
+        determinant_nodes=256,
+        determinant_capacity=96,
+        reduced_nodes=256,
+        residual_normalization=:operator,
+        component_scaling=:contour_max,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=print_rows,
+    )
+end
+
+function run_three_function_adaptive_grid_loewner_refinement(;
+    outer_radius=20.0,
+    base_spacing=3.0,
+    target_support=2,
+    refinement_rounds=2,
+    loewner_radius=1.3,
+    loewner_phase=0.0,
+    loewner_points=6,
+    chart_radii=(1.5, 2.4),
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    run_adaptive_grid_loewner_refinement(;
+        label="Three-function adaptive grid Loewner refinement",
+        cases=(scalar_sine_case(), scalar_cosine_case(), scalar_shifted_sine_case()),
+        outer_radius=outer_radius,
+        base_spacing=base_spacing,
+        target_support=target_support,
+        refinement_rounds=refinement_rounds,
+        loewner_radius=loewner_radius,
+        loewner_phase=loewner_phase,
+        loewner_points=loewner_points,
+        chart_radii=chart_radii,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=print_rows,
+    )
+end
+
+function adaptive_retention_score_summary(
+    result;
+    outer_center=0.0 + 0.0im,
+    outer_radius,
+    match_atol=1e-6,
+    count_error_tol=1e-2,
+)
+    final = result.refined
+    expected = final.expected
+    clusters = final.support_clusters
+    support1_global = globally_supported_cluster_values(
+        clusters,
+        outer_center,
+        outer_radius;
+        min_support=1,
+        boundary_margin=10 * match_atol,
+    )
+    support2_global = globally_supported_cluster_values(
+        clusters,
+        outer_center,
+        outer_radius;
+        min_support=2,
+        boundary_margin=10 * match_atol,
+    )
+    support3_global = globally_supported_cluster_values(
+        clusters,
+        outer_center,
+        outer_radius;
+        min_support=3,
+        boundary_margin=10 * match_atol,
+    )
+    inside_clusters = [
+        cluster for cluster in clusters
+        if abs(cluster.value - outer_center) <= outer_radius + 10 * match_atol
+    ]
+    usable_records = [record for record in final.records if !record.failed]
+    good_records = [record for record in usable_records if record.good > 0]
+    (
+        expected=length(expected),
+        support1_global=length(support1_global),
+        support1_global_matched=match_expected_count(support1_global, expected; atol=match_atol),
+        support2_global=length(support2_global),
+        support2_global_matched=match_expected_count(support2_global, expected; atol=match_atol),
+        support3_global=length(support3_global),
+        support3_global_matched=match_expected_count(support3_global, expected; atol=match_atol),
+        weak_inside_clusters=count(cluster -> cluster.support < 2, inside_clusters),
+        inside_cluster_count=length(inside_clusters),
+        usable_records=length(usable_records),
+        good_records=length(good_records),
+        count_error_bad=count(record -> record.count_error > count_error_tol, good_records),
+        count_deficit_records=count(record -> record.good < record.count_estimate, good_records),
+        max_count_error=isempty(good_records) ? Inf : maximum(record.count_error for record in good_records),
+        max_record_residual=isempty(good_records) ? Inf : maximum(record.max_residual for record in good_records),
+        exact_support2_global=length(support2_global) == length(expected) &&
+            match_expected_count(support2_global, expected; atol=match_atol) == length(expected),
+    )
+end
+
+function run_three_function_retention_score_diagnostic(;
+    outer_radius=20.0,
+    base_spacing=3.0,
+    chart_radii=(1.5, 2.4),
+    loewner_radius=1.3,
+    loewner_points=6,
+    count_error_tol=1e-2,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    include_layout_agreement=false,
+    include_extractor_agreement=false,
+    print_rows=true,
+)
+    result = run_three_function_adaptive_grid_loewner_refinement(;
+        outer_radius=outer_radius,
+        base_spacing=base_spacing,
+        chart_radii=chart_radii,
+        refinement_rounds=2,
+        loewner_radius=loewner_radius,
+        loewner_points=loewner_points,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=false,
+    )
+    summary = adaptive_retention_score_summary(
+        result;
+        outer_radius=outer_radius,
+        match_atol=match_atol,
+        count_error_tol=count_error_tol,
+    )
+    layout_agreement = include_layout_agreement ? run_three_function_adaptive_grid_loewner_layout_sweep(;
+        radii=(1.15, 1.3, 1.6),
+        phase_fractions=(0.0,),
+        loewner_points=loewner_points,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=false,
+    ) : nothing
+    extractor_agreement = include_extractor_agreement ? run_three_function_adaptive_grid_extractor_agreement(;
+        extractors=(:loewner_counted, :ss_counted),
+        loewner_radius=loewner_radius,
+        loewner_points=loewner_points,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=false,
+    ) : nothing
+    evidence = (
+        support_and_target=summary.exact_support2_global,
+        local_count_warning=summary.count_deficit_records > 0 || summary.count_error_bad > 0,
+        residual_ok=summary.max_record_residual <= 10 * residual_tol,
+        layout_agreement=layout_agreement === nothing ? missing : layout_agreement.summary.success,
+        extractor_agreement=extractor_agreement === nothing ? missing : extractor_agreement.summary.success,
+    )
+    if print_rows
+        println()
+        println("Three-function adaptive retention-score diagnostic")
+        println("  reports support thresholds, target-domain weak clusters, and local count-estimator stress")
+        @printf(
+            "  expected=%d support1_global=%d/%d support2_global=%d/%d support3_global=%d/%d weak_inside=%d\n",
+            summary.expected,
+            summary.support1_global_matched,
+            summary.support1_global,
+            summary.support2_global_matched,
+            summary.support2_global,
+            summary.support3_global_matched,
+            summary.support3_global,
+            summary.weak_inside_clusters,
+        )
+        @printf(
+            "  local records usable=%d good=%d count_error_bad=%d count_deficit=%d max_count_error=%.3e max_residual=%.3e status=%s\n",
+            summary.usable_records,
+            summary.good_records,
+            summary.count_error_bad,
+            summary.count_deficit_records,
+            summary.max_count_error,
+            summary.max_record_residual,
+            summary.exact_support2_global ? "ok" : "check",
+        )
+        println("  evidence=", evidence)
+    end
+    (
+        result=result,
+        summary=summary,
+        evidence=evidence,
+        layout_agreement=layout_agreement,
+        extractor_agreement=extractor_agreement,
+    )
+end
+
+function retention_policy_decision(
+    summary;
+    residual_tol=1e-8,
+    layout_agreement=missing,
+    extractor_agreement=missing,
+)
+    actions = Symbol[]
+    if summary.exact_support2_global
+        push!(actions, :retain_support2_global)
+    else
+        push!(actions, :refine_weak_target_support)
+    end
+    local_count_warning = summary.count_deficit_records > 0 || summary.count_error_bad > 0
+    if local_count_warning
+        push!(actions, :treat_local_count_errors_as_chart_warnings)
+    end
+    if summary.max_record_residual > 10 * residual_tol
+        push!(actions, :tighten_or_refine_high_residual_charts)
+    end
+    if layout_agreement === missing
+        if local_count_warning || !summary.exact_support2_global
+            push!(actions, :request_loewner_layout_agreement)
+        end
+    elseif !layout_agreement
+        push!(actions, :reject_or_split_layout_unstable_candidates)
+    else
+        push!(actions, :layout_agreement_certified)
+    end
+    if extractor_agreement === missing
+        if local_count_warning || !summary.exact_support2_global
+            push!(actions, :request_reduced_extractor_agreement)
+        end
+    elseif !extractor_agreement
+        push!(actions, :escalate_reduced_extractor_disagreement)
+    else
+        push!(actions, :extractor_agreement_certified)
+    end
+
+    residual_ok = summary.max_record_residual <= 10 * residual_tol
+    support_ok = summary.exact_support2_global
+    layout_ok = layout_agreement === missing ? !local_count_warning : Bool(layout_agreement)
+    extractor_ok = extractor_agreement === missing ? !local_count_warning : Bool(extractor_agreement)
+    status = if support_ok && residual_ok && layout_ok && extractor_ok && !local_count_warning
+        :accept
+    elseif support_ok && residual_ok && layout_ok && extractor_ok
+        :accept_with_chart_warnings
+    elseif !support_ok
+        :refine
+    else
+        :escalate
+    end
+    (
+        status=status,
+        retain_support=2,
+        retained=summary.support2_global,
+        expected=summary.expected,
+        support_ok=support_ok,
+        residual_ok=residual_ok,
+        local_count_warning=local_count_warning,
+        layout_ok=layout_ok,
+        extractor_ok=extractor_ok,
+        actions=Tuple(actions),
+    )
+end
+
+function run_three_function_automatic_retention_policy(;
+    outer_radius=20.0,
+    base_spacing=3.0,
+    chart_radii=(1.5, 2.4),
+    loewner_radius=1.3,
+    loewner_points=6,
+    count_error_tol=1e-2,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    base = run_three_function_retention_score_diagnostic(;
+        outer_radius=outer_radius,
+        base_spacing=base_spacing,
+        chart_radii=chart_radii,
+        loewner_radius=loewner_radius,
+        loewner_points=loewner_points,
+        count_error_tol=count_error_tol,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        include_layout_agreement=false,
+        include_extractor_agreement=false,
+        print_rows=false,
+    )
+    initial_decision = retention_policy_decision(
+        base.summary;
+        residual_tol=residual_tol,
+        layout_agreement=missing,
+        extractor_agreement=missing,
+    )
+    needs_layout = :request_loewner_layout_agreement in initial_decision.actions
+    needs_extractor = :request_reduced_extractor_agreement in initial_decision.actions
+    layout_agreement = needs_layout ? run_three_function_adaptive_grid_loewner_layout_sweep(;
+        radii=(1.15, 1.3, 1.6),
+        phase_fractions=(0.0,),
+        loewner_points=loewner_points,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=false,
+    ) : nothing
+    extractor_agreement = needs_extractor ? run_three_function_adaptive_grid_extractor_agreement(;
+        extractors=(:loewner_counted, :ss_counted),
+        loewner_radius=loewner_radius,
+        loewner_points=loewner_points,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=false,
+    ) : nothing
+    final_decision = retention_policy_decision(
+        base.summary;
+        residual_tol=residual_tol,
+        layout_agreement=layout_agreement === nothing ? missing : layout_agreement.summary.success,
+        extractor_agreement=extractor_agreement === nothing ? missing : extractor_agreement.summary.success,
+    )
+    if print_rows
+        println()
+        println("Three-function automatic retention policy")
+        @printf(
+            "  initial_status=%s final_status=%s retained=%d/%d residual_ok=%s local_count_warning=%s\n",
+            string(initial_decision.status),
+            string(final_decision.status),
+            final_decision.retained,
+            final_decision.expected,
+            string(final_decision.residual_ok),
+            string(final_decision.local_count_warning),
+        )
+        println("  initial_actions=", initial_decision.actions)
+        println("  final_actions=", final_decision.actions)
+    end
+    (
+        base=base,
+        initial_decision=initial_decision,
+        final_decision=final_decision,
+        layout_agreement=layout_agreement,
+        extractor_agreement=extractor_agreement,
+    )
+end
+
+function global_loewner_artifact_retention_policy(summary)
+    single_layout_safe = summary.bad_single_layouts == 0 && summary.initial_support1_spurious == 0 &&
+        summary.updated_support1_spurious == 0
+    cross_layout_safe = summary.support2_prunes_artifacts &&
+        summary.updated_support2_matched == summary.expected &&
+        summary.updated_support2_count == summary.expected
+    actions = Symbol[]
+    if !single_layout_safe
+        push!(actions, :do_not_accept_single_layout_residual_small_values)
+        push!(actions, :require_cross_layout_support2)
+    end
+    if cross_layout_safe
+        push!(actions, :retain_cross_layout_support2)
+    else
+        push!(actions, :split_chart_or_change_reduced_extractor)
+    end
+    (
+        status=cross_layout_safe ? :accept_cross_layout : :escalate,
+        single_layout_safe=single_layout_safe,
+        cross_layout_safe=cross_layout_safe,
+        retained=summary.updated_support2_count,
+        expected=summary.expected,
+        actions=Tuple(actions),
+    )
+end
+
+function run_global_loewner_artifact_retention_policy(; print_rows=true)
+    diagnostic = run_global_loewner_interior_artifact_diagnostic(; print_rows=false)
+    decision = global_loewner_artifact_retention_policy(diagnostic.summary)
+    if print_rows
+        println()
+        println("Global Loewner artifact retention policy")
+        @printf(
+            "  status=%s single_layout_safe=%s cross_layout_safe=%s retained=%d/%d\n",
+            string(decision.status),
+            string(decision.single_layout_safe),
+            string(decision.cross_layout_safe),
+            decision.retained,
+            decision.expected,
+        )
+        println("  actions=", decision.actions)
+    end
+    (diagnostic=diagnostic, decision=decision)
+end
+
+function run_three_function_adaptive_grid_extractor_agreement(;
+    extractors=(:loewner_counted, :ss_counted),
+    loewner_radius=1.3,
+    loewner_points=6,
+    min_extractor_support=2,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    rows = NamedTuple[]
+    entries = NamedTuple[]
+    results = Any[]
+    expected = ComplexF64[]
+    for (extractor_index, extractor) in pairs(extractors)
+        result = run_adaptive_grid_loewner_refinement(;
+            label="Three-function adaptive $(extractor) refinement",
+            cases=(scalar_sine_case(), scalar_cosine_case(), scalar_shifted_sine_case()),
+            outer_radius=20.0,
+            base_spacing=3.0,
+            target_support=2,
+            refinement_rounds=2,
+            loewner_radius=loewner_radius,
+            loewner_points=loewner_points,
+            chart_radii=(1.5, 2.4),
+            extractor=extractor,
+            residual_tol=residual_tol,
+            match_atol=match_atol,
+            print_rows=false,
+        )
+        push!(results, result)
+        expected = ComplexF64.(result.refined.expected)
+        final = result.rows[end]
+        push!(
+            rows,
+            (
+                extractor=extractor,
+                centers=final.centers,
+                expected=final.expected,
+                support2_global=final.support2_global,
+                support2_global_matched=final.support2_global_matched,
+                success=final.success_support2_global,
+            ),
+        )
+        extractor_id = ComplexF64(extractor_index, 0.0)
+        append!(
+            entries,
+            [
+                (
+                    value=ComplexF64(value),
+                    residual=0.0,
+                    right_residual=0.0,
+                    left_residual=0.0,
+                    center=extractor_id,
+                    radius=Float64(extractor_index),
+                    extractor=extractor,
+                )
+                for value in result.refined.support2_global_found
+            ],
+        )
+    end
+    clusters = loewner_layout_clusters(entries; atol=match_atol)
+    supported = loewner_supported_cluster_values(clusters; min_support=min_extractor_support)
+    matched = match_expected_count(supported, expected; atol=match_atol)
+    summary = (
+        extractors=length(rows),
+        expected=length(expected),
+        support=min_extractor_support,
+        supported=length(supported),
+        matched=matched,
+        success=matched == length(expected) && length(supported) == length(expected),
+    )
+    if print_rows
+        println()
+        println("Three-function adaptive reduced-extractor agreement")
+        println("  reruns target-limited adaptive charting across reduced extractors")
+        @printf("  %-18s %8s %10s %14s %8s\n", "extractor", "centers", "global2", "global2_ok", "status")
+        for row in rows
+            @printf(
+                "  %-18s %8d %8d %4d/%-7d %s\n",
+                string(row.extractor),
+                row.centers,
+                row.support2_global,
+                row.support2_global_matched,
+                row.expected,
+                row.success ? "ok" : "check",
+            )
+        end
+        @printf(
+            "  cross-extractor support>=%d count=%d matched=%d/%d status=%s\n",
+            summary.support,
+            summary.supported,
+            summary.matched,
+            summary.expected,
+            summary.success ? "ok" : "check",
+        )
+    end
+    (
+        extractors=extractors,
+        rows=rows,
+        results=results,
+        clusters=clusters,
+        supported_values=supported,
+        summary=summary,
+    )
+end
+
+function run_three_function_adaptive_grid_loewner_layout_sweep(;
+    radii=(1.15, 1.3, 1.6),
+    phase_fractions=(0.0,),
+    loewner_points=6,
+    min_layout_support=2,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    rows = NamedTuple[]
+    entries = NamedTuple[]
+    results = Any[]
+    expected = ComplexF64[]
+    for rho in radii, fraction in phase_fractions
+        phase = 2pi * fraction / loewner_points
+        result = run_three_function_adaptive_grid_loewner_refinement(;
+            loewner_radius=rho,
+            loewner_phase=phase,
+            loewner_points=loewner_points,
+            residual_tol=residual_tol,
+            match_atol=match_atol,
+            print_rows=false,
+        )
+        push!(results, result)
+        expected = ComplexF64.(result.refined.expected)
+        final = result.rows[end]
+        push!(
+            rows,
+            (
+                rho=Float64(rho),
+                phase=Float64(phase),
+                centers=final.centers,
+                expected=final.expected,
+                support2_global=final.support2_global,
+                support2_global_matched=final.support2_global_matched,
+                success=final.success_support2_global,
+            ),
+        )
+        layout_id = ComplexF64(rho, phase)
+        append!(
+            entries,
+            [
+                (
+                    value=ComplexF64(value),
+                    residual=0.0,
+                    right_residual=0.0,
+                    left_residual=0.0,
+                    center=layout_id,
+                    radius=Float64(rho),
+                    phase=Float64(phase),
+                )
+                for value in result.refined.support2_global_found
+            ],
+        )
+    end
+    clusters = loewner_layout_clusters(entries; atol=match_atol)
+    supported = loewner_supported_cluster_values(clusters; min_support=min_layout_support)
+    matched = match_expected_count(supported, expected; atol=match_atol)
+    summary = (
+        layouts=length(rows),
+        expected=length(expected),
+        support=min_layout_support,
+        supported=length(supported),
+        matched=matched,
+        success=matched == length(expected) && length(supported) == length(expected),
+    )
+    if print_rows
+        println()
+        println("Three-function adaptive Loewner layout sweep")
+        println("  reruns target-limited adaptive charting across Loewner interpolation layouts")
+        @printf("  %-6s %-8s %8s %12s %12s %8s\n", "rho", "phase", "centers", "global2", "matched", "status")
+        for row in rows
+            @printf(
+                "  %-6.2f %-8.3f %8d %5d/%-6d %5d/%-6d %s\n",
+                row.rho,
+                row.phase,
+                row.centers,
+                row.support2_global,
+                row.expected,
+                row.support2_global_matched,
+                row.expected,
+                row.success ? "ok" : "check",
+            )
+        end
+        @printf(
+            "  layout_support>=%d supported=%d matched=%d/%d %s\n",
+            min_layout_support,
+            summary.supported,
+            summary.matched,
+            summary.expected,
+            summary.success ? "ok" : "check",
+        )
+    end
+    (rows=rows, clusters=clusters, supported=supported, summary=summary, results=results)
 end
 
 function run_matrix_local_chart_case(;

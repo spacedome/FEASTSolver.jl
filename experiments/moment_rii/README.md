@@ -472,6 +472,92 @@ with diagnostics good enough to choose the right chart in ordinary cases.
   On the harder rank-deficient analytic reduced-basis cases it does not yet
   beat counted SS; interpolation-point placement and rank visibility are now
   explicit diagnostics rather than hidden moment-order choices.
+- A Loewner interpolation-point sweep was added for the exponential many-root
+  global chart. It varies the outside interpolation radius and phase while
+  keeping the contour solve data, reduced basis, count, and residual policy
+  fixed. On the current radius-10 exponential control all tested Loewner
+  layouts recover the 18 roots; one updated layout (`rho=1.3`, zero phase)
+  keeps 18 residual-small values but matches only 17 roots at the strict
+  `1e-6` lattice-matching tolerance. The focused
+  `run_global_loewner_interior_artifact_diagnostic` records this as an
+  in-target artifact rather than an outside-domain local-chart extra: among six
+  layouts, one single updated layout has one residual-small spurious value with
+  nearest-root distance about `1.2e-6`, residual about `6.9e-11`, and Loewner
+  singular ratio about `3e-8`. Cross-layout clustering with support threshold
+  at least two removes the artifact and recovers all 18 roots after the residual
+  update. The practical policy should therefore score several cheap Loewner
+  layouts and prefer support across layouts/charts rather than treating a single
+  Loewner pencil as canonical.
+- The same Loewner-layout question was pushed into the local chart cover. On
+  supervised radius-10 exponential charts with local radii `1.2` and `2.0`, all
+  tested Loewner layouts recover the 18 roots after support merging. The raw
+  union contains 20--22 residual-small candidates depending on interpolation
+  radius/phase, but chart support `>=2` consistently returns exactly the 18
+  expected roots. This separates two roles: Loewner layout selection is an
+  important diagnostic on oversized global charts, while local chart geometry
+  plus support merging is robust across the tested Loewner layouts.
+- The first unsupervised Loewner local-chart cover for the exponential
+  many-root radius-10 problem now removes exact-root-centered charts. A
+  Cartesian grid with spacing `2.4` and local radii `1.2, 2.0` already has a raw
+  union that matches all 18 roots, but only 12 roots have support `>=2`. A
+  denser spacing `1.8` gives 97 centers and support `>=2` returns exactly the
+  18 roots; spacing `1.2` gives 221 centers and support `>=3` still retains all
+  18. This clarifies that support thresholds are cover-density diagnostics, not
+  absolute pruning laws: coarse grids can recover roots with weak support, while
+  denser grids buy stronger support at higher solve cost.
+- A first adaptive refinement policy repairs the coarse-grid weak-support case
+  without paying for the full denser grid. Starting from spacing `2.4`, it adds
+  the residual-small candidate values whose chart support is below two as new
+  chart centers. This adds five centers, increasing the cover from 57 to 62
+  centers, and changes support `>=2` from 12/18 roots to exactly 18/18. The
+  policy is still a supervised diagnostic only in its validation, not in the
+  refinement rule: it uses computed residual-small weak-support candidates, not
+  exact root locations. This is the first concrete adaptive-chart rung for the
+  robust algorithm.
+- The same weak-support refinement was then applied to a harder nonnormal
+  triangular analytic control rather than the clean diagonal/similarity
+  exponential control. On the radius-6, coupling-10 triangular case, a coarse
+  spacing-`2.4` grid with 21 centers has a raw union containing all 11 roots,
+  but support `>=2` retains only 5/11. Restricting adaptive refinement centers
+  to weak-support candidates inside the final target contour avoids spending
+  charts on outside-domain local roots: one refinement round adds five centers
+  and raises global support `>=2` to 10/11; a second round adds two more centers
+  and raises global support `>=2` to exactly 11/11. The unfiltered support-2 set
+  still has 13 candidates because local charts can legitimately recover roots
+  just outside the global contour. Applying the final global-contour membership
+  test reduces that set to exactly 11/11 roots. This upgrades the policy from a
+  pure support threshold to a chart-cover retention rule: local charts may
+  extend past the target domain, so merged candidates must pass both repeated
+  support and final target-contour membership, and refinement should prioritize
+  weakly supported candidates in the requested target domain.
+- The target-limited refinement rule also repairs a larger radius-20 analytic
+  chart cover for the three-function `sin/cos/sin(z)-0.3` control, which has 38
+  unique target roots. A coarse spacing-`3.0` grid with local radii `1.5, 2.4`
+  initially recovers only 36/38 roots in the raw union and 16/38 with
+  support `>=2`. The first weak-support refinement round finds all 38 in the
+  raw union but still only 36/38 with final global support. A second round adds
+  just two more target-domain weak centers and yields 38/38 final global
+  support. Repeating this full adaptive solve for Loewner radii `1.15`, `1.3`,
+  and `1.6` gives exact 38/38 final global support for each layout, and
+  clustering final candidates across layouts with support `>=2` also returns
+  exactly 38/38. This is stronger evidence that the adaptive rule is not just
+  fixing the exponential lattice case or the small triangular radius-6 control;
+  it can repair a larger many-root analytic chart where the initial cover misses
+  roots outright, and the repaired retained set is stable across tested Loewner
+  interpolation radii.
+- The first automatic retention-policy wrapper now turns these diagnostics into
+  an explicit decision ladder. On the radius-20 three-function adaptive cover,
+  support `>=2` plus final target-domain membership already retains exactly
+  38/38 with small residuals, but the local argument-principle count diagnostics
+  still contain chart warnings. The policy therefore does not silently accept
+  the single run: its first decision is `:escalate`, requesting Loewner-layout
+  and reduced-extractor agreement. After those independent checks both certify
+  the same 38/38 retained set, the policy accepts with chart warnings rather
+  than deleting roots or hiding the count stress. The global exponential
+  in-target artifact uses the complementary policy branch: because one single
+  Loewner layout is unsafe, the policy refuses single-layout residual-small
+  values and retains only cross-layout support-2 candidates, again recovering
+  exactly 18/18.
 - A focused literature pass on the missing iteration step did not turn up an
   existing method that is simply "Loewner FEAST" or "SS RII". The nearest
   established machinery is invariant-pair/block Newton refinement, polynomial
@@ -695,6 +781,26 @@ Current first-pass matrix result:
 - The triangular local-chart support run recovers all true roots with
   support>=2 while retaining a small number of extra candidates. Support is
   therefore a retention diagnostic before it is a pruning rule.
+- The radius-20 three-function adaptive chart solve is also stable across
+  reduced-extractor families. Running the same target-domain weak-support
+  refinement with Loewner counted extraction and counted SS/Hankel extraction
+  gives exact final target-domain support in both cases: Loewner reaches 38/38
+  with 158 centers and counted SS reaches 38/38 with 159 centers. Clustering
+  the final retained values across the two extractors with cross-extractor
+  support>=2 again returns exactly 38/38. This is stronger than Loewner-layout
+  stability alone: the retained set is not an artifact of either one Loewner
+  interpolation circle or one reduced realization algebra.
+- A first retention-score diagnostic now separates three different notions of
+  evidence on the same radius-20 case. Final target-domain support>=1 and
+  support>=2 both retain exactly 38/38 roots, while support>=3 retains only
+  30/38 because the chart cover is not uniformly triple-overlapping. At the
+  chart level, three local records have argument-principle count deficits and
+  count errors above `1e-2` even though the merged support>=2 set is exact and
+  the maximum local residual among good records is about `1.4e-13`. Optional
+  scorecard checks also attach the already-established Loewner-layout and
+  reduced-extractor agreement. This confirms that support threshold, local count
+  consistency, residual quality, chart geometry, and extractor/layout agreement
+  are distinct diagnostics; none should be promoted to a standalone pruning law.
 
 ## Nonlinear Experiment Plan
 
@@ -736,10 +842,27 @@ Current first-pass matrix result:
 8. In progress: turn reduced-NEP extraction into an algorithmic component. Polynomial
    problems can use reduced companion/QZ solves; generic analytic problems need
    counted reduced SS/Hankel extraction, reduced NLFEAST/SS, or NLEIGS-style
-   reduced solvers. The current best analytic prototype uses argument-principle
-   counting plus SS/Hankel root extraction on the reduced NEP. A Loewner
-   reduced extractor has been prototyped and should be tested as a chart
-   alternative, especially where high-order Hankel moments have poor rank gaps.
+   reduced solvers. The current best analytic prototypes use argument-principle
+   counting with counted SS/Hankel or Loewner root extraction on the reduced
+   NEP. Loewner now has global interpolation-layout, supervised local-chart
+   layout, unsupervised grid-chart spacing, and adaptive weak-support refinement
+   sweeps on a clean exponential control, a nonnormal triangular control, and a
+   larger radius-20 three-function analytic control. The current boundary is
+   sharper: target-domain weak-support candidate centering repairs missing roots
+   without refining outside-domain local roots, while final target-contour
+   membership removes supported local-chart candidates that are valid nearby
+   roots but outside the requested domain. A three-layout Loewner-radius sweep
+   on the repaired radius-20 three-function cover gives exact cross-layout
+   support, and a Loewner-vs-counted-SS rerun gives exact cross-extractor
+   support, so the retained set is not an artifact of one interpolation circle
+   or one reduced-extractor algebra. A first automatic retention wrapper now
+   escalates exact-but-count-stressed support-2 retained sets to those agreement
+   checks and then returns `:accept_with_chart_warnings` when both pass; the
+   global in-target Loewner artifact follows the complementary branch and
+   requires cross-layout support before accepting residual-small values. The next
+   reduced-extraction boundary is to replace the hard-coded escalation ladder
+   with chart split/shrink and layout/extractor selection rules driven by rank
+   gaps, local count errors, residual magnitudes, and chart geometry.
 9. In progress: add the invariant-pair/block-Newton refinement rung explicitly for
    reduced polynomial and small dense analytic problems. This should be treated
    as a local refinement/check on a reduced NEP, not as a replacement for the
