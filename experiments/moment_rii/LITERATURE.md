@@ -393,6 +393,62 @@ loop" based on the targeted search; the larger risk is that an adjacent
 invariant-pair or model-reduction method can be specialized to the same formula
 with different language.
 
+### May 2026 Adjacent Implementation Recheck
+
+A further search focused on production contour solvers and alternatives to
+high-order moments. Three nearby methods sharpen the boundary of our candidate
+algorithm.
+
+- RSRR, the resolvent-sampling based Rayleigh-Ritz method, constructs the
+  approximate eigenspace from resolvent samples at contour points rather than
+  high-order contour moments. Its abstract explicitly frames this as avoiding
+  the unreliability of previous high-order moment schemes, then solves projected
+  NEPs with improved SS machinery and Chebyshev interpolation for boundary
+  element applications. This is strong external support for our move away from
+  large monomial Hankel state. It does not appear to provide a FEAST-style
+  residual Laurent repair loop; it is an extraction/projection robustness
+  strategy.
+  Source: J. Xiao, S. Meng, C. Zhang, C. Zheng, "Resolvent sampling based
+  Rayleigh-Ritz method for large-scale nonlinear eigenvalue problems",
+  Computer Methods in Applied Mechanics and Engineering 310, 2016, 33--57.
+  DOI: https://doi.org/10.1016/j.cma.2016.06.018.
+- SLEPc's `NEPCISS` documentation confirms the standard production nonlinear
+  CISS model: contour integration produces a subspace, Rayleigh-Ritz projection
+  produces a small dense nonlinear eigenproblem, and the main cost is the
+  collection of contour-node linear systems. The documented implementation
+  exposes KSP objects for those solves, which matches our worker-boundary
+  decision: contour-node solve ownership and reduced extraction are separate
+  layers. It does not describe an outer residual inverse update of the trial
+  spaces.
+  Source: https://slepc.upv.es/release/manualpages/NEP/NEPCISS.html.
+- SLEPc's CISS family also exposes Ritz vs Hankel extraction choices and
+  refinement parameters in the linear/polynomial variants. This supports
+  treating the extractor as a policy object, not a hard-coded consequence of
+  contour integration. It also reinforces that "refinement" in production CISS
+  implementations is not necessarily the same as NLFEAST's residual-inverse
+  iteration.
+  Sources:
+  https://slepc.upv.es/release/manualpages/EPS/EPSCISSExtraction.html and
+  https://slepc.upv.es/release/manualpages/EPS/EPSCISSSetRefinement.html.
+- Riesz-projection NLEP methods compute physically relevant spectral
+  projections by choosing contour-source fields and weight functions, then
+  processing a small nonlinear system. This is an important adjacent direction
+  for applications where "wanted" roots are determined by observability or
+  physical coupling, not simply contour inclusion. It supports our support and
+  observability diagnostics, but it is not a general finite-realization
+  residual update.
+  Source: F. Binkowski, L. Zschiedrich, S. Burger, "A Riesz-projection-based
+  method for nonlinear eigenvalue problems", Journal of Computational Physics
+  419, 2020, 109678. DOI: https://doi.org/10.1016/j.jcp.2020.109678.
+
+Updated conclusion: the closest external alternatives either improve the
+realization/extraction layer (RSRR, Loewner, CISS Ritz/Hankel choices) or
+change the selection/observability target (Riesz projection). They strengthen
+the case for our chart/extractor/policy split, and they make high-order
+monomial moment state less defensible. They still do not replace the
+residual-Laurent update as the FEAST-style iteration/repair step on left/right
+physical spaces.
+
 ## Actionable Design After Focused Pass
 
 The literature pass supports the direction of the current experiment rather

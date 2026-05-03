@@ -212,6 +212,12 @@ per scalar Ritz value.
   diagonal linear operator through `Tmatrix/Tsolve` closures and reproduces the
   serial residual-Laurent update on the sparse linear control. This is generic
   sparse compatibility evidence, not sparse factorization reuse.
+- Adjacent implementation recheck: RSRR, SLEPc CISS, and Riesz-projection
+  methods all support the current separation between contour-node solves,
+  reduced extraction, and selection/observability policy. They do not appear to
+  replace the residual-Laurent physical-space repair step, so they are evidence
+  for keeping extractor and policy as explicit layers rather than evidence for
+  dropping FEAST-style iteration.
 - Canonical NLFEAST limit control: a three-component one-root-per-component
   rational NEP compares the existing `nlfeast!`, scalar-expanded residual RII,
   and compressed residual-Laurent update. All three recover the same three

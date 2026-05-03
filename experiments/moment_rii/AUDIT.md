@@ -32,7 +32,7 @@ and claims need both theoretical basis and numerical evidence.
 | Define the moment update | `residual_laurent_update`, `moment_compressed_dual_rii_bases_generic`, `run_residual_laurent_update_ladder_diagnostic`, `ALGORITHM.md`, `DERIVATION.md` | Residual Laurent moments repair left/right physical spaces instead of iterating expanded Hankel columns. The derivation note connects the update to Keldysh local resolvent form, scalar RII, and the circular-chart Laurent expansion. The nonnormal chart-cover ladder now pins the lower-rung interpretation numerically: reduced extraction alone recovers `34/44`, one residual update recovers `42/44`, and two updates recover `44/44`. | Core candidate implemented |
 | Handle higher moments elegantly | `TrialSpaces`, `MomentBasisConfig`, `ReducedExtractorConfig`, Loewner/counting extractors, chart policy | The iterative state is physical `X,Y` plus reduced realization/extractor; expanded moments are not exposed as state. The initial contour-moment basis is now an explicit experiment object instead of only loose keywords. | Satisfied as design boundary |
 | Avoid ad-hoc black-box hacks | `CountDrivenPolicyConfig`, `CountDrivenNumericsConfig`, `MomentBasisConfig`, `ReducedExtractorConfig`, `ResidualUpdateConfig`, `retention_policy_decision`, `chart_policy_plan`, tests | Retention/refinement is expressed as support/count/residual/agreement diagnostics and explicit chart actions. Selected count-deficit charts shrink, while count-error-only nonnormal charts preserve parent-radius candidates. The newer count-driven stress runners now pass chart spacing, support threshold, refinement depth, chart radii, optional radius-ladder stages, residual tolerance, and count tolerance as one policy object. Numerical basis/extraction/update choices now lower from `CountDrivenNumericsConfig` into the shared basis/extractor/update config objects used by the local chart sweep, and the central analytic iteration accepts those objects directly. | Improving, not final |
-| Provide theoretical basis | `LITERATURE.md`, `README.md`, `ALGORITHM.md`, `DERIVATION.md` | Systems/Loewner, SS/Hankel realization, invariant-pair/block Newton, algebraic multiplicity by argument principle, rational Krylov/NLEIGS, infinite-GMRES contour solves, SS parameter-estimation references, targeted residual-update and dual-extraction searches, a broader adjacent contour-iteration search, and a local NEP-PACK contour implementation check are summarized. The derivation note records the local residual-Laurent argument and reduction checks. | Stronger local basis; publication-level review still remains |
+| Provide theoretical basis | `LITERATURE.md`, `README.md`, `ALGORITHM.md`, `DERIVATION.md` | Systems/Loewner, SS/Hankel realization, invariant-pair/block Newton, algebraic multiplicity by argument principle, rational Krylov/NLEIGS, infinite-GMRES contour solves, SS parameter-estimation references, targeted residual-update and dual-extraction searches, a broader adjacent contour-iteration search, a local NEP-PACK contour implementation check, and a May 2026 recheck over RSRR/CISS/Riesz-projection implementations are summarized. The derivation note records the local residual-Laurent argument and reduction checks. | Stronger local basis; publication-level review still remains |
 | Provide numerical evidence | Slow tests under `just test --slow 'moment RII'` and focused presets | Linear, polynomial, analytic local-chart, Loewner-layout, extractor-agreement, near-pole rational, rational-coordinate, block-Newton boundary, and matrix-valued mixed diagnostic tests. The polynomial bridge diagnostic now checks the degree-eight nonnormal polynomial against FEAST on the companion pencil and verifies that companion FEAST, polynomial-native extraction, block-Newton cleanup, and the residual-Laurent update recover the same 20 target roots. | Strong for dense experiment controls |
 | Care about numerical properties | Rank, support, residual, count, layout/extractor agreement diagnostics | Tests pin cases where residuals, support, count, and agreement disagree. | Satisfied for current controls |
 | Care about efficiency | Algorithm avoids expanded Hankel state; residual update uses low-rank residual bases | `run_residual_laurent_compression_diagnostic` now returns an explicit efficiency scorecard. It shows the moment update recovering a rank-deficient analytic chart with fewer candidate columns, candidate-ratio savings, and a larger observable physical realization than scalar expanded RII; scalar-expanded RII fails despite using more candidate columns. `run_residual_laurent_low_rank_equivalence_diagnostic` verifies that residual-basis compression preserves the same updated physical spaces as an uncompressed residual-block update while reducing residual rank and candidate columns. `run_sparse_linear_moment_pipeline_smoke` verifies sparse `Tmatrix`/`Tsolve` can flow through the experiment pipeline. `run_residual_laurent_partition_diagnostic` verifies the residual-Laurent update decomposes over contour-node partitions with roundoff-level projection gaps. `run_remote_residual_laurent_worker_diagnostic` verifies actual Julia worker processes can retain operator data and contour-node subsets across two updates while reproducing the serial update. `run_sparse_remote_residual_laurent_worker_smoke` verifies the same persistent worker boundary accepts a sparse linear operator closure. Sparse factorization reuse and benchmark-level performance remain open. | Partially evidenced |
@@ -143,8 +143,13 @@ global block Newton, or rational-coordinate-only fixes.
   interpretations, systems/Loewner contour methods, contour invariant-pair
   methods, resolvent-sampling Rayleigh--Ritz, Riesz-projection methods,
   contour algebraic-multiplicity counts, and recent Beyn/RIM region
-  partitioning. A publication-level novelty review should still be done before
-  making final claims.
+  partitioning. The latest adjacent implementation recheck suggests RSRR,
+  Loewner, CISS Ritz/Hankel extraction, and Riesz-projection methods mostly
+  strengthen the extractor/selection side of the architecture rather than
+  replacing the residual-Laurent repair loop. A publication-level novelty
+  review should still be done before making final claims, with particular care
+  around whether an adjacent invariant-pair or model-reduction formulation can
+  be specialized to the same update in different language.
 
 ## Completion Status
 
@@ -171,8 +176,8 @@ productive steps are:
    sparse/distributed moment-NLFEAST and benchmark-level performance are still
    open rungs.
 3. Continue publication-level novelty review before making final claims. The
-   current literature and NEP-PACK implementation checks did not find the exact
-   residual-Laurent finite-realization iteration, but they are not an exhaustive
-   publication review.
+   current literature, NEP-PACK, RSRR, CISS, and Riesz-projection checks did not
+   find the exact residual-Laurent finite-realization iteration, but they are
+   not an exhaustive publication review.
 4. Only after those pass, consider extracting stable pieces from the experiment
    into a real implementation plan.
