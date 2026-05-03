@@ -1520,3 +1520,79 @@ The search did not find a finite-realization residual-correction theorem that
 directly implies the candidate update. This strengthens the current status:
 the extractor side has nearby theory, while the residual-Laurent enrichment
 side remains the unresolved theorem gap.
+
+## Lemma 5 Targeted Recheck, 2026-05-03
+
+Search scope: `"nonlinear eigenvalue problem" "Jacobi-Davidson correction
+equation" residual Rayleigh-Ritz perturbation theorem`, `"residual inverse
+iteration" "nonlinear eigenvalue" quasi-Newton Keldysh theorem`, `"refined
+Rayleigh-Ritz" "nonlinear eigenvalue" analytic residual perturbation theorem`,
+`"contour integral" "nonlinear eigenvalue" residual correction subspace
+expansion`, and `"higher moments" nonlinear FEAST Sakurai Sugiura residual
+inverse iteration`.
+
+The recheck focused only on the missing Lemma 5 shape:
+
+```text
+captured two-sided finite contour realization
+  -> reduced Petrov-Galerkin Ritz data
+  -> compressed physical right/left residual bases
+  -> contour-averaged inverse residual enrichment
+  -> improved re-extracted physical residuals
+```
+
+Closest useful sources:
+
+- Neumaier's RII theorem remains the scalar local correction result. It gives
+  local convergence for one nonlinear eigenpair when the fixed shift is close
+  enough to the root, but it has no finite contour realization or two-sided
+  residual-subspace compression. DOI: <https://doi.org/10.1137/0722055>.
+- Jarlebring--Koskela--Mele remain the best Keldysh/quasi-Newton language.
+  Their analysis explains RII-like NEP methods as quasi-Newton methods, but
+  the Jacobian approximation is not the FEAST-filtered block residual operator
+  used here. DOI: <https://doi.org/10.1007/s11075-017-0438-2>.
+- Jia--Zheng's RR/refined-RR theory remains the best extraction theorem. It
+  relates analytic NEP Ritz/refined-Ritz behavior to deviation of the exact
+  eigenvector from a given subspace and residual norms. It does not explain
+  how to generate the next subspace from contour-filtered residuals. DOI:
+  <https://doi.org/10.1137/23M161392X>.
+- Voss and Betcke--Voss remain the closest subspace-expansion algorithms:
+  nonlinear Jacobi-Davidson solves projected NEPs, forms physical residuals,
+  expands the search space through a correction equation, and re-extracts.
+  These are one-target correction-equation methods rather than contour-node
+  FEAST filters of compressed two-sided residual subspaces. DOI:
+  <https://doi.org/10.1016/j.future.2003.07.003> and
+  <https://doi.org/10.1016/j.compstruc.2006.08.088>.
+- RSRR and systems/Loewner contour methods support the realization/extractor
+  layer and the warning that high-order Hankel coordinates can be unreliable.
+  They do not supply the residual-Laurent repair loop. DOI:
+  <https://doi.org/10.1016/j.cma.2016.06.018> and
+  <https://doi.org/10.1137/20M1389303>.
+- The NLFEAST paper explicitly describes NLFEAST as a multishift/contour
+  generalization of residual inverse iteration. That pins the `K=1` rung, but
+  it does not resolve the higher-moment update without scalar-expanded state.
+  DOI: <https://doi.org/10.1016/j.jocs.2018.05.006>.
+
+Conclusion:
+
+The closest known theory decomposes around, but does not include, Lemma 5.
+The available pieces are:
+
+- RII/quasi-Newton theory for scalar local nonlinear correction;
+- JD correction-equation theory for residual-driven subspace expansion;
+- RR/refined-RR theory for extraction once a good trial subspace is given;
+- SS/Beyn/Loewner/RSRR theory for contour realization and extraction.
+
+None of the checked sources proves the specific FEAST-filtered block
+correction estimate needed here. The honest theorem program is therefore
+modular:
+
+1. use contour-realization theory to justify the finite two-sided model;
+2. use a new or adapted JD/RII-style estimate to justify residual-Laurent
+   enrichment of physical trial/test spaces;
+3. use RR/refined-RR perturbation theory after enrichment to justify
+   re-extraction.
+
+This reinforces the current audit status: the candidate algorithm is coherent
+and literature-adjacent, but the decisive missing theorem is not available as
+an obvious existing result.
