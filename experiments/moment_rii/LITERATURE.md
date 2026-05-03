@@ -1183,3 +1183,64 @@ Interpretation:
   two-sided contour realization by low-rank residual Laurent repairs of the
   physical trial/test spaces. That remains the distinctive candidate mechanism
   to analyze, not a settled novelty claim.
+
+## Targeted Update/Projection Recheck, 2026-05-03
+
+Search scope: `"residual Laurent" nonlinear eigenvalue contour integral`,
+`"nonlinear FEAST" "higher moments" residual inverse iteration`,
+`"contour" "residual inverse iteration" "Sakurai" nonlinear eigenvalue`,
+`"finite realization" "nonlinear eigenvalue" "residual" "contour"`,
+`"Loewner" "residual inverse iteration" nonlinear eigenvalue`, and recent
+projection/partitioning followups.
+
+New or rechecked adjacent items:
+
+- The 2020 NLFEAST-Beyn hybrid preprint remains the closest direct ancestor. It
+  explicitly formulates the open higher-moment issue: applying RII to
+  higher-order moments expands the state by `K*m` and then requires deflation
+  back down to `m`, which prevents low-dimensional/many-root cases from being
+  handled cleanly. That paper therefore states the problem this experiment is
+  trying to solve, but it does not contain the local two-sided residual-Laurent
+  physical-space update now pinned here. DOI:
+  <https://doi.org/10.48550/arXiv.2007.03000>.
+- Jia and Zheng's 2025 analysis of Rayleigh--Ritz and refined Rayleigh--Ritz
+  for regular analytic NEPs is relevant to reduced extraction quality. Their
+  convergence theory says the Ritz value and refined Ritz vector can converge
+  under subspace approximation while the Ritz vector itself is conditional and
+  may fail. This supports our diagnostics around physical residuals, refined
+  extraction, and false reduced Ritz data. It is still a projection/extraction
+  analysis, not a FEAST-style residual moment update. DOI:
+  <https://doi.org/10.1137/23M161392X>.
+- Tang and Saad's 2024 rational-Chebyshev projection method combines polynomial
+  and rational approximation, uses Cauchy-integral ideas, keeps projected
+  vectors in the original physical dimension rather than the linearized
+  dimension, and includes automatic shift selection/region partitioning. This
+  is close in spirit to our chart/rational-coordinate and region-policy rungs,
+  but it builds an approximation/linearization/projection method rather than
+  iterating a contour realization by residual Laurent repair. DOI:
+  <https://doi.org/10.1002/nla.2563>.
+- Liu, Roman, and Shao's 2026 contour integration and region-partitioning paper
+  combines Beyn's method with recursive integral methods and a new partitioning
+  criterion. This is relevant to chart-cover policy and count-driven
+  refinement. It remains a region-selection wrapper around extraction, not a
+  residual-inverse update of left/right physical trial spaces. DOI:
+  <https://doi.org/10.1002/nla.70072>.
+- The contour invariant-pair paper remains the closest mathematical neighbor
+  below the fully analytic case: it adapts SS moments to invariant pairs and
+  studies Newton refinement. It strengthens the interpretation of
+  invariant-pair Newton as a refinement/escalation rung, but not as the
+  residual-Laurent FEAST iteration itself. DOI:
+  <https://doi.org/10.1016/j.tcs.2017.03.024>.
+
+Updated interpretation:
+
+- The recent literature continues to split into projection/extraction,
+  approximation/linearization, region partitioning, and local refinement
+  families.
+- None of the checked sources appears to update a local two-sided contour
+  realization by compressed residual inverse Laurent moments of the physical
+  trial and test spaces.
+- The newest projection theory is useful for explaining why reduced Ritz data
+  must be validated with physical residuals and why the two-sided diagnostic is
+  important. It does not weaken the current candidate; it clarifies the
+  acceptance/refinement layer around it.
