@@ -95,6 +95,30 @@ accepted roots, while one compressed residual-Laurent enrichment improves the
 residual scale by more than `1e8` and recovers the full target set. This is the
 main numerical clue for the analytic local correction estimate.
 
+## Why This Is Not Just Block Newton
+
+Invariant-pair or block Newton methods are still the right local refinement
+language once a small reliable reduced model is available. They are not the
+moment update itself.
+
+The experiment separates the roles as follows:
+
+- block Newton acts inside an already chosen reduced realization or invariant
+  pair;
+- residual-Laurent enrichment changes the physical trial/test spaces before
+  re-extraction;
+- chart policy decides whether the local realization is trustworthy enough to
+  refine, split, or reject.
+
+The `run_analytic_block_newton_boundary_diagnostic` control records this
+boundary. On a small, well-localized chart, reduced block Newton can improve
+local data. On a large many-root analytic chart, it is not a substitute for
+chart policy or residual-Laurent physical-space repair. Thus the remaining
+theorem should not be stated as "apply block Newton to the moment matrix." It
+should explain why the residual-Laurent update is a FEAST-style outer
+correction that supplies better physical spaces for the next reduced
+realization.
+
 ## Proof Skeleton
 
 1. **Realization layer.** Use Keldysh plus contour integration to show positive
@@ -157,6 +181,8 @@ Hankel columns as the persistent state.
 - It does not claim that more inverse-Laurent moments always improve a bad
   chart.
 - It does not claim subspace angle alone controls success.
+- It does not claim block Newton on a reduced realization is the outer
+  moment-update mechanism.
 
 ## Current Evidence Map
 
@@ -178,3 +204,22 @@ Hankel columns as the persistent state.
 The unresolved mathematical task is step 5: a clean local correction estimate
 for analytic `T` stated in terms of the finite transfer realization and reduced
 physical residuals.
+
+## Current Stopping Boundary
+
+At this point the experiment has a coherent candidate algorithm and has ruled
+out three tempting but wrong proof simplifications:
+
+- finite denominator-only Laurent truncation;
+- pure subspace-angle improvement;
+- reduced block Newton as the outer moment update.
+
+The remaining gap is genuinely mathematical: prove a local correction estimate
+for analytic `T` where a captured two-sided finite realization has inaccurate
+physical Ritz residuals, and show that compressed inverse-Laurent residual
+enrichment improves the re-extracted physical Ritz data under explicit local
+conditioning/quadrature/rank assumptions.
+
+If that estimate cannot be proved, the algorithm should be reported as a
+strong empirical FEAST-family synthesis rather than a solved general
+moment-NLFEAST theory.

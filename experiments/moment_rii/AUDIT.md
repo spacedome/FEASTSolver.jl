@@ -71,6 +71,10 @@ global block Newton, or rational-coordinate-only fixes.
   residual-Laurent update fixes the residuals. The theorem needs reduced
   Ritz/eigenvector residual quality inside the realized subspace, not only an
   angle-to-residue-space statement.
+- Reduced block Newton is not the outer moment-update mechanism. Existing
+  diagnostics keep it as a local refinement rung after a reliable reduced
+  realization is available, not as a substitute for residual-Laurent
+  physical-space repair or chart policy.
 - Inverse and Mobius moment coordinates do not replace Loewner/local charts on
   the exponential many-root global chart.
 - Near-pole rational singularities outside the contour do not currently require
@@ -217,8 +221,8 @@ productive steps are:
    remaining mathematical gap is a local statement relating residual-subspace
    enrichment, quadrature/rank truncation, and reduced Ritz/eigenvector
    residual quality inside a captured realization. A naive scalar denominator
-   truncation proof and a pure subspace-angle proof have both been explicitly
-   rejected by diagnostics.
+   truncation proof, a pure subspace-angle proof, and a "just block Newton"
+   interpretation have all been explicitly rejected by diagnostics.
 2. Continue tightening the experiment interface around a small set of stable
    objects: chart, pipeline, basis, extractor, update, policy, and diagnostic.
    `pipeline.jl` now holds the chart/pipeline/basis/extractor/update objects, while
