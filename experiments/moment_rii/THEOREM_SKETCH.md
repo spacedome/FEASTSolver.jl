@@ -366,6 +366,56 @@ Status: not proved. The sparse diagonal and rank-deficient analytic diagnostics
 show exactly the behavior the lemma should explain, but they are not proof.
 This lemma is the current theorem gap.
 
+### Minimal Sufficient Form Of Lemma 5
+
+The theorem does not need to prove monotone convergence of the whole nonlinear
+iteration. A weaker, more realistic statement would be enough:
+
+```text
+Given a safe chart whose positive moments identify the correct two-sided
+realization rank, and given reduced Ritz data with compressed physical
+residual bases U_X,U_Y, the residual-Laurent enrichment spaces contain,
+up to quadrature/rank/compression errors, the leading local correction
+directions that a JD/RII-style correction equation would add for the same
+Ritz data.
+```
+
+Then the proof can be modular:
+
+```text
+contour realization accuracy
+  -> residual-Laurent contains useful correction directions
+  -> reduced RR/refined-RR perturbation improves re-extracted physical data
+```
+
+This weaker form is enough for the algorithm-family story because FEAST is
+also a subspace iteration: the contour step supplies a better physical space,
+and Rayleigh--Ritz/reduced extraction is responsible for producing new Ritz
+data inside that space.
+
+The minimum missing estimate is therefore a **range-inclusion/angle** statement
+for correction directions, not a full nonlinear convergence theorem:
+
+```text
+dist(correction_space_JD/RII,
+     span([X, contour_inverse_residual_moments(U_X)]))
+  <= C_chart * (realization_error + quadrature_error + compression_error).
+```
+
+The left side should be interpreted side-by-side for the right and left
+physical spaces. This also explains why a pure eigenvector-subspace angle
+theorem was insufficient: the useful object is the local residual-correction
+range inside a captured realization, not merely the angle between `X,Y` and
+the exact residue spaces.
+
+This minimal form still appears to be new or at least not covered by the
+adjacent sources checked so far. Neumaier/Jarlebring-style RII theory supplies
+the scalar correction language, Jacobi--Davidson supplies the residual
+correction-equation analogy, Jia--Zheng supplies reduced extraction
+perturbation after a good space exists, and SS/Beyn/Loewner supplies the
+finite realization. None of those sources, as currently checked, proves this
+contour-filtered compressed residual range-inclusion step.
+
 ## Formal Obstruction
 
 The remaining proof is not blocked by implementation details. It is blocked at
