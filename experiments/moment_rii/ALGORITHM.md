@@ -86,7 +86,10 @@ per scalar Ritz value.
   realization extractor. Counted SS/Hankel, companion/QZ, and Loewner are
   interchangeable reduced extractors for this stage.
 - Canonical NLFEAST: with one local chart, one moment, and diagonal scalar
-  extraction, this collapses toward the existing NLFEAST/Beyn-RII path.
+  extraction, this matches the existing NLFEAST/Beyn-RII path on the
+  one-root-per-component limit. The compressed residual-Laurent update gives
+  the same roots and residual scale without carrying scalar-expanded update
+  columns as persistent state.
 - Moment-NLFEAST: with higher moments, the reduced realization is kept finite
   and local. The method avoids forcing a many-root Hankel realization back into
   a single global diagonal scalar-RII state.
@@ -104,6 +107,10 @@ per scalar Ritz value.
 - Residual-Laurent compression control: on a rank-deficient analytic chart, the
   moment update recovers all roots with fewer candidate columns and a larger
   observable physical realization than scalar expanded RII, which fails.
+- Canonical NLFEAST limit control: a three-component one-root-per-component
+  rational NEP compares the existing `nlfeast!`, scalar-expanded residual RII,
+  and compressed residual-Laurent update. All three recover the same three
+  target values to residuals near machine precision, pinning the `K=1` bridge.
 - Rational controls: poles placed just outside the contour are stable across
   Loewner vs counted-SS extraction and residual normalization in the current
   dense reduced setting.
@@ -148,6 +155,7 @@ Representative tests:
 - `just test 'automatic retention policy'`
 - `just test 'candidate-centered split'`
 - `just test 'residual Laurent update'`
+- `just test 'canonical NLFEAST limit'`
 - `just test 'near-pole rational'`
 - `just test 'without root oracle'`
 - `just test 'oracle-free nonnormal delay'`

@@ -654,6 +654,20 @@ end
     @test final.retained == result.count.count_estimate
 end
 
+@testitem "experimental moment RII: canonical NLFEAST limit agrees with scalar and compressed updates" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_canonical_nlfeast_limit_diagnostic(; print_rows=false)
+
+    @test length(result.expected) == 3
+    for summary in (result.canonical_summary, result.scalar_summary, result.compressed_summary)
+        @test summary.good == length(result.expected)
+        @test summary.matched == length(result.expected)
+        @test summary.spurious_good == 0
+        @test summary.max_residual <= 1e-8
+    end
+end
+
 @testitem "experimental moment RII: count-driven refinement handles oracle-free multiplicity" tags=[:slow] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 

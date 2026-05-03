@@ -1807,6 +1807,100 @@ function run_count_driven_radius_ladder(;
     )
 end
 
+function run_canonical_nlfeast_limit_diagnostic(;
+    center=0.0 + 0.0im,
+    radius=1.2,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    cases = (
+        scalar_rational_case(; root=-0.5, pole=3.0, name="canonical_r1"),
+        scalar_rational_case(; root=0.2 + 0.3im, pole=3.0 + 0.5im, name="canonical_r2"),
+        scalar_rational_case(; root=0.6 - 0.2im, pole=3.2 - 0.4im, name="canonical_r3"),
+    )
+    common_kwargs = (
+        cases=cases,
+        center=center,
+        radius=radius,
+        operator_builder=similarity_analytic_tools,
+        operator_label="canonical similarity rational",
+        basis_moments=1,
+        basis_nodes=16,
+        rii_nodes=128,
+        update_moment_count=1,
+        iterations=2,
+        extractor=:loewner_counted,
+        reduced_moments=6,
+        reduced_nodes=256,
+        determinant_capacity=16,
+        basis_ranktol=1e-10,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        verbose=false,
+    )
+    scalar = run_dual_moment_compressed_rii_analytic_iteration(; common_kwargs..., update_mode=:scalar_expanded)
+    compressed = run_dual_moment_compressed_rii_analytic_iteration(; common_kwargs..., update_mode=:moment_compressed)
+
+    chart = ContourChart(center, radius)
+    ctx = analytic_context(cases, chart, similarity_analytic_tools)
+    Random.seed!(1234)
+    X = rand(ComplexF64, ctx.n, length(ctx.expected))
+    values, _, residuals = FEASTSolver.nlfeast!(
+        ctx.Tmatrix,
+        X,
+        16,
+        2;
+        c=center,
+        r=radius,
+        ϵ=residual_tol,
+        store=true,
+    )
+    inside = FEASTSolver.in_contour(values, center, radius)
+    canonical_values = ComplexF64.(values[inside])
+    canonical_residuals = Float64.(residuals[inside])
+    canonical_matched = match_expected_count(canonical_values, ctx.expected; atol=match_atol)
+    canonical_summary = (
+        inside=count(inside),
+        good=count(canonical_residuals .<= residual_tol),
+        matched=canonical_matched,
+        spurious_good=max(count(canonical_residuals .<= residual_tol) - canonical_matched, 0),
+        max_residual=isempty(canonical_residuals) ? Inf : maximum(canonical_residuals),
+    )
+
+    scalar_summary = last(scalar.summaries)
+    compressed_summary = last(compressed.summaries)
+    if print_rows
+        println()
+        println("Canonical NLFEAST limit diagnostic")
+        println("  one root per component; compares existing nlfeast!, scalar expanded RII, and compressed residual-Laurent update")
+        for row in (
+            (method=:nlfeast, summary=canonical_summary),
+            (method=:scalar_expanded, summary=scalar_summary),
+            (method=:moment_compressed, summary=compressed_summary),
+        )
+            @printf(
+                "  %-18s good=%d matched=%d/%d spurious=%d max=%.3e\n",
+                string(row.method),
+                row.summary.good,
+                row.summary.matched,
+                length(ctx.expected),
+                row.summary.spurious_good,
+                row.summary.max_residual,
+            )
+        end
+    end
+    (
+        expected=ctx.expected,
+        canonical_values=canonical_values,
+        canonical_summary=canonical_summary,
+        scalar=scalar,
+        scalar_summary=scalar_summary,
+        compressed=compressed,
+        compressed_summary=compressed_summary,
+    )
+end
+
 function run_three_function_count_driven_adaptive_refinement(;
     outer_radius=20.0,
     base_spacing=3.0,
