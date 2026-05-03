@@ -1109,7 +1109,9 @@ end
 end
 
 @testitem "experimental moment RII: residual Laurent update runs on remote contour workers" tags=[:slow, :distributed] begin
-    Base.include(Main, joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+    if !isdefined(Main, :run_remote_residual_laurent_worker_diagnostic)
+        Base.include(Main, joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+    end
 
     result = Main.run_remote_residual_laurent_worker_diagnostic(; worker_count=2, print_rows=false)
 
@@ -1132,10 +1134,17 @@ end
     @test result.assignments == [[i for i in 1:2:128], [i for i in 2:2:128]]
     @test result.remote_stats.right_candidate_cols == result.serial_stats.right_candidate_cols
     @test result.remote_stats.left_candidate_cols == result.serial_stats.left_candidate_cols
+    @test result.timing.plan_setup_ns > 0
+    @test result.timing.serial_update_ns > 0
+    @test result.timing.remote_update_ns > 0
+    @test 0 < result.timing.remote_worker_max_ns <= result.timing.remote_worker_sum_ns
+    @test 0 < result.timing.remote_second_worker_max_ns <= result.timing.remote_second_worker_sum_ns
 end
 
 @testitem "experimental moment RII: sparse residual Laurent update runs on remote contour workers" tags=[:slow, :distributed] begin
-    Base.include(Main, joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+    if !isdefined(Main, :run_sparse_remote_residual_laurent_worker_smoke)
+        Base.include(Main, joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+    end
 
     result = Main.run_sparse_remote_residual_laurent_worker_smoke(; worker_count=2, print_rows=false)
 
@@ -1151,6 +1160,10 @@ end
     @test sum(report.nodes for report in result.remote_stats.workers) == 64
     @test result.remote_stats.right_candidate_cols == result.serial_stats.right_candidate_cols
     @test result.remote_stats.left_candidate_cols == result.serial_stats.left_candidate_cols
+    @test result.timing.plan_setup_ns > 0
+    @test result.timing.serial_update_ns > 0
+    @test result.timing.remote_update_ns > 0
+    @test 0 < result.timing.remote_worker_max_ns <= result.timing.remote_worker_sum_ns
 end
 
 @testitem "experimental moment RII: residual Laurent update repairs nonnormal chart cover" tags=[:slow, :moment_heavy] begin

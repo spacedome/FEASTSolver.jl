@@ -4325,6 +4325,20 @@ function ensure_moment_remote_workers(worker_count)
     filter(!=(Distributed.myid()), Distributed.workers())[1:worker_count], added
 end
 
+function timed_moment_rii_call(f)
+    start_ns = time_ns()
+    value = f()
+    (value=value, elapsed_ns=time_ns() - start_ns)
+end
+
+function worker_elapsed_summary(worker_reports)
+    elapsed = [report.elapsed_ns for report in worker_reports]
+    (
+        worker_sum_ns=sum(elapsed; init=0),
+        worker_max_ns=isempty(elapsed) ? 0 : maximum(elapsed),
+    )
+end
+
 function run_remote_residual_laurent_worker_diagnostic(;
     worker_count=2,
     residual_tol=1e-8,
@@ -4355,19 +4369,26 @@ function run_remote_residual_laurent_worker_diagnostic(;
         )
         trial = initial_dual_trial_spaces(ctx, chart, basis)
         extraction0 = extract_reduced_nep(ctx, trial, chart, extractor)
-        plan = RemoteResidualLaurentUpdatePlan(
-            ctx,
-            chart,
-            update;
-            worker_ids=worker_ids,
+        plan_timing = timed_moment_rii_call(
+            () -> RemoteResidualLaurentUpdatePlan(
+                ctx,
+                chart,
+                update;
+                worker_ids=worker_ids,
+            ),
         )
+        plan = plan_timing.value
         result = try
-            serial_trial, serial_stats = residual_laurent_update(ctx, trial, extraction0, chart, update)
-            remote_trial, remote_stats = remote_residual_laurent_update(ctx, trial, extraction0, plan)
+            serial_timing = timed_moment_rii_call(() -> residual_laurent_update(ctx, trial, extraction0, chart, update))
+            serial_trial, serial_stats = serial_timing.value
+            remote_timing = timed_moment_rii_call(() -> remote_residual_laurent_update(ctx, trial, extraction0, plan))
+            remote_trial, remote_stats = remote_timing.value
             serial_extraction = extract_reduced_nep(ctx, serial_trial, chart, extractor)
             remote_extraction = extract_reduced_nep(ctx, remote_trial, chart, extractor)
-            serial_trial2, serial_stats2 = residual_laurent_update(ctx, serial_trial, serial_extraction, chart, update)
-            remote_trial2, remote_stats2 = remote_residual_laurent_update(ctx, remote_trial, remote_extraction, plan)
+            serial_timing2 = timed_moment_rii_call(() -> residual_laurent_update(ctx, serial_trial, serial_extraction, chart, update))
+            serial_trial2, serial_stats2 = serial_timing2.value
+            remote_timing2 = timed_moment_rii_call(() -> remote_residual_laurent_update(ctx, remote_trial, remote_extraction, plan))
+            remote_trial2, remote_stats2 = remote_timing2.value
             serial_extraction2 = extract_reduced_nep(ctx, serial_trial2, chart, extractor)
             remote_extraction2 = extract_reduced_nep(ctx, remote_trial2, chart, extractor)
             serial_summary = dual_scalar_rii_summary(serial_extraction, ctx.expected; residual_tol=residual_tol, match_atol=match_atol)
@@ -4378,6 +4399,8 @@ function run_remote_residual_laurent_worker_diagnostic(;
             Py = serial_trial.Y * serial_trial.Y' - remote_trial.Y * remote_trial.Y'
             Px2 = serial_trial2.X * serial_trial2.X' - remote_trial2.X * remote_trial2.X'
             Py2 = serial_trial2.Y * serial_trial2.Y' - remote_trial2.Y * remote_trial2.Y'
+            remote_worker_timing = worker_elapsed_summary(remote_stats.workers)
+            remote_worker_timing2 = worker_elapsed_summary(remote_stats2.workers)
             (
                 expected=length(ctx.expected),
                 workers=worker_ids,
@@ -4394,6 +4417,17 @@ function run_remote_residual_laurent_worker_diagnostic(;
                 remote_stats=remote_stats,
                 serial_stats_second=serial_stats2,
                 remote_stats_second=remote_stats2,
+                timing=(
+                    plan_setup_ns=plan_timing.elapsed_ns,
+                    serial_update_ns=serial_timing.elapsed_ns,
+                    remote_update_ns=remote_timing.elapsed_ns,
+                    serial_second_update_ns=serial_timing2.elapsed_ns,
+                    remote_second_update_ns=remote_timing2.elapsed_ns,
+                    remote_worker_sum_ns=remote_worker_timing.worker_sum_ns,
+                    remote_worker_max_ns=remote_worker_timing.worker_max_ns,
+                    remote_second_worker_sum_ns=remote_worker_timing2.worker_sum_ns,
+                    remote_second_worker_max_ns=remote_worker_timing2.worker_max_ns,
+                ),
             )
         finally
             close_remote_residual_laurent_plan!(plan)
@@ -4403,7 +4437,7 @@ function run_remote_residual_laurent_worker_diagnostic(;
             println("Remote residual Laurent worker diagnostic")
             println("  verifies actual Julia worker processes can retain contour-node ownership across residual-Laurent updates")
             @printf(
-                "  workers=%s expected=%d serial=%d/%d remote=%d/%d second=%d/%d projection_gap=(%.3e, %.3e) second_gap=(%.3e, %.3e) worker_nodes=%s\n",
+                "  workers=%s expected=%d serial=%d/%d remote=%d/%d second=%d/%d projection_gap=(%.3e, %.3e) second_gap=(%.3e, %.3e) worker_nodes=%s setup=%.3fs updates=(serial %.3fs, remote %.3fs, remote2 %.3fs)\n",
                 string(worker_ids),
                 result.expected,
                 result.serial.matched,
@@ -4417,6 +4451,10 @@ function run_remote_residual_laurent_worker_diagnostic(;
                 result.x_projection_gap_second,
                 result.y_projection_gap_second,
                 string([report.nodes for report in result.remote_stats.workers]),
+                result.timing.plan_setup_ns / 1e9,
+                result.timing.serial_update_ns / 1e9,
+                result.timing.remote_update_ns / 1e9,
+                result.timing.remote_second_update_ns / 1e9,
             )
         end
         result
@@ -4475,19 +4513,23 @@ function run_sparse_remote_residual_laurent_worker_smoke(;
         )
         trial = initial_dual_trial_spaces(ctx, chart, basis)
         extraction0 = extract_reduced_nep(ctx, trial, chart, extractor)
-        serial_trial, serial_stats = residual_laurent_update(ctx, trial, extraction0, chart, update)
-        plan = RemoteResidualLaurentUpdatePlan(ctx, chart, update; worker_ids=worker_ids)
-        remote_trial, remote_stats = try
-            remote_residual_laurent_update(ctx, trial, extraction0, plan)
+        serial_timing = timed_moment_rii_call(() -> residual_laurent_update(ctx, trial, extraction0, chart, update))
+        serial_trial, serial_stats = serial_timing.value
+        plan_timing = timed_moment_rii_call(() -> RemoteResidualLaurentUpdatePlan(ctx, chart, update; worker_ids=worker_ids))
+        plan = plan_timing.value
+        remote_timing = try
+            timed_moment_rii_call(() -> remote_residual_laurent_update(ctx, trial, extraction0, plan))
         finally
             close_remote_residual_laurent_plan!(plan)
         end
+        remote_trial, remote_stats = remote_timing.value
         serial_extraction = extract_reduced_nep(ctx, serial_trial, chart, extractor)
         remote_extraction = extract_reduced_nep(ctx, remote_trial, chart, extractor)
         serial_summary = dual_scalar_rii_summary(serial_extraction, expected; residual_tol=residual_tol, match_atol=match_atol)
         remote_summary = dual_scalar_rii_summary(remote_extraction, expected; residual_tol=residual_tol, match_atol=match_atol)
         Px = serial_trial.X * serial_trial.X' - remote_trial.X * remote_trial.X'
         Py = serial_trial.Y * serial_trial.Y' - remote_trial.Y * remote_trial.Y'
+        remote_worker_timing = worker_elapsed_summary(remote_stats.workers)
         result = (
             expected=length(expected),
             sparse_matrix=Tmatrix(center + radius * im) isa AbstractSparseMatrix,
@@ -4498,13 +4540,20 @@ function run_sparse_remote_residual_laurent_worker_smoke(;
             y_projection_gap=opnorm(Py),
             serial_stats=serial_stats,
             remote_stats=remote_stats,
+            timing=(
+                plan_setup_ns=plan_timing.elapsed_ns,
+                serial_update_ns=serial_timing.elapsed_ns,
+                remote_update_ns=remote_timing.elapsed_ns,
+                remote_worker_sum_ns=remote_worker_timing.worker_sum_ns,
+                remote_worker_max_ns=remote_worker_timing.worker_max_ns,
+            ),
         )
         if print_rows
             println()
             println("Sparse remote residual Laurent worker smoke")
             println("  sparse diagonal T(z)=zI-A; validates sparse operator closures in persistent remote workers")
             @printf(
-                "  workers=%s expected=%d serial=%d/%d remote=%d/%d projection_gap=(%.3e, %.3e) worker_nodes=%s\n",
+                "  workers=%s expected=%d serial=%d/%d remote=%d/%d projection_gap=(%.3e, %.3e) worker_nodes=%s setup=%.3fs updates=(serial %.3fs, remote %.3fs)\n",
                 string(worker_ids),
                 result.expected,
                 result.serial.matched,
@@ -4514,6 +4563,9 @@ function run_sparse_remote_residual_laurent_worker_smoke(;
                 result.x_projection_gap,
                 result.y_projection_gap,
                 string([report.nodes for report in result.remote_stats.workers]),
+                result.timing.plan_setup_ns / 1e9,
+                result.timing.serial_update_ns / 1e9,
+                result.timing.remote_update_ns / 1e9,
             )
         end
         result

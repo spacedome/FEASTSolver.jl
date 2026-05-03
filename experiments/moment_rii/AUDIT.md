@@ -89,10 +89,11 @@ global block Newton, or rational-coordinate-only fixes.
   accumulation and candidate-compression helpers. The first remote worker
   diagnostic now stores operator closures and contour-node subsets in actual
   Julia worker processes, sends only residual bases for two update calls, and
-  reduces the returned Laurent blocks to match the serial update. A sparse
-  diagonal linear smoke runs through the same persistent worker boundary, but
-  this is still not reusable sparse factorization storage or a benchmark-level
-  performance claim.
+  reduces the returned Laurent blocks to match the serial update. The remote
+  dense and sparse diagnostics now carry lightweight setup/update/worker timing
+  metadata as a profiling smoke check. A sparse diagonal linear smoke runs
+  through the same persistent worker boundary, but this is still not reusable
+  sparse factorization storage or a benchmark-level performance claim.
   `IMPLEMENTATION.md` records the sparse and distributed rungs needed to turn
   the experiment boundary into a real implementation.
 - Split/shrink chart policy is now a reproducible local refinement rung, not a

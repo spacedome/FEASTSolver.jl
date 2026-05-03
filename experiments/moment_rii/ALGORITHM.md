@@ -205,13 +205,15 @@ per scalar Ritz value.
 - Remote residual-Laurent worker diagnostic: the same update runs on actual
   Julia worker processes with each process retaining the operator closures and
   a stable contour-node subset across two residual-Laurent updates. The reduced
-  Laurent blocks match the serial update to roundoff projection gaps. This is
-  process-level evidence for the worker model, not yet an optimized sparse or
-  benchmarked implementation.
+  Laurent blocks match the serial update to roundoff projection gaps. The
+  diagnostic also reports setup, update, and worker-local timing metadata as a
+  profiling smoke check. This is process-level evidence for the worker model,
+  not yet an optimized sparse or benchmarked implementation.
 - Sparse remote worker smoke: the persistent worker path also accepts a sparse
   diagonal linear operator through `Tmatrix/Tsolve` closures and reproduces the
-  serial residual-Laurent update on the sparse linear control. This is generic
-  sparse compatibility evidence, not sparse factorization reuse.
+  serial residual-Laurent update on the sparse linear control while preserving
+  the same lightweight timing shape. This is generic sparse compatibility
+  evidence, not sparse factorization reuse.
 - Adjacent implementation recheck: RSRR, SLEPc CISS, and Riesz-projection
   methods all support the current separation between contour-node solves,
   reduced extraction, and selection/observability policy. They do not appear to

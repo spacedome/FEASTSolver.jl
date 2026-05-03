@@ -80,8 +80,10 @@ to map onto workers.
 prototype: it stores the operator closures and contour-node subsets on actual
 Julia worker processes, sends only the current low-rank residual bases for each
 update, and the master reduces the returned Laurent blocks before running the
-same compression step. This is still an experiment diagnostic, not a public or
-optimized sparse plan.
+same compression step. The diagnostic now reports lightweight setup, serial
+update, remote update, and worker-local elapsed times so we can see where the
+prototype spends time without treating this small control as a benchmark. This
+is still an experiment diagnostic, not a public or optimized sparse plan.
 
 ## What Not To Do
 
@@ -111,12 +113,13 @@ operator with known eigenvalues, not a difficult NEP:
 
 The current remote diagnostic completes steps 1-6 for a dense analytic control
 and keeps worker-local operator data and node assignments alive across two
-residual-update calls. The next implementation step is to add worker-local
+residual-update calls. It also records per-stage timing metadata as a
+profiling smoke check. The next implementation step is to add worker-local
 buffers and sparse/factorization storage, then benchmark against the serial and
 one-shot remote paths.
 `run_sparse_remote_residual_laurent_worker_smoke` also verifies that sparse
-linear operator closures pass through the same persistent worker boundary. It
-does not yet reuse symbolic sparse factorizations or keep sparse work buffers
-node-local.
+linear operator closures pass through the same persistent worker boundary and
+records the same lightweight timing shape. It does not yet reuse symbolic
+sparse factorizations or keep sparse work buffers node-local.
 
 Only after that should the prototype move to nonlinear sparse gallery problems.
