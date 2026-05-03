@@ -67,6 +67,12 @@ left worker output:  sum_nodes zeta^( k) T(z)^(-H) U_Y dz
 The master then concatenates those partial blocks with the existing `X,Y`,
 compresses the physical spaces, and runs the reduced extractor again.
 
+The partition diagnostic now verifies this algebra without process machinery:
+four disjoint contour-node partitions return partial residual-Laurent blocks
+whose sum reproduces the serial update to roundoff-level projection gaps and
+the same recovered target roots. That makes the remaining distributed work an
+ownership/workspace implementation problem, not a new numerical update.
+
 ## What Not To Do
 
 - Do not distribute reduced extraction first. The reduced NEP is small and is
@@ -90,7 +96,7 @@ operator with known eigenvalues, not a difficult NEP:
 3. Form low-rank residual bases.
 4. Send those bases to persistent contour workers.
 5. Reduce worker Laurent moments back to the master.
-6. Verify the result matches the serial residual-Laurent update on the same
-   problem.
+6. Verify the result matches the pinned partition diagnostic and the serial
+   residual-Laurent update on the same problem.
 
 Only after that should the prototype move to nonlinear sparse gallery problems.

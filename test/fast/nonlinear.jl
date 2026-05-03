@@ -1049,6 +1049,27 @@ end
     @test result.efficiency.scalar_expanded_worse
 end
 
+@testitem "experimental moment RII: residual Laurent update decomposes across contour partitions" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_residual_laurent_partition_diagnostic(; partitions=4, print_rows=false)
+
+    @test result.expected == 20
+    @test result.partitions == 4
+    @test result.serial.matched == result.expected
+    @test result.partitioned.matched == result.expected
+    @test result.partitioned.spurious_good == 0
+    @test result.partitioned.max_residual <= 1e-8
+    @test result.x_projection_gap <= 1e-12
+    @test result.y_projection_gap <= 1e-12
+    @test result.partitioned_stats.right_candidate_cols == result.serial_stats.right_candidate_cols
+    @test result.partitioned_stats.left_candidate_cols == result.serial_stats.left_candidate_cols
+    @test result.partitioned_stats.right_residual_rank == result.serial_stats.right_residual_rank
+    @test result.partitioned_stats.left_residual_rank == result.serial_stats.left_residual_rank
+    @test length(result.partitioned_stats.partitions) == result.partitions
+    @test sum(row.nodes for row in result.partitioned_stats.partitions) == 128
+end
+
 @testitem "experimental moment RII: residual Laurent update repairs nonnormal chart cover" tags=[:slow, :moment_heavy] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 

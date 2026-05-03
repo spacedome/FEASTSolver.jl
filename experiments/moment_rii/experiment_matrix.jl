@@ -3752,6 +3752,152 @@ function run_residual_laurent_compression_diagnostic(;
     )
 end
 
+function partitioned_residual_laurent_update(
+    ctx,
+    trial::TrialSpaces,
+    extraction,
+    chart::ContourChart,
+    config::ResidualUpdateConfig;
+    partitions=4,
+)
+    Rright_basis, Rleft_basis, right_residual_singulars, left_residual_singulars =
+        residual_blocks_from_matrix_extraction(ctx.Tmatrix, extraction; residual_ranktol=config.residual_ranktol)
+    n = size(trial.X, 1)
+    right_moments = [zeros(ComplexF64, n, size(Rright_basis, 2)) for _ in 1:config.moment_count]
+    left_moments = [zeros(ComplexF64, n, size(Rleft_basis, 2)) for _ in 1:config.moment_count]
+    z_nodes, z_weights = circular_rule(chart, config.rii_nodes)
+    partition_reports = NamedTuple[]
+    for part in 1:partitions
+        local_indices = part:partitions:length(z_nodes)
+        local_right = [zeros(ComplexF64, n, size(Rright_basis, 2)) for _ in 1:config.moment_count]
+        local_left = [zeros(ComplexF64, n, size(Rleft_basis, 2)) for _ in 1:config.moment_count]
+        for index in local_indices
+            z = z_nodes[index]
+            weight = z_weights[index]
+            ζ = (z - chart.center) / chart.radius
+            base = weight / (z - chart.center)
+            solved_right = size(Rright_basis, 2) == 0 ? zeros(ComplexF64, n, 0) : ctx.Tsolve(z, Rright_basis)
+            solved_left = size(Rleft_basis, 2) == 0 ? zeros(ComplexF64, n, 0) : ctx.Tadjoint_solve(z, Rleft_basis)
+            right_power = one(ComplexF64)
+            left_power = one(ComplexF64)
+            for k in 1:config.moment_count
+                local_right[k] .+= (base * right_power) .* solved_right
+                local_left[k] .+= (conj(base) * left_power) .* solved_left
+                right_power /= ζ
+                left_power *= ζ
+            end
+        end
+        for k in 1:config.moment_count
+            right_moments[k] .+= local_right[k]
+            left_moments[k] .+= local_left[k]
+        end
+        push!(
+            partition_reports,
+            (
+                partition=part,
+                nodes=length(local_indices),
+                right_cols=size(Rright_basis, 2),
+                left_cols=size(Rleft_basis, 2),
+            ),
+        )
+    end
+    Xcandidate = reduce(hcat, vcat(Matrix{ComplexF64}[Matrix(trial.X)], right_moments))
+    Ycandidate = reduce(hcat, vcat(Matrix{ComplexF64}[Matrix(trial.Y)], left_moments))
+    Xnew, right_singulars = physical_basis_from_columns(Xcandidate; ranktol=config.compression_ranktol)
+    Ynew, left_singulars = physical_basis_from_columns(Ycandidate; ranktol=config.compression_ranktol)
+    if size(Xnew, 2) != size(Ynew, 2)
+        common = min(size(Xnew, 2), size(Ynew, 2))
+        Xnew = Xnew[:, 1:common]
+        Ynew = Ynew[:, 1:common]
+    end
+    updated = common_square_trial_spaces(TrialSpaces(
+        X=Xnew,
+        Y=Ynew,
+        right_singulars=Float64.(right_singulars),
+        left_singulars=Float64.(left_singulars),
+        source=:partitioned_residual_laurent_update,
+    ))
+    stats = (
+        right_residual_rank=size(Rright_basis, 2),
+        left_residual_rank=size(Rleft_basis, 2),
+        right_residual_singulars=right_residual_singulars,
+        left_residual_singulars=left_residual_singulars,
+        right_candidate_cols=size(Xcandidate, 2),
+        left_candidate_cols=size(Ycandidate, 2),
+        right_singulars=right_singulars,
+        left_singulars=left_singulars,
+        partitions=partition_reports,
+    )
+    updated, stats
+end
+
+function run_residual_laurent_partition_diagnostic(;
+    partitions=4,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    cases = (scalar_sine_case(), scalar_cosine_case(), scalar_shifted_sine_case())
+    chart = ContourChart(0.0 + 0.0im, 10.0)
+    ctx = analytic_context(cases, chart, similarity_analytic_tools)
+    basis = MomentBasisConfig(moments=4, nodes=8, ranktol=0.5, seed=9911)
+    extractor = ReducedExtractorConfig(;
+        extractor=:loewner_counted,
+        determinant_nodes=512,
+        determinant_capacity=64,
+        reduced_moments=12,
+        reduced_nodes=512,
+        loewner_points=6,
+        loewner_radius=1.3,
+        residual_normalization=:vector,
+    )
+    update = ResidualUpdateConfig(;
+        moment_count=1,
+        rii_nodes=128,
+        residual_ranktol=1e-10,
+        compression_ranktol=1e-10,
+    )
+    trial = initial_dual_trial_spaces(ctx, chart, basis)
+    extraction0 = extract_reduced_nep(ctx, trial, chart, extractor)
+    serial_trial, serial_stats = residual_laurent_update(ctx, trial, extraction0, chart, update)
+    partitioned_trial, partitioned_stats = partitioned_residual_laurent_update(ctx, trial, extraction0, chart, update; partitions=partitions)
+    serial_extraction = extract_reduced_nep(ctx, serial_trial, chart, extractor)
+    partitioned_extraction = extract_reduced_nep(ctx, partitioned_trial, chart, extractor)
+    serial_summary = dual_scalar_rii_summary(serial_extraction, ctx.expected; residual_tol=residual_tol, match_atol=match_atol)
+    partitioned_summary = dual_scalar_rii_summary(partitioned_extraction, ctx.expected; residual_tol=residual_tol, match_atol=match_atol)
+    Px = serial_trial.X * serial_trial.X' - partitioned_trial.X * partitioned_trial.X'
+    Py = serial_trial.Y * serial_trial.Y' - partitioned_trial.Y * partitioned_trial.Y'
+    result = (
+        expected=length(ctx.expected),
+        partitions=partitions,
+        serial=serial_summary,
+        partitioned=partitioned_summary,
+        x_projection_gap=opnorm(Px),
+        y_projection_gap=opnorm(Py),
+        serial_stats=serial_stats,
+        partitioned_stats=partitioned_stats,
+    )
+    if print_rows
+        println()
+        println("Residual Laurent partition diagnostic")
+        println("  verifies contour-node partition sums reproduce the serial residual-Laurent update")
+        @printf(
+            "  partitions=%d expected=%d serial=%d/%d partitioned=%d/%d projection_gap=(%.3e, %.3e) candidate_cols=(%d,%d)\n",
+            partitions,
+            result.expected,
+            result.serial.matched,
+            result.expected,
+            result.partitioned.matched,
+            result.expected,
+            result.x_projection_gap,
+            result.y_projection_gap,
+            result.partitioned_stats.right_candidate_cols,
+            result.partitioned_stats.left_candidate_cols,
+        )
+    end
+    result
+end
+
 function run_residual_laurent_update_ladder_diagnostic(;
     coupling=10.0,
     outer_radius=20.0,

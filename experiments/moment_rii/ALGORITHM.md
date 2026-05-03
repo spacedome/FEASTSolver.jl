@@ -187,6 +187,11 @@ per scalar Ritz value.
   all eight with residuals near machine precision. This is implementation
   evidence for the generic operator boundary, not a sparse-optimized moment
   solver.
+- Partitioned residual-Laurent update: splitting the residual-update contour
+  nodes into four independent partitions, summing the partial Laurent blocks,
+  and recompressing produces the same physical right/left trial spaces as the
+  serial update to projection gaps near roundoff. This pins the algebra needed
+  for persistent worker-owned contour partitions.
 - Canonical NLFEAST limit control: a three-component one-root-per-component
   rational NEP compares the existing `nlfeast!`, scalar-expanded residual RII,
   and compressed residual-Laurent update. All three recover the same three
