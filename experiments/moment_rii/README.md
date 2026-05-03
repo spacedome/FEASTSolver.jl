@@ -798,7 +798,7 @@ remaining gaps. It is the current guardrail against over-claiming completion.
 
 Current first-pass matrix result:
 
-- The matrix now spans physical dimensions `n=1,3,4,5,6,8,15`. This is
+- The matrix now spans physical dimensions `n=1,2,3,4,5,6,8,15`. This is
   intentional: small low-dimensional many-root cases test the moment geometry,
   while the larger polynomial controls catch ordinary matrix-size issues.
 - The regular `n=8` quadratic, deficient `n=15` quadratic, many-root `n=4`
@@ -933,6 +933,11 @@ Current first-pass matrix result:
   is 14 while the retained set contains seven unique roots. Local cluster counts
   assign multiplicity two to every retained root, giving algebraic completion
   without requiring explicit Jordan-chain extraction in the lower rung.
+- The no-oracle count-driven branch now includes non-triangular dense controls:
+  a 2x2 coupled two-delay NEP and a 3x3 dense multi-delay NEP. These are useful
+  because the determinant is no longer a simple product of scalar components,
+  yet the policy still completes from the full-operator argument-principle count
+  and chart support rather than exact roots.
 
 ## Nonlinear Experiment Plan
 
@@ -1013,11 +1018,13 @@ Current first-pass matrix result:
   when roots coincide, but small local contour counts can attach multiplicity
   to retained clusters. The same rule handles `sin(z)^2`, so it is not merely a
   coincident-component workaround. The scalar delay control complements this by
-  exercising the same count-completion path with no exact-root oracle at all;
-  the multi-delay triangular control exercises that path with nonnormal
-  left/right spaces, the near-pole rational control exercises it with exterior
-  rational singularities, and the duplicate-delay triangular control does the
-  same for the multiplicity branch.
+  showing simple-root count completion without exact roots, and the dense 2x2
+  and 3x3 delay controls now show weak-support refinement and residual-small
+  outside-domain diagnostics without relying on triangular determinant
+  structure. The multi-delay triangular control exercises the same
+  count-completion path with nonnormal left/right spaces, the near-pole
+  rational control exercises it with exterior rational singularities, and the
+  duplicate-delay triangular control does the same for the multiplicity branch.
 9. In progress: add the invariant-pair/block-Newton refinement rung explicitly for
    reduced polynomial and small dense analytic problems. This should be treated
    as a local refinement/check on a reduced NEP, not as a replacement for the
