@@ -259,9 +259,13 @@ level:
 - Containment: all new algorithm objects remain inside `experiments/moment_rii`.
 
 The remaining blocker is publication-level confidence, not another local
-implementation trick. We still need either a more formal proof/derivation that
-identifies the residual-Laurent repair in established realization language, or
-a broader novelty review showing that adjacent contour projection,
-Loewner/realization, invariant-pair Newton, and refined Rayleigh--Ritz methods
-do not already contain the same update in different notation. Until then the
-status remains "strong candidate", not "solved decisively."
+implementation trick. We now know the formal obstruction precisely:
+`THEOREM_SKETCH.md` identifies the missing estimate as perturbation/correction
+theory for contour-filtered compressed residual corrections of a two-sided
+finite NEP realization. We still need either that proof, or a known theorem
+from adjacent Jacobi-Davidson/RII/projection theory that implies it. A broader
+novelty review should also verify that adjacent contour projection,
+Loewner/realization, invariant-pair Newton, refined Rayleigh--Ritz, and
+Jacobi-Davidson methods do not already contain the same update in different
+notation. Until then the status remains "strong candidate with a sharply
+identified theorem gap", not "solved decisively."

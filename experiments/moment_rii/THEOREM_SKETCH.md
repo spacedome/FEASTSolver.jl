@@ -263,3 +263,59 @@ This suggests a proof route:
 The theorem should therefore be framed as a **FEAST-filtered block correction
 equation for a finite contour realization**. That is currently the most concise
 description of the candidate algorithm.
+
+## Formal Obstruction
+
+The remaining proof is not blocked by implementation details. It is blocked at
+one specific mathematical step.
+
+For one approximate Ritz pair `(lambda, x)`, scalar nonlinear RII studies an
+update of the form
+
+```text
+x_+ = x - T(sigma)^(-1) T(lambda) x
+```
+
+or a variable-shift variant. For linear FEAST, replacing one shift by a contour
+average is harmless because the identity
+
+```text
+x - (zI-A)^(-1)(lambda I-A)x = (z-lambda)(zI-A)^(-1)x
+```
+
+turns the residual correction exactly into a rational spectral filter.
+
+For analytic `T`, there is no matching identity:
+
+```text
+x - T(z)^(-1) T(lambda)x
+```
+
+does not factor by `(z-lambda)` times a clean resolvent action except in a
+local first-order model. Keldysh gives the pole structure of `T(z)^(-1)`, but
+the residual term `T(lambda)x` is produced by the reduced Petrov-Galerkin NEP
+and depends on the current left/right realization, extractor, and Ritz
+coordinate. Therefore a proof must control all of the following at once:
+
+- perturbation of the reduced nonlinear Ritz data from the exact local
+  transfer realization;
+- physical right/left residual compression error;
+- quadrature error for applying `T(z)^(-1)` and `T(z)^(-H)` to those residual
+  subspaces;
+- the effect of re-extracting after the physical spaces are enriched;
+- nonnormal left/right conditioning of the reduced Petrov-Galerkin NEP.
+
+The diagnostics rule out simpler substitutes:
+
+- denominator-only Laurent truncation fails because `T(z)^(-1)` has interior
+  poles;
+- subspace angle can already be near roundoff while physical residuals are bad;
+- block Newton refines a chosen reduced realization but does not supply the
+  outer FEAST-style physical-space repair;
+- scalar expanded RII chooses a bad coordinate gauge for many-root moment
+  charts and can fail while the compressed residual subspace update succeeds.
+
+This is the precise place where a new proof or a known theorem is required.
+The candidate algorithm is no longer vague; what is missing is a perturbation
+and correction estimate for **contour-filtered compressed residual corrections
+of a two-sided finite NEP realization**.
