@@ -4686,8 +4686,12 @@ function init_sparse_factor_residual_laurent_remote_worker!(
         moment_count=Int(moment_count),
         right_factors=Dict{ComplexF64, Any}(),
         left_factors=Dict{ComplexF64, Any}(),
+        right_solutions=Dict{ComplexF64, Matrix{ComplexF64}}(),
+        left_solutions=Dict{ComplexF64, Matrix{ComplexF64}}(),
         right_solves=Ref(0),
         left_solves=Ref(0),
+        right_solution_buffers=Ref(0),
+        left_solution_buffers=Ref(0),
     )
     (
         pid=myid(),
@@ -4699,15 +4703,25 @@ end
 function sparse_factor_workspace_solve!(ws, z, B; adjoint=false)
     key = ComplexF64(z)
     factors = adjoint ? ws.left_factors : ws.right_factors
+    solutions = adjoint ? ws.left_solutions : ws.right_solutions
     if !haskey(factors, key)
         factors[key] = lu(adjoint ? ws.Tmatrix(z)' : ws.Tmatrix(z))
+    end
+    if !haskey(solutions, key) || size(solutions[key]) != size(B)
+        solutions[key] = similar(B, ComplexF64)
+        if adjoint
+            ws.left_solution_buffers[] += 1
+        else
+            ws.right_solution_buffers[] += 1
+        end
     end
     if adjoint
         ws.left_solves[] += 1
     else
         ws.right_solves[] += 1
     end
-    factors[key] \ B
+    ldiv!(solutions[key], factors[key], B)
+    solutions[key]
 end
 
 function residual_laurent_sparse_factor_remote_worker_step(key::Symbol, Rright_basis, Rleft_basis)
@@ -4744,6 +4758,8 @@ function residual_laurent_sparse_factor_remote_worker_step(key::Symbol, Rright_b
         pid=myid(),
         right_factorizations=length(ws.right_factors),
         left_factorizations=length(ws.left_factors),
+        right_solution_buffers=ws.right_solution_buffers[],
+        left_solution_buffers=ws.left_solution_buffers[],
         right_solves=ws.right_solves[],
         left_solves=ws.left_solves[],
     )

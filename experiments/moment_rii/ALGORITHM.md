@@ -236,11 +236,12 @@ per scalar Ritz value.
   evidence, not sparse factorization reuse.
 - Sparse remote stored-factor worker smoke: persistent Julia workers own
   node-local sparse factors for fixed contour subsets. The first update creates
-  the expected right/left node factors, the repeated update reuses those same
-  factors, and both remote updates match the serial residual-Laurent physical
-  spaces to roundoff projection gaps. This pins fixed-node sparse factor
-  ownership across the process boundary without claiming symbolic sparse reuse
-  or benchmark-level performance.
+  the expected right/left node factors and node-local solve buffers, the
+  repeated update reuses those same factors and buffers, and both remote
+  updates match the serial residual-Laurent physical spaces to roundoff
+  projection gaps. This pins fixed-node sparse factor and solve-buffer
+  ownership across the process boundary without claiming full sparse workspace
+  reuse or benchmark-level performance.
 - Sparse nonlinear remote stored-factor worker smoke: the same worker-owned
   factor cache also runs on the sparse quadratic polynomial gallery control.
   This verifies that nonlinear sparse gallery materialization, residual
@@ -254,9 +255,10 @@ per scalar Ritz value.
   realistic sparse NEP evidence, not a scaling benchmark.
 - Sparse Schrodinger remote stored-factor smoke: the same realistic sparse
   Schrodinger control runs through persistent worker-owned contour partitions.
-  The worker factors are created once on the first update, reused on the
-  repeated update, and the remote physical spaces match the serial update. This
-  extends the distributed stored-factor evidence beyond diagonal controls.
+  The worker factors and node-local solve buffers are created once on the first
+  update, reused on the repeated update, and the remote physical spaces match
+  the serial update. This extends the distributed stored-factor evidence beyond
+  diagonal controls.
 - Adjacent implementation recheck: RSRR, SLEPc CISS, and Riesz-projection
   methods all support the current separation between contour-node solves,
   reduced extraction, and selection/observability policy. They do not appear to

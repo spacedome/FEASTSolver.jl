@@ -320,6 +320,8 @@ end
     @test sum(length, result.assignments) == 96
     @test result.first_worker_factorizations == 192
     @test result.second_worker_factorizations == result.first_worker_factorizations
+    @test result.first_worker_solution_buffers == result.first_worker_factorizations
+    @test result.second_worker_solution_buffers == result.first_worker_solution_buffers
     @test result.first_worker_solves == 192
     @test result.second_worker_solves == 2 * result.first_worker_solves
 end
@@ -347,6 +349,8 @@ end
     @test sum(length, result.assignments) == 48
     @test result.first_worker_factorizations == 96
     @test result.second_worker_factorizations == result.first_worker_factorizations
+    @test result.first_worker_solution_buffers == result.first_worker_factorizations
+    @test result.second_worker_solution_buffers == result.first_worker_solution_buffers
     @test result.first_worker_solves == 96
     @test result.second_worker_solves == 2 * result.first_worker_solves
 end
@@ -1336,6 +1340,8 @@ end
     @test sum(length, result.assignments) == 64
     @test result.first_worker_factorizations == 128
     @test result.second_worker_factorizations == result.first_worker_factorizations
+    @test result.first_worker_solution_buffers == result.first_worker_factorizations
+    @test result.second_worker_solution_buffers == result.first_worker_solution_buffers
     @test result.first_worker_solves == 128
     @test result.second_worker_solves == 2 * result.first_worker_solves
     @test result.remote_stats.right_candidate_cols == result.serial_stats.right_candidate_cols

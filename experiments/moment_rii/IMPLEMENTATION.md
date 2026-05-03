@@ -167,9 +167,9 @@ on the small `n=128` instance. This is still a correctness/diagnostic rung, not
 a sparse performance benchmark.
 `run_sparse_schrodinger_remote_stored_factor_worker_smoke` runs the same
 realistic sparse control through persistent worker-owned contour factors and
-verifies a repeated update reuses the same worker-local factors. The next
-prototype should broaden this to larger and less benign sparse gallery
-problems.
+verifies a repeated update reuses the same worker-local factors and
+node-local solve buffers. The next prototype should broaden this to larger and
+less benign sparse gallery problems.
 
 The argument-principle estimator now accepts sparse `T'(z)` outputs by
 densifying only the derivative right-hand side before the trace solve. This
