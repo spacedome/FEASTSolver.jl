@@ -111,6 +111,13 @@ global block Newton, or rational-coordinate-only fixes.
   factors and node-local solve buffers. `just bench-moment` now gives a first
   local BenchmarkTools harness for that Schrodinger serial/remote rung and
   prints timing, allocation, correctness, and reuse counters after warmup. It
+  was most recently run on the small default Schrodinger case with two workers:
+  serial took `0.476s` with three matched roots and max residual
+  `3.40e-11`, while the persistent-worker stored-factor path took `16.10s`,
+  matched the same three roots, reused the 96 worker-owned factors across the
+  repeated update, and matched the serial spaces to projection gaps near
+  `1e-14`. This confirms correctness/reuse and also confirms that process
+  overhead dominates at this size.
   deliberately does not yet provide full reusable sparse workspaces, broad
   realistic sparse gallery coverage, or publication-level scaling claims.
   `IMPLEMENTATION.md` records the sparse and distributed rungs needed to turn
