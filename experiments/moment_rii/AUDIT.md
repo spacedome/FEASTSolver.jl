@@ -118,8 +118,9 @@ global block Newton, or rational-coordinate-only fixes.
   repeated updates reuse the same 96 worker-owned factors and solve buffers and
   match the serial spaces to projection gaps near `1e-14`. This is enough
   implementation evidence for now; it is not a benchmark-maxing result.
-  deliberately does not yet provide full reusable sparse workspaces, broad
-  realistic sparse gallery coverage, or publication-level scaling claims.
+  The experiment deliberately does not yet provide full reusable sparse
+  workspaces, broad realistic sparse gallery coverage, or publication-level
+  scaling claims.
   `IMPLEMENTATION.md` records the sparse and distributed rungs needed to turn
   the experiment boundary into a real implementation.
 - Split/shrink chart policy is now a reproducible local refinement rung, not a
@@ -204,16 +205,37 @@ productive steps are:
    and central analytic iteration now pass the pipeline bundle through
    directly. Older helper harnesses still expose many loose keywords and should
    be migrated opportunistically.
-2. Add performance/implementation evidence for the candidate update beyond
-   dense toy controls. The current compression diagnostic shows why the
-   low-rank residual Laurent update is better than scalar-expanded RII, and
-   `just bench-moment` gives a first local sparse Schrodinger benchmark
-   harness. Larger sparse/distributed problem coverage and publication-level
-   scaling evidence are still open rungs.
-3. Continue publication-level novelty review before making final claims. The
+2. Continue publication-level novelty review before making final claims. The
    current literature, NEP-PACK, RSRR, CISS, Riesz-projection, and targeted
    extraction-versus-update checks did not find the exact residual-Laurent
    finite-realization iteration, but they are not an exhaustive publication
    review.
+3. Broaden problem-class evidence around the chart policy and reduced
+   extractor layer, not around benchmark maxing. The current sparse/distributed
+   implementation rungs are sufficient as rough feasibility evidence; broader
+   sparse coverage and scaling can wait until the algorithm story is more
+   publication-ready.
 4. Only after those pass, consider extracting stable pieces from the experiment
    into a real implementation plan.
+
+## Latest Completion Audit Snapshot
+
+Concrete deliverables from the objective are mostly covered at the experiment
+level:
+
+- Unified family story: covered by `ALGORITHM.md` and `DERIVATION.md`.
+- Elegant higher-moment update: covered as the residual-Laurent two-sided
+  physical-space repair, with scalar expanded RII rejected as the wrong state.
+- Numerical evidence: covered by `moment-core`, count-driven, sparse, and
+  distributed smoke controls.
+- Efficiency awareness: covered by low-rank residual compression and rough
+  sparse remote plan evidence; no benchmark-maxing claim is needed.
+- Containment: all new algorithm objects remain inside `experiments/moment_rii`.
+
+The remaining blocker is publication-level confidence, not another local
+implementation trick. We still need either a more formal proof/derivation that
+identifies the residual-Laurent repair in established realization language, or
+a broader novelty review showing that adjacent contour projection,
+Loewner/realization, invariant-pair Newton, and refined Rayleigh--Ritz methods
+do not already contain the same update in different notation. Until then the
+status remains "strong candidate", not "solved decisively."
