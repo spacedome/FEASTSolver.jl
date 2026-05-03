@@ -2777,6 +2777,148 @@ function run_fused_polynomial_contour_sample_realization_diagnostic(;
     )
 end
 
+function run_fused_cache_residual_augmentation_diagnostic(;
+    basis_nodes=96,
+    moment_count=3,
+    seed=20260505,
+    ranktol=1e-10,
+    basis_ranktol=1e-10,
+    residual_ranktol=1e-10,
+    compression_ranktol=1e-10,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    coeffs, center, radius, probe_cols = deficient_quadratic_problem()
+    expected = companion_reference(coeffs, center, radius)
+    n = size(coeffs[1], 1)
+    chart = ContourChart(center, radius)
+    Tsolve = (z, B) -> polynomial_matrix(coeffs, z) \ B
+    Tadjoint_solve = (z, B) -> polynomial_matrix(coeffs, z)' \ B
+
+    Random.seed!(seed)
+    Xprobe = rand(ComplexF64, n, max(probe_cols, length(expected)))
+    Wprobe = rand(ComplexF64, n, max(probe_cols, length(expected)))
+    cache = build_contour_sample_cache(
+        Tsolve,
+        Tadjoint_solve,
+        Xprobe,
+        Wprobe,
+        chart,
+        basis_nodes;
+        source=:fused_residual_augmentation_base,
+    )
+    right_base_moments = right_moments(cache, moment_count)
+    left_base_moments = left_moments(cache, moment_count)
+    Xbasis, _ = moment_block_basis(right_base_moments, moment_count; ranktol=basis_ranktol)
+    Ybasis, _ = moment_block_basis(left_base_moments, moment_count; ranktol=basis_ranktol)
+    d = min(size(Xbasis, 2), size(Ybasis, 2))
+    Xbasis = Xbasis[:, 1:d]
+    Ybasis = Ybasis[:, 1:d]
+
+    extraction = reduced_analytic_ss_extraction(
+        z -> polynomial_matrix(coeffs, z),
+        z -> begin
+            M = zeros(ComplexF64, n, n)
+            power = one(ComplexF64)
+            for j in 2:length(coeffs)
+                M .+= (j - 1) * power .* coeffs[j]
+                power *= z
+            end
+            M
+        end,
+        Xbasis,
+        Ybasis,
+        center,
+        radius;
+        reduced_moments=moment_count,
+        reduced_nodes=basis_nodes,
+        ranktol=ranktol,
+        maxrank=length(expected),
+        count_estimate=length(expected),
+        residual_normalization=:operator,
+        refinement=:none,
+    )
+    Rright_basis, Rleft_basis, right_residual_singulars, left_residual_singulars =
+        residual_blocks_from_matrix_extraction(z -> polynomial_matrix(coeffs, z), extraction; residual_ranktol=residual_ranktol)
+
+    z_nodes, z_weights = circular_rule(center, radius, basis_nodes)
+    right_update_moments, left_update_moments = residual_laurent_moment_blocks_generic(
+        Tsolve,
+        Tadjoint_solve,
+        Rright_basis,
+        Rleft_basis,
+        z_nodes,
+        z_weights,
+        center,
+        radius;
+        moment_count=moment_count,
+    )
+    Xupdate, Yupdate, _, _, _, _ = compress_residual_laurent_candidates(
+        Xbasis,
+        Ybasis,
+        right_update_moments,
+        left_update_moments;
+        compression_ranktol=compression_ranktol,
+    )
+
+    augmented = augment_contour_sample_cache(
+        cache,
+        Tsolve,
+        Tadjoint_solve,
+        Rright_basis,
+        Rleft_basis;
+        source=:fused_residual_augmentation,
+    )
+    right_range = (size(cache.right_probe, 2) + 1):size(augmented.right_probe, 2)
+    left_range = (size(cache.left_probe, 2) + 1):size(augmented.left_probe, 2)
+    right_cache_update_moments, left_cache_update_moments =
+        residual_laurent_moments(augmented, right_range, left_range, moment_count)
+    Xcache, Ycache, _, _, _, _ = compress_residual_laurent_candidates(
+        Xbasis,
+        Ybasis,
+        right_cache_update_moments,
+        left_cache_update_moments;
+        compression_ranktol=compression_ranktol,
+    )
+
+    x_gap = subspace_projection_gap(Xupdate, Xcache)
+    y_gap = subspace_projection_gap(Yupdate, Ycache)
+    base_good = extraction.inside .& (extraction.residuals .<= residual_tol)
+    base_matched = match_expected_count(extraction.values[base_good], expected; atol=match_atol)
+
+    if print_rows
+        println("Fused cache residual augmentation diagnostic")
+        println("  problem=deficient quadratic; compares explicit residual-Laurent moments against cache augmentation")
+        @printf(
+            "  expected=%d base_matched=%d residual_ranks=(%d,%d) dims update=(%d,%d) cache=(%d,%d) gaps=(%.3e, %.3e)\n",
+            length(expected),
+            base_matched,
+            size(Rright_basis, 2),
+            size(Rleft_basis, 2),
+            size(Xupdate, 2),
+            size(Yupdate, 2),
+            size(Xcache, 2),
+            size(Ycache, 2),
+            x_gap,
+            y_gap,
+        )
+    end
+
+    (
+        expected=length(expected),
+        base_matched=base_matched,
+        right_residual_rank=size(Rright_basis, 2),
+        left_residual_rank=size(Rleft_basis, 2),
+        right_residual_singulars=Float64.(right_residual_singulars),
+        left_residual_singulars=Float64.(left_residual_singulars),
+        update_dims=(right=size(Xupdate, 2), left=size(Yupdate, 2)),
+        cache_dims=(right=size(Xcache, 2), left=size(Ycache, 2)),
+        x_projection_gap=x_gap,
+        y_projection_gap=y_gap,
+    )
+end
+
 function loewner_interpolation_points(count; radius=1.6, phase=0.0)
     ComplexF64[radius * exp(im * (phase + 2pi * (j - 1) / count)) for j in 1:count]
 end
@@ -4392,6 +4534,17 @@ function physical_basis_from_columns(X; ranktol=1e-10)
     rank = count(F.S ./ F.S[1] .> ranktol)
     rank = min(rank, size(X, 1), length(F.S))
     F.U[:, 1:rank], copy(F.S)
+end
+
+function subspace_projection_gap(A, B)
+    if size(A, 2) == 0 && size(B, 2) == 0
+        return 0.0
+    elseif size(A, 2) == 0 || size(B, 2) == 0
+        return 1.0
+    end
+    QA = Matrix(qr(A).Q)[:, 1:size(A, 2)]
+    QB = Matrix(qr(B).Q)[:, 1:size(B, 2)]
+    norm(QA * QA' - QB * QB')
 end
 
 function low_rank_column_factor(A; ranktol=1e-12)

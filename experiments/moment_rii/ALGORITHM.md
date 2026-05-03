@@ -366,8 +366,28 @@ Current implementation status: `ContourSampleCache` in `pipeline.jl` is the
 first explicit experiment object for this boundary. The fused analytic and
 polynomial diagnostics now build their physical moments and projected transfer
 moments from that cache, rather than assembling one-off local moment arrays.
+`run_fused_cache_residual_augmentation_diagnostic` also pins the update side:
+augmenting the same cache with compressed residual probe responses and reducing
+those responses with inverse-Laurent weights produces the same repaired
+physical spaces as the explicit residual-Laurent update.
+
+One important detail fell out of this diagnostic. The same node samples can
+serve both extraction and residual repair, but the reductions are different:
+
+```text
+positive powers of zeta       -> finite realization / extractor moments
+inverse-Laurent powers        -> residual repair moments
+```
+
+Simply appending residual probes to the cache and reducing them as positive
+realization moments gives the wrong space. This supports the two-moment-role
+story in a concrete implementation way: the cache is unified, while the
+reduction applied to each probe block depends on whether that block is an
+initial realization probe or a residual correction probe.
+
 This is still an experiment layer object, but it pins the direction for the
-final implementation: chart-owned contour samples first, extractors second.
+final implementation: chart-owned contour samples first, extractors and update
+reductions second.
 
 ## Moment Roles
 

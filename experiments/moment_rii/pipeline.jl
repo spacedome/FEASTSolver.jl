@@ -84,6 +84,50 @@ function projected_transfer_moments(cache::ContourSampleCache, moment_count)
     [cache.left_probe' * M for M in right_moments(cache, moment_count)]
 end
 
+function augment_contour_sample_cache(cache::ContourSampleCache, Tsolve, Tadjoint_solve, right_probe, left_probe; source=:augmented_contour_samples)
+    size(right_probe, 1) == size(cache.right_probe, 1) || error("right probe row count must match cache")
+    size(left_probe, 1) == size(cache.left_probe, 1) || error("left probe row count must match cache")
+    new_right_samples = Matrix{ComplexF64}[]
+    new_left_samples = Matrix{ComplexF64}[]
+    for (z, right_sample, left_sample) in zip(cache.nodes, cache.right_samples, cache.left_samples)
+        push!(new_right_samples, hcat(right_sample, Matrix{ComplexF64}(Tsolve(z, right_probe))))
+        push!(new_left_samples, hcat(left_sample, Matrix{ComplexF64}(Tadjoint_solve(z, left_probe))))
+    end
+    ContourSampleCache(
+        chart=cache.chart,
+        nodes=cache.nodes,
+        weights=cache.weights,
+        right_probe=hcat(cache.right_probe, Matrix{ComplexF64}(right_probe)),
+        left_probe=hcat(cache.left_probe, Matrix{ComplexF64}(left_probe)),
+        right_samples=new_right_samples,
+        left_samples=new_left_samples,
+        source=source,
+    )
+end
+
+function residual_laurent_moments(cache::ContourSampleCache, right_range, left_range, moment_count)
+    n = size(cache.right_probe, 1)
+    right_width = length(right_range)
+    left_width = length(left_range)
+    right_blocks = [zeros(ComplexF64, n, right_width) for _ in 1:moment_count]
+    left_blocks = [zeros(ComplexF64, n, left_width) for _ in 1:moment_count]
+    for (z, weight, right_sample, left_sample) in zip(cache.nodes, cache.weights, cache.right_samples, cache.left_samples)
+        ζ = (z - cache.chart.center) / cache.chart.radius
+        base = weight / (z - cache.chart.center)
+        right_view = right_sample[:, right_range]
+        left_view = left_sample[:, left_range]
+        right_power = one(ComplexF64)
+        left_power = one(ComplexF64)
+        for k in 1:moment_count
+            right_blocks[k] .+= (base * right_power) .* right_view
+            left_blocks[k] .+= (conj(base) * left_power) .* left_view
+            right_power /= ζ
+            left_power *= ζ
+        end
+    end
+    right_blocks, left_blocks
+end
+
 Base.@kwdef struct MomentBasisConfig
     moments::Int = 4
     nodes::Int = 8

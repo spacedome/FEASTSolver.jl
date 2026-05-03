@@ -91,6 +91,19 @@ end
     @test maximum(result.fused_residuals) <= 1e-8
 end
 
+@testitem "experimental moment RII: fused cache augmentation matches residual Laurent update" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_fused_cache_residual_augmentation_diagnostic(; print_rows=false)
+
+    @test result.base_matched == result.expected
+    @test result.right_residual_rank > 0
+    @test result.left_residual_rank > 0
+    @test result.update_dims == result.cache_dims
+    @test result.x_projection_gap <= 1e-12
+    @test result.y_projection_gap <= 1e-12
+end
+
 @testitem "experimental moment RII: retention policy exposes acceptance contract" begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 
