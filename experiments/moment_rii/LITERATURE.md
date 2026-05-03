@@ -185,6 +185,43 @@ Its implementation points to several concepts we should reuse deliberately.
   dual-FEAST analogy, or is our left/right reduced-NEP correction genuinely a
   new synthesis?
 
+## Novelty Checklist Before Final Claims
+
+Before calling the candidate algorithm solved in a publication sense, check
+each adjacent family for an equivalent update written in different language.
+The important pattern to look for is not just contour extraction; it is:
+
+```text
+finite contour realization
+  -> physical right/left residual compression
+  -> contour inverse moments of those residual bases
+  -> repaired physical trial/test spaces
+  -> repeated reduced Petrov-Galerkin extraction
+```
+
+Specific checks:
+
+- Nonlinear FEAST/RII papers: confirm higher moments are not updated by a
+  two-sided low-rank residual Laurent repair rather than scalar deflation from
+  `K*m` back to `m`.
+- Beyn/SS/SS-RR papers: distinguish extraction-only moment/Hankel updates from
+  FEAST-style residual repair of the physical spaces.
+- Loewner/systems contour papers: check whether residual interpolation or
+  model-updating steps imply the same left/right residual-moment correction.
+- Invariant-pair Newton and block Newton papers: determine whether our update
+  is a projected/quadrature approximation to a known invariant-pair Newton
+  correction, or a distinct FEAST-style outer subspace iteration.
+- Refined Rayleigh--Ritz / RSRR / CISS / Riesz-projection methods: verify that
+  their refinements improve extraction/selection rather than reusing residual
+  inverse moments to repair both trial spaces.
+- Deflation/Jordan/multiplicity literature: keep this as an escalation layer
+  unless it supplies a natural replacement for the residual-Laurent update.
+
+If one of these contains the same mechanism, the experiment should be reframed
+as an implementation/FEAST-family specialization. If none does, the current
+claim can be strengthened from "strong candidate" toward "new residual-Laurent
+moment-NLFEAST iteration" once the derivation is made rigorous.
+
 ## Focused Pass: Iterating Realizations
 
 The targeted follow-up was to look for the missing iteration theory: not
