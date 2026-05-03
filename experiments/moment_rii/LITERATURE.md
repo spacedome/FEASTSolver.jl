@@ -1437,3 +1437,48 @@ Impact on the theorem sketch:
   finite transfer realization; residual-Laurent enrichment gives a
   coordinate-invariant physical residual correction; re-extraction supplies the
   Rayleigh--Ritz/reduced-NEP step.
+
+## Jacobi-Davidson Correction-Equation Boundary, 2026-05-03
+
+Search scope: `"residual inverse iteration" "subspace" "nonlinear
+eigenvalue"`, `"block residual inverse iteration" "nonlinear eigenvalue"`,
+`"Jacobi-Davidson" "nonlinear eigenvalue" correction equation convergence`,
+and `"nonlinear eigenvalue" "subspace iteration" "residual" "Keldysh"`.
+
+Findings:
+
+- Neumaier remains the scalar nonlinear residual inverse iteration source. It
+  gives local convergence for one eigenpair with a fixed shift close to the
+  root. DOI: <https://doi.org/10.1137/0722055>.
+- Nonlinear Jacobi-Davidson methods construct and expand a search space by
+  solving correction equations derived from projected NEPs and residuals. Voss
+  discusses a JD-type projection method for NEPs where the subspace is expanded
+  by a Jacobi-Davidson approach and small projected problems are solved by
+  safeguarded iteration. DOI: <https://doi.org/10.1016/j.future.2003.07.003>.
+- Betcke and Voss apply JD to nonlinear and nonsymmetric eigenproblems. Their
+  method computes Ritz data from `V^H T(lambda) V`, forms physical residuals,
+  and expands the search subspace with a correction equation. DOI:
+  <https://doi.org/10.1016/j.compstruc.2006.08.088>.
+- Jacobi-Davidson correction-equation papers emphasize that the correction
+  equation and its approximate solution are the mechanism for robust outer
+  progress. This is relevant to the theorem shape but not identical to our
+  update. Example DOI: <https://doi.org/10.1016/j.laa.2017.02.007>.
+
+Interpretation for moment-NLFEAST:
+
+- The closest convergence analogy for residual-Laurent enrichment is not block
+  Newton on the reduced realization; it is closer to a contour-averaged,
+  block-residual correction equation.
+- However, standard JD is not the same algorithm. JD chooses one target shift
+  or correction equation and expands a one-sided search space. The candidate
+  moment-NLFEAST update applies many contour-node inverse solves to compressed
+  right and left physical residual subspaces, then re-extracts a reduced
+  Petrov-Galerkin realization.
+- A plausible proof route is therefore to treat residual-Laurent enrichment as
+  a FEAST-filtered block correction equation: FEAST/RII gives the exact linear
+  reduction, JD/RII gives local residual-correction language, and
+  SS/Beyn/Loewner give the finite realization/extraction layer.
+
+This strengthens the theorem target but does not close it. The missing result
+would compare the contour-averaged residual correction to a known local
+correction equation under chart-local assumptions.

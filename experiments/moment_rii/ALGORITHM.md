@@ -18,6 +18,18 @@ generalized moment-NLFEAST =
   + explicit chart policy driven by support, counts, residuals, and agreement
 ```
 
+Equivalently, the current proof-facing description is:
+
+```text
+a FEAST-filtered block correction equation for a finite two-sided contour
+realization.
+```
+
+This phrasing connects the pieces without collapsing them: FEAST supplies the
+contour-filtered residual correction, SS/Beyn/Loewner supply the finite
+realization, and the Petrov-Galerkin left/right spaces supply the nonnormal
+geometry.
+
 The important design choice is to stop treating expanded Hankel columns as the
 iterative state. The iterative state is instead:
 

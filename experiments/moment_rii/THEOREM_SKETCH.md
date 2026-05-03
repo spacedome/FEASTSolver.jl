@@ -223,3 +223,43 @@ conditioning/quadrature/rank assumptions.
 If that estimate cannot be proved, the algorithm should be reported as a
 strong empirical FEAST-family synthesis rather than a solved general
 moment-NLFEAST theory.
+
+## Closest Known Proof Language
+
+The closest adjacent proof language now appears to be Jacobi-Davidson and
+residual inverse iteration, not block Newton alone.
+
+In JD-style NEP methods, the outer loop:
+
+```text
+extracts Ritz data from a projected NEP,
+forms a physical residual,
+solves a correction equation,
+expands the search space,
+re-extracts.
+```
+
+Moment-NLFEAST has the same high-level correction rhythm but with FEAST
+geometry:
+
+```text
+extract Ritz data from a two-sided contour realization,
+compress physical right/left residual subspaces,
+apply contour-averaged inverse solves to those residual subspaces,
+expand both physical trial/test spaces,
+re-extract.
+```
+
+This suggests a proof route:
+
+1. Use positive contour moments to justify the reduced realization.
+2. Use JD/RII correction-equation theory as the local residual-correction
+   analogue.
+3. Use the linear FEAST/RII identity to show that contour-averaged correction
+   is the correct FEAST-family replacement for one fixed-shift correction.
+4. Prove that the compressed two-sided residual subspace gives the same
+   correction space under residual-coordinate changes.
+
+The theorem should therefore be framed as a **FEAST-filtered block correction
+equation for a finite contour realization**. That is currently the most concise
+description of the candidate algorithm.
