@@ -324,10 +324,9 @@ that setting.
   refinement depth, local chart radii, optional radius-ladder stages, residual
   tolerance, and count tolerance are treated as one experiment policy rather
   than incidental keyword clutter. Its companion `CountDrivenNumericsConfig`
-  now lowers into the shared `ReducedExtractorConfig` and `ResidualUpdateConfig`
-  objects used by the local chart sweep and central analytic iteration, so
-  extraction/update choices are explicit experiment objects rather than loose
-  keyword bundles.
+  now lowers into the shared `MomentPipelineConfig` used by the local chart
+  sweep and central analytic iteration, so basis/extraction/update choices are
+  explicit experiment objects rather than loose keyword bundles.
 - Oracle-free control: a scalar delay NEP with no exact-root list stops from
   the full-operator argument-principle count alone, validating that the
   count-driven loop is not secretly supervised by analytic roots.

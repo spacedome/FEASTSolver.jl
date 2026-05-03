@@ -168,9 +168,8 @@ analytic matrix-function machinery.
 
 This prototype path produced useful controls, but it is not the current
 implementation target. The current implementation target is the charted
-left/right pipeline described by `ContourChart`, `MomentBasisConfig`,
-`ReducedExtractorConfig`, `ResidualUpdateConfig`, `CountDrivenPolicyConfig`,
-and `CountDrivenNumericsConfig`.
+left/right pipeline described by `ContourChart`, `MomentPipelineConfig`,
+`CountDrivenPolicyConfig`, and `CountDrivenNumericsConfig`.
 
 ## Original Robust Path And Current Status
 
@@ -822,6 +821,9 @@ experiment-layer objects for:
 
 - `ContourChart`: contour center/radius plus chart-local scaling policy.
 - `TrialSpaces`: left/right physical spaces and their singular diagnostics.
+- `MomentPipelineConfig`: one chart-local bundle of basis, extractor, and
+  update choices.
+- `MomentBasisConfig`: initial contour-moment trial/test space construction.
 - `ReducedExtractorConfig`: counted SS, Loewner, determinant, and reduced
   solver knobs.
 - `ResidualUpdateConfig`: residual Laurent moment update knobs.

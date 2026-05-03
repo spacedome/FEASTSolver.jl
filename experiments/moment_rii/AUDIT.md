@@ -194,9 +194,9 @@ productive steps are:
    `pipeline.jl` now holds the chart/pipeline/basis/extractor/update objects, while
    `policy.jl` holds `CountDrivenPolicyConfig`, `CountDrivenNumericsConfig`,
    and the named count-stressed chart-refinement rule. The local chart sweep
-   and central analytic iteration now pass basis/extractor/update objects
-   through directly. Older helper harnesses still expose many loose keywords
-   and should be migrated opportunistically.
+   and central analytic iteration now pass the pipeline bundle through
+   directly. Older helper harnesses still expose many loose keywords and should
+   be migrated opportunistically.
 2. Add performance/implementation evidence for the candidate update beyond
    dense toy controls. The current compression diagnostic shows why the
    low-rank residual Laurent update is better than scalar-expanded RII, and
