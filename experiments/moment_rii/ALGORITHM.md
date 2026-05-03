@@ -124,7 +124,10 @@ per scalar Ritz value.
 - Retention policy: the current scorecard separates support thresholds, target
   membership, residual size, local count stress, layout agreement, and extractor
   agreement; the policy returns explicit retained roots and chart-refinement
-  suggestions.
+  suggestions. The count-driven stress harness now carries the reusable
+  `CountDrivenPolicyConfig` object so grid spacing, support threshold,
+  refinement depth, local chart radii, residual tolerance, and count tolerance
+  are treated as one experiment policy rather than incidental keyword clutter.
 - Oracle-free control: a scalar delay NEP with no exact-root list stops from
   the full-operator argument-principle count alone, validating that the
   count-driven loop is not secretly supervised by analytic roots.

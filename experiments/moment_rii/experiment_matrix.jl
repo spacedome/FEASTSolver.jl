@@ -1543,6 +1543,30 @@ function count_driven_chart_diagnostic_summary(
     )
 end
 
+Base.@kwdef struct CountDrivenPolicyConfig
+    base_spacing::Float64 = 2.4
+    target_support::Int = 2
+    max_refinement_rounds::Int = 4
+    chart_radii::Tuple{Vararg{Float64}} = (1.2, 2.0)
+    residual_tol::Float64 = 1e-8
+    match_atol::Float64 = 1e-6
+    count_error_tol::Float64 = 1e-2
+    refine_inside_target_only::Bool = true
+end
+
+function count_driven_policy_kwargs(policy::CountDrivenPolicyConfig)
+    (
+        base_spacing=policy.base_spacing,
+        target_support=policy.target_support,
+        max_refinement_rounds=policy.max_refinement_rounds,
+        chart_radii=policy.chart_radii,
+        residual_tol=policy.residual_tol,
+        match_atol=policy.match_atol,
+        count_error_tol=policy.count_error_tol,
+        refine_inside_target_only=policy.refine_inside_target_only,
+    )
+end
+
 function local_cluster_multiplicity_estimates(
     cases,
     values;
@@ -1849,7 +1873,7 @@ end
 function run_count_driven_policy_diagnostic(;
     outer_center=0.0 + 0.0im,
     outer_radius,
-    match_atol=1e-6,
+    policy=CountDrivenPolicyConfig(),
     print_rows=true,
     diagnostic_label="policy diagnostic",
     kwargs...,
@@ -1857,7 +1881,7 @@ function run_count_driven_policy_diagnostic(;
     result = run_count_driven_adaptive_grid_refinement(;
         outer_center=outer_center,
         outer_radius=outer_radius,
-        match_atol=match_atol,
+        count_driven_policy_kwargs(policy)...,
         print_rows=print_rows,
         kwargs...,
     )
@@ -1865,7 +1889,8 @@ function run_count_driven_policy_diagnostic(;
         result;
         outer_center=outer_center,
         outer_radius=outer_radius,
-        match_atol=match_atol,
+        match_atol=policy.match_atol,
+        count_error_tol=policy.count_error_tol,
     )
     if print_rows
         println("  $diagnostic_label:")
@@ -2338,15 +2363,20 @@ function run_coupled_two_delay_mixed_policy_stress(;
     match_atol=1e-6,
     print_rows=true,
 )
+    policy = CountDrivenPolicyConfig(;
+        base_spacing=base_spacing,
+        chart_radii=chart_radii,
+        max_refinement_rounds=max_refinement_rounds,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+    )
     run_count_driven_policy_diagnostic(;
         label="Coupled two-delay mixed policy stress",
         cases=coupled_two_delay_cases(),
         outer_radius=outer_radius,
         operator_builder=coupled_two_delay_operator_builder(; coupling=coupling),
         operator_label="coupled two-delay(coupling=$coupling)",
-        base_spacing=base_spacing,
-        chart_radii=chart_radii,
-        max_refinement_rounds=max_refinement_rounds,
+        policy=policy,
         iterations=2,
         basis_moments=8,
         basis_nodes=64,
@@ -2357,8 +2387,6 @@ function run_coupled_two_delay_mixed_policy_stress(;
         reduced_nodes=768,
         residual_normalization=:operator,
         component_scaling=:none,
-        residual_tol=residual_tol,
-        match_atol=match_atol,
         print_rows=print_rows,
         diagnostic_label="mixed diagnostic",
     )
@@ -2374,15 +2402,20 @@ function run_dense_multi_delay_weak_support_stress(;
     match_atol=1e-6,
     print_rows=true,
 )
+    policy = CountDrivenPolicyConfig(;
+        base_spacing=base_spacing,
+        chart_radii=chart_radii,
+        max_refinement_rounds=max_refinement_rounds,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+    )
     run_count_driven_policy_diagnostic(;
         label="Dense multi-delay weak-support stress",
         cases=dense_multi_delay_cases(),
         outer_radius=outer_radius,
         operator_builder=dense_multi_delay_operator_builder(; coupling=coupling),
         operator_label="dense multi-delay(coupling=$coupling)",
-        base_spacing=base_spacing,
-        chart_radii=chart_radii,
-        max_refinement_rounds=max_refinement_rounds,
+        policy=policy,
         iterations=2,
         basis_moments=8,
         basis_nodes=64,
@@ -2393,8 +2426,6 @@ function run_dense_multi_delay_weak_support_stress(;
         reduced_nodes=768,
         residual_normalization=:operator,
         component_scaling=:none,
-        residual_tol=residual_tol,
-        match_atol=match_atol,
         print_rows=print_rows,
         diagnostic_label="dense diagnostic",
     )
