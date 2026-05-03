@@ -70,9 +70,10 @@ given T, T', a circular chart Gamma(c,r), and right/left probes V,W:
        X = orth([int zeta^k T(z)^(-1) V dz]_{k=0}^{K_basis-1})
        Y = orth([int zeta^k T(z)^(-H) W dz]_{k=0}^{K_basis-1})
 
-2. Solve/extract the reduced Petrov-Galerkin NEP
+2. Extract a finite reduced realization of the Petrov-Galerkin transfer data
        Y^H T(lambda) X u = 0
-   using a realization coordinate such as counted SS/Hankel or Loewner.
+   preferably by a linear small pencil/realization such as counted
+   SS/Hankel, Beyn, Loewner, or a companion/QZ construction.
 
 3. Score physical Ritz data
        x = X u,  y = Y v
@@ -101,34 +102,52 @@ The central implementation path is currently `ContourChart`, `TrialSpaces`,
 `run_count_driven_policy_diagnostic`. These are experiment objects, not public
 `FEASTSolver` API.
 
-## Reduced Problem Boundary
+## Reduced Realization Boundary
 
-Stages 2--5 deliberately keep the reduced nonlinear solve and the acceptance
+Stages 2--5 deliberately keep reduced realization/extraction and acceptance
 policy separate from the FEAST-style update. This mirrors linear FEAST more
 than it may first appear: FEAST theory controls the contour projection, the
 filtered subspace iteration, and the Rayleigh--Ritz reduction, while the
-details of the small reduced eigenproblem are mostly an implementation choice.
+details of the small reduced solve are mostly an implementation choice.
 
-For moment-NLFEAST the reduced object is harder:
+For moment-NLFEAST the projected analytic object is:
 
 ```text
 Tred(lambda) = Y^H T(lambda) X.
 ```
 
-Even if `X,Y` expose the correct local finite realization, `Tred` is still a
-nonlinear eigenvalue problem. In pathological or highly oscillatory cases,
-such as sine/delay-type problems with many roots in a low-dimensional physical
-space, the reduced problem can remain globally difficult. The contour method
-does not magically make arbitrary analytic rootfinding easy; it localizes the
-problem, supplies a finite realization, and gives diagnostics for whether that
-realization is trustworthy.
+But the practical route should usually not be "globally solve this reduced
+analytic NEP." The point of higher moments is precisely to expose a finite
+linear realization of the local pole data, so that extraction reduces to a
+small linear generalized eigenvalue problem or equivalent small realization
+problem:
+
+```text
+positive contour moments -> finite realization -> small pencil -> roots
+```
+
+This is the practical bridge to the original NLFEAST/PEP idea: polynomial
+problems can be linearized explicitly by a companion expansion, while general
+analytic problems can be linearized locally by SS/Hankel, Beyn, or Loewner
+realizations of contour data. Direct nonlinear solution of `Tred` should be
+treated as a fallback, validation tool, or local cleanup step, not as the main
+algorithmic promise.
+
+This distinction matters most for problems like sine or delay equations. A
+low-dimensional physical operator can contain many eigenvalues inside one
+chart. Moment expansion is meaningful only if those moments produce a finite
+local realization whose roots can be extracted by a small pencil. If the
+extractor cannot produce such a realization, then the problem has fallen back
+to hard analytic rootfinding and the FEAST-style update has not bought us a
+practical solver.
 
 The extractor layer should therefore be understood as a coordinate choice for
 the finite local realization, not as part of the residual-Laurent update
 itself:
 
 ```text
-SS/Hankel, Beyn, Loewner, companion/QZ, or local Newton-like extraction
+SS/Hankel, Beyn, Loewner, companion/QZ, or local Newton cleanup after a
+linearized realization
 ```
 
 are interchangeable reduced-realization coordinates when their assumptions
@@ -154,8 +173,8 @@ The hard cases are then assigned to the right layer:
 - algebraic/geometric mismatch: use local contour counts for multiplicity;
 - contour near a pole or singularity: diagnose as unsafe rather than hiding
   the placement error;
-- genuinely hard reduced analytic rootfinding: treat as an extractor/local
-  solver limitation, not as a failure of the FEAST residual update.
+- failure to linearize the local pole data into a finite realization: treat as
+  an extractor/chart limitation, not as a successful moment-NLFEAST solve.
 
 ## Moment Roles
 
