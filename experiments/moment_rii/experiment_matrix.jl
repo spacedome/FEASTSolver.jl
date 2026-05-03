@@ -629,9 +629,11 @@ function run_sparse_linear_moment_pipeline_smoke(;
     initial_extracted_left_gap = extracted_projection_gap(extraction0, :left)
     updated_extracted_right_gap = extracted_projection_gap(extraction1, :right)
     updated_extracted_left_gap = extracted_projection_gap(extraction1, :left)
+    residual_improvement = summary0.max_residual / max(summary1.max_residual, eps(Float64))
     result = (
         expected=length(expected),
         sparse_matrix=Tmatrix(center + radius * im) isa AbstractSparseMatrix,
+        residual_improvement=residual_improvement,
         initial=merge(
             (
                 right_projection_gap=initial_right_gap,
@@ -664,15 +666,16 @@ function run_sparse_linear_moment_pipeline_smoke(;
         println("Sparse linear moment pipeline smoke")
         println("  sparse diagonal T(z)=zI-A; validates generic Tmatrix/Tsolve path accepts sparse matrices")
         @printf(
-        "  n=%d expected=%d sparse=%s initial_matched=%d/%d updated_matched=%d/%d residual_rank=(%d,%d) basis=(%d,%d) extracted_gap=(%.3e,%.3e)->(%.3e,%.3e)\n",
+        "  n=%d expected=%d sparse=%s initial_matched=%d/%d updated_matched=%d/%d residual_improvement=%.3e residual_rank=(%d,%d) basis=(%d,%d) extracted_gap=(%.3e,%.3e)->(%.3e,%.3e)\n",
         n,
         result.expected,
         string(result.sparse_matrix),
         result.initial.matched,
         result.expected,
-            result.updated.matched,
-            result.expected,
-            result.updated.right_residual_rank,
+        result.updated.matched,
+        result.expected,
+        result.residual_improvement,
+        result.updated.right_residual_rank,
         result.updated.left_residual_rank,
         result.updated.right_basis_cols,
         result.updated.left_basis_cols,

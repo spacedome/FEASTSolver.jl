@@ -404,6 +404,7 @@ end
     @test result.updated.matched == result.expected
     @test result.updated.spurious_good == 0
     @test result.updated.max_residual <= 1e-10
+    @test result.residual_improvement >= 1e4
     @test result.updated.right_extracted_projection_gap <= 1e-10
     @test result.updated.left_extracted_projection_gap <= 1e-10
     @test result.updated.right_residual_rank <= result.expected

@@ -76,6 +76,19 @@ still too large. The useful local quantity is the quality of the reduced
 Ritz/eigenvector data inside the captured realization, measured by physical
 right/left residuals and Petrov-Galerkin consistency.
 
+The current controlled correction target is therefore:
+
+```text
+if the realization rank/count is correct but extracted physical residuals are
+too large, residual-Laurent enrichment should reduce the physical residuals
+after re-extraction, even when subspace angle was already a weak diagnostic.
+```
+
+The sparse diagonal pipeline pins this lower-rung behavior: the extracted
+right/left subspace projection gaps are near roundoff before the update, but
+the physical residuals improve by more than `1e4` after one residual-Laurent
+enrichment and re-extraction.
+
 ## Proof Skeleton
 
 1. **Realization layer.** Use Keldysh plus contour integration to show positive
