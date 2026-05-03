@@ -9,30 +9,36 @@ default:
 smoke:
     {{julia}} --project=. --startup-file=no -e 'using FEASTSolver; println("FEASTSolver loaded")'
 
-# Run the package test harness. Args: regex filter, required tags, excluded tags.
-# Tags are comma-separated, e.g. `just test 'moment RII' '' moment_heavy`.
-test filter='' tags='' exclude='':
-    {{julia}} --project=. --startup-file=no test/pkgtest.jl {{quote(filter)}} {{quote(tags)}} {{quote(exclude)}}
+# Examples:
+#   just test
+#   just test 'moment RII'
+#   just test --slow 'count-driven refinement'
+#   just test --tags moment_heavy 'moment RII'
+#   just test --exclude moment_heavy 'moment RII'
 
-# Run the package test harness including test items tagged as slow.
-test-slow filter='' tags='' exclude='':
-    FEAST_TEST_SLOW=1 {{julia}} --project=. --startup-file=no test/pkgtest.jl {{quote(filter)}} {{quote(tags)}} {{quote(exclude)}}
+# Run the package test harness.
+test *args:
+    {{julia}} --project=. --startup-file=no test/pkgtest.jl {{quote(args)}}
 
-# Run flagged numerical torture tests. These are correctness tests, not benchmarks.
-test-torture filter='':
-    FEAST_TEST_ONLY_TORTURE=1 FEAST_TEST_TORTURE=1 FEAST_TEST_SLOW=1 {{julia}} --project=. --startup-file=no test/pkgtest.jl {{quote(filter)}}
+# Include test items tagged :slow.
+test-slow *args:
+    @just test --slow {{args}}
 
-# Run the fast moment-RII iteration smoke loop. Use test-slow for full moment research checks.
+# Run only flagged numerical torture tests. These are correctness tests, not benchmarks.
+test-torture *args:
+    @just test --only-torture {{args}}
+
+# Run the fast moment-RII iteration smoke loop.
 test-moment filter='moment RII':
     @just test {{quote(filter)}}
 
 # Run the expensive moment-RII agreement/policy diagnostics explicitly.
 test-moment-heavy filter='moment RII':
-    @just test-slow {{quote(filter)}} moment_heavy ''
+    @just test --slow --tags moment_heavy {{quote(filter)}}
 
 # Run only the count-driven moment-RII policy tests.
-test-moment-count:
-    @just test-slow 'count-driven refinement'
+test-moment-count filter='count-driven refinement':
+    @just test --slow {{quote(filter)}}
 
 # Run the older simple dense FEAST contour-parallel scaling benchmark.
 bench-parallel:
@@ -86,10 +92,11 @@ notes:
       'Use nix develop for Julia work.' \
       'The shell sets JULIA_PROJECT=@. and uses ./.julia as the first depot.' \
       'Run just smoke, just test, and just docs for the normal local loop.' \
-      'Run just test REGEX [TAGS] [EXCLUDE_TAGS] to run matching TestItems through Pkg.test(test_args=...).' \
-      'Tags are comma-separated; for example: just test "moment RII" "" moment_heavy.' \
+      'Run just test [OPTIONS] [REGEX] to run matching TestItems through Pkg.test(test_args=...).' \
+      'Supported options: --slow, --torture, --only-torture, --tags TAGS, --exclude TAGS.' \
+      'Tags are comma-separated; for example: just test --tags moment_heavy "moment RII".' \
       'Run just test-slow to include TestItems tagged :slow.' \
-      'Regex filters do not include :slow tests; required tags are treated as explicit and may select slow tests.' \
+      'Regex filters do not include :slow tests unless --slow or explicit --tags are passed.' \
       'Run just test-moment for the fast moment-RII loop, and just test-moment-heavy for expensive moment diagnostics.' \
       'Run just test-moment-count for count-driven moment-RII policy tests.' \
       'Run just test-torture to include flagged generated/NLEVP numerical stress tests.' \

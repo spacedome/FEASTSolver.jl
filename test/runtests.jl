@@ -5,12 +5,110 @@ function parse_test_tags(text)
     Set(Symbol(strip(part)) for part in split(text, ",") if !isempty(strip(part)))
 end
 
-const TEST_FILTER = isempty(ARGS) || isempty(ARGS[1]) ? nothing : Regex(ARGS[1])
-const INCLUDE_TAGS = length(ARGS) >= 2 ? parse_test_tags(ARGS[2]) : parse_test_tags(get(ENV, "FEAST_TEST_TAGS", ""))
-const EXCLUDE_TAGS = length(ARGS) >= 3 ? parse_test_tags(ARGS[3]) : parse_test_tags(get(ENV, "FEAST_TEST_EXCLUDE_TAGS", ""))
-const RUN_SLOW_TESTS = get(ENV, "FEAST_TEST_SLOW", "0") == "1"
-const RUN_TORTURE_TESTS = get(ENV, "FEAST_TEST_TORTURE", "0") == "1"
-const ONLY_TORTURE_TESTS = get(ENV, "FEAST_TEST_ONLY_TORTURE", "0") == "1"
+function normalize_test_args(args)
+    length(args) == 1 || return args
+    text = strip(only(args))
+    startswith(text, "--") || return args
+
+    tokens = split(text)
+    normalized = String[]
+    index = firstindex(tokens)
+    while index <= lastindex(tokens)
+        token = tokens[index]
+        if token in ("--slow", "--torture", "--only-torture") || startswith(token, "--tags=") ||
+                startswith(token, "--exclude=")
+            push!(normalized, String(token))
+        elseif token in ("--tags", "--exclude")
+            push!(normalized, String(token))
+            index == lastindex(tokens) && error("$token requires a comma-separated value")
+            index += 1
+            push!(normalized, String(tokens[index]))
+        elseif token == "--"
+            index < lastindex(tokens) && push!(normalized, join(tokens[(index + 1):end], " "))
+            break
+        elseif startswith(token, "--")
+            push!(normalized, String(token))
+        else
+            push!(normalized, join(tokens[index:end], " "))
+            break
+        end
+        index += 1
+    end
+    normalized
+end
+
+function parse_test_options(args)
+    args = normalize_test_args(args)
+    filter = nothing
+    include_tags = parse_test_tags(get(ENV, "FEAST_TEST_TAGS", ""))
+    exclude_tags = parse_test_tags(get(ENV, "FEAST_TEST_EXCLUDE_TAGS", ""))
+    run_slow = get(ENV, "FEAST_TEST_SLOW", "0") == "1"
+    run_torture = get(ENV, "FEAST_TEST_TORTURE", "0") == "1"
+    only_torture = get(ENV, "FEAST_TEST_ONLY_TORTURE", "0") == "1"
+    positionals = String[]
+
+    index = firstindex(args)
+    while index <= lastindex(args)
+        arg = args[index]
+        if arg == "--slow"
+            run_slow = true
+        elseif arg == "--torture"
+            run_torture = true
+        elseif arg == "--only-torture"
+            only_torture = true
+            run_torture = true
+            run_slow = true
+        elseif arg == "--tags"
+            index == lastindex(args) && error("--tags requires a comma-separated value")
+            index += 1
+            include_tags = parse_test_tags(args[index])
+        elseif startswith(arg, "--tags=")
+            include_tags = parse_test_tags(arg[8:end])
+        elseif arg == "--exclude"
+            index == lastindex(args) && error("--exclude requires a comma-separated value")
+            index += 1
+            exclude_tags = parse_test_tags(args[index])
+        elseif startswith(arg, "--exclude=")
+            exclude_tags = parse_test_tags(arg[11:end])
+        elseif arg == "--"
+            append!(positionals, args[(index + 1):end])
+            break
+        elseif startswith(arg, "--")
+            error("unknown test option: $arg")
+        else
+            push!(positionals, arg)
+        end
+        index += 1
+    end
+
+    # Preserve the old positional API: REGEX [INCLUDE_TAGS] [EXCLUDE_TAGS].
+    if !isempty(positionals) && !isempty(positionals[1])
+        filter = Regex(positionals[1])
+    end
+    if length(positionals) >= 2 && !isempty(positionals[2])
+        include_tags = parse_test_tags(positionals[2])
+    end
+    if length(positionals) >= 3 && !isempty(positionals[3])
+        exclude_tags = parse_test_tags(positionals[3])
+    end
+
+    (
+        filter=filter,
+        include_tags=include_tags,
+        exclude_tags=exclude_tags,
+        run_slow=run_slow,
+        run_torture=run_torture,
+        only_torture=only_torture,
+    )
+end
+
+const TEST_OPTIONS = parse_test_options(ARGS)
+const TEST_FILTER = TEST_OPTIONS.filter
+const INCLUDE_TAGS = TEST_OPTIONS.include_tags
+const EXCLUDE_TAGS = TEST_OPTIONS.exclude_tags
+const RUN_SLOW_TESTS = TEST_OPTIONS.run_slow
+const RUN_TORTURE_TESTS = TEST_OPTIONS.run_torture
+const ONLY_TORTURE_TESTS = TEST_OPTIONS.only_torture
 const TEST_ROOT = normpath(@__DIR__)
 const HAS_INCLUDE_TAGS = !isempty(INCLUDE_TAGS)
 

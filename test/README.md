@@ -44,8 +44,15 @@ generators locally instead.
 
 TestItems and TestItemRunner are kept as test-only dependencies in `Project.toml`
 under `[extras]` and `[targets]`. Use `just test`, which runs Julia's package
-test harness. Use `just test REGEX` to run only test items whose names match
-`REGEX`. Slow tests are tagged `:slow`; use `just test-slow` to include them in
-the full run, or select one explicitly with `just test REGEX`. Torture tests are
-tagged `:torture`; use `just test-torture` to run only that flagged stress
-suite.
+test harness through `Pkg.test(test_args=...)`. Use `just test REGEX` to run only
+test items whose names match `REGEX`. Slow tests are tagged `:slow`; include them
+with `just test --slow REGEX` or `just test-slow REGEX`. Torture tests are tagged
+`:torture`; use `just test-torture` to run only that flagged stress suite.
+
+The maintained test options are:
+
+- `--slow`: include tests tagged `:slow`.
+- `--torture`: include tests tagged `:torture`.
+- `--only-torture`: run only tests tagged `:torture`; this also enables slow tests.
+- `--tags TAGS`: require comma-separated tags, e.g. `just test --tags moment_heavy "moment RII"`.
+- `--exclude TAGS`: exclude comma-separated tags, e.g. `just test --exclude moment_heavy "moment RII"`.
