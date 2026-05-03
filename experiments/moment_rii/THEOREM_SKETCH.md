@@ -83,17 +83,23 @@ right/left residuals and Petrov-Galerkin consistency.
    linear diagonal control, this is pinned numerically by
    `M_k = X*S^(k-1)*C` and by outside-contour leakage near roundoff.
 
-2. **Coordinate invariance.** Show that replacing residual blocks
+2. **Linear FEAST convergence language.** In the linear case, view the contour
+   operator as a rational filter approximating a spectral projector, followed
+   by Rayleigh--Ritz. This is the established FEAST convergence framing. The
+   residual identity below explains why the residual-inverse update is the same
+   filter in different algebra.
+
+3. **Coordinate invariance.** Show that replacing residual blocks
    `R_X, R_Y` by `R_X C_X, R_Y C_Y`, for nonsingular `C_X, C_Y`, leaves the
    enriched spaces unchanged after residual-subspace compression. This is
    pinned by the residual-coordinate invariance diagnostic.
 
-3. **Closure.** If `X,Y` contain the exact target right/left residue spaces and
+4. **Closure.** If `X,Y` contain the exact target right/left residue spaces and
    the reduced Ritz data is exact, then `R_X=R_Y=0`; the enrichment adds no
    physical directions. This is pinned by the exact-realization closure
    diagnostic.
 
-4. **Linear reduction.** For `T(z)=zI-A`, use
+5. **Linear reduction.** For `T(z)=zI-A`, use
 
    ```text
    x - (zI-A)^(-1)(lambda I-A)x = (z-lambda)(zI-A)^(-1)x
@@ -102,7 +108,7 @@ right/left residuals and Petrov-Galerkin consistency.
    so scalar residual inverse iteration and the FEAST contour filter are the
    same object. This is pinned by the dual linear RII diagnostic.
 
-5. **Nonlinear local correction.** For analytic `T`, use the local pole
+6. **Nonlinear local correction.** For analytic `T`, use the local pole
    realization to interpret the residual inverse-Laurent enrichment as a
    correction of physical input/output maps for the reduced realization. This
    is the remaining proof gap. The proof must involve the captured
@@ -110,10 +116,17 @@ right/left residuals and Petrov-Galerkin consistency.
    denominator-only Laurent tail bound: that path is explicitly rejected by the
    scalar truncation boundary diagnostic.
 
-6. **Re-extraction.** After enrichment, the algorithm returns to the
+7. **Re-extraction.** After enrichment, the algorithm returns to the
    realization layer and solves the reduced Petrov-Galerkin NEP again. This is
    why the persistent state remains `X,Y` plus extractor policy, not expanded
    residual or Hankel columns.
+
+The nonlinear correction proof should likely borrow quasi-Newton/RII language:
+Neumaier gives scalar nonlinear RII convergence, and Jarlebring--Koskela--Mele
+connect RII-type NEP methods to quasi-Newton methods through Keldysh theory.
+The missing step is lifting that scalar local-correction language to a
+compressed two-sided finite realization without choosing scalar expanded
+Hankel columns as the persistent state.
 
 ## Non-Claims
 

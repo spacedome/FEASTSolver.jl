@@ -1390,3 +1390,50 @@ Interpretation:
 This is not a final novelty proof. It is a focused check that the most obvious
 terms around "residual realization update" and "residual Loewner update" do not
 appear to name the same loop.
+
+## Focused Convergence-Language Pass, 2026-05-03
+
+Search scope: `FEAST eigenvalue solver convergence rational filter subspace
+iteration theorem`, `contour integral eigensolver convergence subspace
+iteration rational filter nonnormal`, `residual inverse iteration nonlinear
+eigenvalue quasi Newton Keldysh convergence`, and `nonlinear FEAST convergence
+residual inverse iteration contour`.
+
+Useful framing:
+
+- Tang and Polizzi analyze FEAST as accelerated subspace iteration using a
+  rational matrix function approximating the spectral projector. This is the
+  right lower-rung language for linear FEAST: convergence is governed by the
+  rational filter/projector and the Rayleigh--Ritz subspace iteration, not by
+  residual-vector algebra alone. DOI: <https://doi.org/10.1137/13090866X>.
+- Guettel, Polizzi, Tang, and Viaud characterize FEAST convergence through the
+  error of the rational approximant to an indicator function, with Zolotarev
+  filters improving robustness when eigenvalues are poorly separated or
+  subspace size barely exceeds the target count. DOI:
+  <https://doi.org/10.1137/140980090>.
+- Neumaier's residual inverse iteration gives the scalar nonlinear correction
+  language: with shift close enough to the target root, nonlinear RII has at
+  least linear local convergence with a factor proportional to shift error.
+  DOI: <https://doi.org/10.1137/0722055>.
+- Jarlebring, Koskela, and Mele reinterpret residual inverse iteration and
+  related NEP methods as quasi-Newton methods using Keldysh theory. This is
+  the closest available local nonlinear convergence language for the correction
+  step. DOI: <https://doi.org/10.1007/s11075-017-0438-2>.
+- The nonlinear FEAST paper identifies NLFEAST as a contour/multishift
+  generalization of residual inverse iteration. This gives the canonical
+  `K=1` reduction but does not solve the higher-moment finite-realization
+  update. DOI: <https://doi.org/10.1016/j.jocs.2018.05.006>.
+
+Impact on the theorem sketch:
+
+- The linear rung should be phrased as rational-filter subspace iteration plus
+  Rayleigh--Ritz, with the residual-inverse identity explaining why the FEAST
+  correction is equivalent in the linear case.
+- The nonlinear local rung should borrow quasi-Newton/RII language, but only
+  after reduction to a finite local realization. A proof based only on subspace
+  angle is too weak: the sparse linear diagnostic already shows essentially
+  correct extracted subspaces can still have bad physical residuals.
+- The likely theorem shape is therefore a hybrid: positive moments identify a
+  finite transfer realization; residual-Laurent enrichment gives a
+  coordinate-invariant physical residual correction; re-extraction supplies the
+  Rayleigh--Ritz/reduced-NEP step.
