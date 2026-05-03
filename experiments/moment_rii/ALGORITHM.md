@@ -131,7 +131,10 @@ per scalar Ritz value.
   `CountDrivenPolicyConfig` object so grid spacing, support threshold,
   refinement depth, local chart radii, optional radius-ladder stages, residual
   tolerance, and count tolerance are treated as one experiment policy rather
-  than incidental keyword clutter.
+  than incidental keyword clutter. Its companion `CountDrivenNumericsConfig`
+  now lowers into the shared `ReducedExtractorConfig` and `ResidualUpdateConfig`
+  objects used by the local chart sweep, so extraction/update choices are
+  explicit experiment objects rather than loose keyword bundles.
 - Oracle-free control: a scalar delay NEP with no exact-root list stops from
   the full-operator argument-principle count alone, validating that the
   count-driven loop is not secretly supervised by analytic roots.
@@ -314,6 +317,8 @@ Representative tests:
   to generate the needed weak center. The radius-ladder policy captures this as
   an explicit two-stage `CountDrivenPolicyConfig`: diagnose with small charts,
   then retry with larger overlap only when the count deficit remains unresolved.
+  Each stage uses the same extractor/update configs, isolating the chart-policy
+  change from numerical extraction settings.
 - A near-pole rational triangular control exercises the same no-oracle path
   with meromorphic components whose poles lie just outside the target contour.
   With pole gap `0.01`, the full-operator count is reliable, support retention

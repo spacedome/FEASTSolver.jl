@@ -30,7 +30,7 @@ and claims need both theoretical basis and numerical evidence.
 | Connect canonical NLFEAST | Existing `nlfeast!`, `run_canonical_nlfeast_limit_diagnostic`, slow test `canonical NLFEAST limit`, and `ALGORITHM.md` reductions | A three-component one-root-per-component rational control compares existing `nlfeast!`, scalar-expanded residual RII, and compressed residual-Laurent update. All three recover the same three target values to residuals near machine precision, pinning the `K=1` bridge while preserving the distinction from higher-moment state. | Numerically pinned for the one-moment limit |
 | Define the moment update | `residual_laurent_update`, `moment_compressed_dual_rii_bases_generic`, `ALGORITHM.md`, `DERIVATION.md` | Residual Laurent moments repair left/right physical spaces instead of iterating expanded Hankel columns. The derivation note connects the update to Keldysh local resolvent form, scalar RII, and the circular-chart Laurent expansion. | Core candidate implemented |
 | Handle higher moments elegantly | `TrialSpaces`, `ReducedExtractorConfig`, Loewner/counting extractors, chart policy | The iterative state is physical `X,Y` plus reduced realization/extractor; expanded moments are not exposed as state. | Satisfied as design boundary |
-| Avoid ad-hoc black-box hacks | `CountDrivenPolicyConfig`, `retention_policy_decision`, `chart_policy_plan`, tests | Retention/refinement is expressed as support/count/residual/agreement diagnostics and explicit chart actions. Selected count-deficit charts shrink, while count-error-only nonnormal charts preserve parent-radius candidates. The newer count-driven stress runners now pass chart spacing, support threshold, refinement depth, chart radii, optional radius-ladder stages, residual tolerance, and count tolerance as one policy object. | Improving, not final |
+| Avoid ad-hoc black-box hacks | `CountDrivenPolicyConfig`, `CountDrivenNumericsConfig`, `ReducedExtractorConfig`, `ResidualUpdateConfig`, `retention_policy_decision`, `chart_policy_plan`, tests | Retention/refinement is expressed as support/count/residual/agreement diagnostics and explicit chart actions. Selected count-deficit charts shrink, while count-error-only nonnormal charts preserve parent-radius candidates. The newer count-driven stress runners now pass chart spacing, support threshold, refinement depth, chart radii, optional radius-ladder stages, residual tolerance, and count tolerance as one policy object. Numerical extraction/update choices now lower from `CountDrivenNumericsConfig` into the shared extractor/update config objects used by the local chart sweep. | Improving, not final |
 | Provide theoretical basis | `LITERATURE.md`, `README.md`, `ALGORITHM.md`, `DERIVATION.md` | Systems/Loewner, SS/Hankel realization, invariant-pair/block Newton, algebraic multiplicity by argument principle, rational Krylov/NLEIGS, infinite-GMRES contour solves, SS parameter-estimation references, and a targeted residual-update literature query are summarized. The derivation note records the local residual-Laurent argument and reduction checks. | Stronger local basis; publication-level review still remains |
 | Provide numerical evidence | Slow tests under `just test 'moment RII'` | Linear, polynomial, analytic local-chart, Loewner-layout, extractor-agreement, near-pole rational, rational-coordinate, block-Newton boundary, and matrix-valued mixed diagnostic tests. | Strong for dense experiment controls |
 | Care about numerical properties | Rank, support, residual, count, layout/extractor agreement diagnostics | Tests pin cases where residuals, support, count, and agreement disagree. | Satisfied for current controls |
@@ -138,8 +138,11 @@ steps are:
 
 1. Continue tightening the experiment interface around a small set of stable
    objects: chart, extractor, update, policy, and diagnostic. `CountDrivenPolicyConfig`
-   now covers the basic refinement knobs and the optional radius ladder, but the
-   extractor/update sides are still more scattered than the policy side.
+   now covers the basic refinement knobs and the optional radius ladder, while
+   `CountDrivenNumericsConfig` lowers into `ReducedExtractorConfig` and
+   `ResidualUpdateConfig` for the count-driven local chart path. Older
+   experiment harnesses still pass many loose keywords and should be migrated
+   opportunistically.
 2. Continue the broader literature pass before making novelty claims, focusing
    on whether any published contour method iterates a finite realization by a
    residual-inverse moment correction.

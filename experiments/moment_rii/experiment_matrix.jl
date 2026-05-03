@@ -1361,8 +1361,11 @@ function run_adaptive_grid_loewner_refinement(;
     iterations=1,
     basis_moments=4,
     basis_nodes=16,
+    update_moment_count=1,
     rii_nodes=128,
     basis_ranktol=1e-8,
+    residual_ranktol=1e-10,
+    compression_ranktol=1e-10,
     determinant_nodes=512,
     determinant_capacity=32,
     extractor=:loewner_counted,
@@ -1396,7 +1399,10 @@ function run_adaptive_grid_loewner_refinement(;
             basis_moments=basis_moments,
             basis_nodes=basis_nodes,
             rii_nodes=rii_nodes,
+            update_moment_count=update_moment_count,
             basis_ranktol=basis_ranktol,
+            residual_ranktol=residual_ranktol,
+            compression_ranktol=compression_ranktol,
             determinant_nodes=determinant_nodes,
             determinant_capacity=determinant_capacity,
             extractor=extractor,
@@ -1573,8 +1579,11 @@ Base.@kwdef struct CountDrivenNumericsConfig
     iterations::Int = 1
     basis_moments::Int = 4
     basis_nodes::Int = 16
+    update_moment_count::Int = 1
     rii_nodes::Int = 128
     basis_ranktol::Float64 = 1e-8
+    residual_ranktol::Float64 = 1e-10
+    compression_ranktol::Float64 = 1e-10
     determinant_nodes::Int = 512
     determinant_capacity::Int = 32
     extractor::Symbol = :loewner_counted
@@ -1589,6 +1598,36 @@ Base.@kwdef struct CountDrivenNumericsConfig
     residual_normalization::Symbol = :vector
     component_scaling::Symbol = :none
     component_scaling_nodes::Int = 64
+    update_mode::Symbol = :moment_compressed
+    biorthogonalize::Bool = false
+end
+
+function reduced_extractor_config(numerics::CountDrivenNumericsConfig)
+    ReducedExtractorConfig(;
+        extractor=numerics.extractor,
+        determinant_nodes=numerics.determinant_nodes,
+        determinant_capacity=numerics.determinant_capacity,
+        reduced_moments=numerics.reduced_moments,
+        reduced_nodes=numerics.reduced_nodes,
+        reduced_ranktol=numerics.reduced_ranktol,
+        loewner_points=numerics.loewner_points,
+        loewner_radius=numerics.loewner_radius,
+        loewner_phase=numerics.loewner_phase,
+        residual_normalization=numerics.residual_normalization,
+        refinement=numerics.reduced_refinement,
+        refinement_steps=numerics.refinement_steps,
+    )
+end
+
+function residual_update_config(numerics::CountDrivenNumericsConfig)
+    ResidualUpdateConfig(;
+        moment_count=numerics.update_moment_count,
+        rii_nodes=numerics.rii_nodes,
+        residual_ranktol=numerics.residual_ranktol,
+        compression_ranktol=numerics.compression_ranktol,
+        mode=numerics.update_mode,
+        biorthogonalize=numerics.biorthogonalize,
+    )
 end
 
 function local_cluster_multiplicity_estimates(
@@ -1660,8 +1699,11 @@ function run_count_driven_adaptive_grid_refinement(;
     iterations=1,
     basis_moments=4,
     basis_nodes=16,
+    update_moment_count=1,
     rii_nodes=128,
     basis_ranktol=1e-8,
+    residual_ranktol=1e-10,
+    compression_ranktol=1e-10,
     determinant_nodes=512,
     determinant_capacity=32,
     extractor=:loewner_counted,
@@ -1673,6 +1715,8 @@ function run_count_driven_adaptive_grid_refinement(;
     residual_normalization=:vector,
     component_scaling=:none,
     component_scaling_nodes=64,
+    update_mode=:moment_compressed,
+    biorthogonalize=false,
     residual_tol=1e-8,
     match_atol=1e-6,
     count_error_tol=1e-2,
@@ -1693,8 +1737,11 @@ function run_count_driven_adaptive_grid_refinement(;
         iterations = numerics.iterations
         basis_moments = numerics.basis_moments
         basis_nodes = numerics.basis_nodes
+        update_moment_count = numerics.update_moment_count
         rii_nodes = numerics.rii_nodes
         basis_ranktol = numerics.basis_ranktol
+        residual_ranktol = numerics.residual_ranktol
+        compression_ranktol = numerics.compression_ranktol
         determinant_nodes = numerics.determinant_nodes
         determinant_capacity = numerics.determinant_capacity
         extractor = numerics.extractor
@@ -1709,7 +1756,11 @@ function run_count_driven_adaptive_grid_refinement(;
         residual_normalization = numerics.residual_normalization
         component_scaling = numerics.component_scaling
         component_scaling_nodes = numerics.component_scaling_nodes
+        update_mode = numerics.update_mode
+        biorthogonalize = numerics.biorthogonalize
     end
+    extraction_config = numerics === nothing ? nothing : reduced_extractor_config(numerics)
+    update_config = numerics === nothing ? nothing : residual_update_config(numerics)
     count = full_operator_count_estimate(
         cases;
         outer_center=outer_center,
@@ -1741,7 +1792,10 @@ function run_count_driven_adaptive_grid_refinement(;
             basis_moments=basis_moments,
             basis_nodes=basis_nodes,
             rii_nodes=rii_nodes,
+            update_moment_count=update_moment_count,
             basis_ranktol=basis_ranktol,
+            residual_ranktol=residual_ranktol,
+            compression_ranktol=compression_ranktol,
             determinant_nodes=determinant_nodes,
             determinant_capacity=determinant_capacity,
             extractor=extractor,
@@ -1756,6 +1810,10 @@ function run_count_driven_adaptive_grid_refinement(;
             residual_normalization=residual_normalization,
             component_scaling=component_scaling,
             component_scaling_nodes=component_scaling_nodes,
+            biorthogonalize=biorthogonalize,
+            update_mode=update_mode,
+            extraction_config=extraction_config,
+            update_config=update_config,
             residual_tol=residual_tol,
             match_atol=match_atol,
             selection=:residual,

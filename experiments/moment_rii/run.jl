@@ -5334,7 +5334,33 @@ function run_dual_local_chart_sweep_analytic(;
     selection=:matched,
     skip_empty_expected=centers === nothing,
     print_charts=true,
+    extraction_config=nothing,
+    update_config=nothing,
 )
+    if extraction_config !== nothing
+        extractor = extraction_config.extractor
+        determinant_nodes = extraction_config.determinant_nodes
+        determinant_capacity = extraction_config.determinant_capacity
+        reduced_moments = extraction_config.reduced_moments
+        reduced_nodes = extraction_config.reduced_nodes
+        reduced_ranktol = extraction_config.reduced_ranktol
+        reduced_ss_mode = extraction_config.reduced_ss_mode
+        loewner_points = extraction_config.loewner_points
+        loewner_radius = extraction_config.loewner_radius
+        loewner_phase = extraction_config.loewner_phase
+        residual_normalization = extraction_config.residual_normalization
+        reduced_refinement = extraction_config.refinement
+        refinement_steps = extraction_config.refinement_steps
+    end
+    if update_config !== nothing
+        rii_nodes = update_config.rii_nodes
+        update_moment_count = update_config.moment_count
+        compression_ranktol = update_config.compression_ranktol
+        residual_ranktol = update_config.residual_ranktol
+        update_mode = update_config.mode
+        biorthogonalize = update_config.biorthogonalize
+    end
+
     _, _, _, _, expected_roots = operator_builder(cases; component_scales=nothing)
     expected_global = expected_roots(outer_center, outer_radius)
     chart_centers = centers === nothing ? expected_global : ComplexF64.(centers)
