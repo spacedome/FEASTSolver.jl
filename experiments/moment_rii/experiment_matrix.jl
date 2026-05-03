@@ -697,6 +697,136 @@ function run_sparse_stored_factor_residual_laurent_smoke(;
     result
 end
 
+function run_sparse_symbolic_reuse_residual_laurent_smoke(;
+    n=16,
+    center=3.5 + 0.0im,
+    radius=2.6,
+    residual_tol=1e-10,
+    match_atol=1e-8,
+    print_rows=true,
+)
+    problem = sparse_quadratic_gallery_moment_context(n, center, radius)
+    direct_ctx = problem.ctx
+    stats_ref = Ref((
+        right_symbolic_initializations=0,
+        left_symbolic_initializations=0,
+        right_numeric_refactors=0,
+        left_numeric_refactors=0,
+        right_solves=0,
+        left_solves=0,
+    ))
+    right_Tz = similar(problem.prototype)
+    left_Tz = similar(problem.prototype)
+    right_factor = Ref{Any}(nothing)
+    left_factor = Ref{Any}(nothing)
+
+    function symbolic_factor_solve!(factor_ref, Tz, z, B; side)
+        problem.T_update(Tz, z)
+        old = stats_ref[]
+        if factor_ref[] === nothing
+            factor_ref[] = lu(Tz)
+            stats_ref[] = side === :right ?
+                merge(old, (right_symbolic_initializations=old.right_symbolic_initializations + 1,)) :
+                merge(old, (left_symbolic_initializations=old.left_symbolic_initializations + 1,))
+        else
+            lu!(factor_ref[], Tz; reuse_symbolic=true)
+            stats_ref[] = side === :right ?
+                merge(old, (right_numeric_refactors=old.right_numeric_refactors + 1,)) :
+                merge(old, (left_numeric_refactors=old.left_numeric_refactors + 1,))
+        end
+        old = stats_ref[]
+        stats_ref[] = side === :right ?
+            merge(old, (right_solves=old.right_solves + 1,)) :
+            merge(old, (left_solves=old.left_solves + 1,))
+        factor_ref[] \ B
+    end
+
+    symbolic_ctx = merge(
+        direct_ctx,
+        (
+            Tsolve=(z, B) -> symbolic_factor_solve!(right_factor, right_Tz, z, B; side=:right),
+            Tadjoint_solve=(z, B) -> symbolic_factor_solve!(left_factor, left_Tz, conj(z), B; side=:left),
+        ),
+    )
+    basis = MomentBasisConfig(;
+        moments=2,
+        nodes=32,
+        ranktol=1e-10,
+        seed=44021,
+    )
+    extractor = ReducedExtractorConfig(;
+        extractor=:ss_counted,
+        determinant_nodes=384,
+        determinant_capacity=2n,
+        reduced_moments=10,
+        reduced_nodes=384,
+        residual_normalization=:vector,
+    )
+    update = ResidualUpdateConfig(;
+        moment_count=1,
+        rii_nodes=96,
+        residual_ranktol=1e-10,
+        compression_ranktol=1e-10,
+    )
+    trial = initial_dual_trial_spaces(direct_ctx, problem.chart, basis)
+    extraction0 = extract_reduced_nep(direct_ctx, trial, problem.chart, extractor)
+    direct_trial, direct_stats = residual_laurent_update(direct_ctx, trial, extraction0, problem.chart, update)
+    symbolic_trial, symbolic_stats = residual_laurent_update(symbolic_ctx, trial, extraction0, problem.chart, update)
+    after_first = stats_ref[]
+    symbolic_trial2, symbolic_stats2 = residual_laurent_update(symbolic_ctx, trial, extraction0, problem.chart, update)
+    after_second = stats_ref[]
+    direct_extraction = extract_reduced_nep(direct_ctx, direct_trial, problem.chart, extractor)
+    symbolic_extraction = extract_reduced_nep(direct_ctx, symbolic_trial, problem.chart, extractor)
+    direct_summary = dual_scalar_rii_summary(direct_extraction, problem.expected; residual_tol=residual_tol, match_atol=match_atol)
+    symbolic_summary = dual_scalar_rii_summary(symbolic_extraction, problem.expected; residual_tol=residual_tol, match_atol=match_atol)
+    Px = direct_trial.X * direct_trial.X' - symbolic_trial.X * symbolic_trial.X'
+    Py = direct_trial.Y * direct_trial.Y' - symbolic_trial.Y * symbolic_trial.Y'
+    Px2 = symbolic_trial.X * symbolic_trial.X' - symbolic_trial2.X * symbolic_trial2.X'
+    Py2 = symbolic_trial.Y * symbolic_trial.Y' - symbolic_trial2.Y * symbolic_trial2.Y'
+    result = (
+        expected=length(problem.expected),
+        sparse_matrix=direct_ctx.Tmatrix(center + radius * im) isa AbstractSparseMatrix,
+        prototype_sparse=problem.prototype isa AbstractSparseMatrix,
+        direct=direct_summary,
+        symbolic=symbolic_summary,
+        x_projection_gap=opnorm(Px),
+        y_projection_gap=opnorm(Py),
+        repeat_x_projection_gap=opnorm(Px2),
+        repeat_y_projection_gap=opnorm(Py2),
+        direct_stats=direct_stats,
+        symbolic_stats=symbolic_stats,
+        symbolic_stats_second=symbolic_stats2,
+        after_first=after_first,
+        after_second=after_second,
+    )
+    if print_rows
+        println()
+        println("Sparse symbolic-reuse residual Laurent smoke")
+        println("  sparse quadratic gallery operator; validates one symbolic factor per side can be numerically refreshed")
+        @printf(
+            "  expected=%d direct=%d/%d symbolic=%d/%d projection_gap=(%.3e, %.3e) init=(%d,%d) refactors=(%d,%d)->(%d,%d) solves=(%d,%d)->(%d,%d)\n",
+            result.expected,
+            result.direct.matched,
+            result.expected,
+            result.symbolic.matched,
+            result.expected,
+            result.x_projection_gap,
+            result.y_projection_gap,
+            result.after_first.right_symbolic_initializations,
+            result.after_first.left_symbolic_initializations,
+            result.after_first.right_numeric_refactors,
+            result.after_first.left_numeric_refactors,
+            result.after_second.right_numeric_refactors,
+            result.after_second.left_numeric_refactors,
+            result.after_first.right_solves,
+            result.after_first.left_solves,
+            result.after_second.right_solves,
+            result.after_second.left_solves,
+        )
+    end
+    result
+end
+
 function sparse_quadratic_gallery_moment_context(n, center, radius)
     roots = ComplexF64.(1:n)
     A0 = spdiagm(0 => -(roots .^ 2))

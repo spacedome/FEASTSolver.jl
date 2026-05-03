@@ -142,16 +142,19 @@ linear operator closures pass through the same persistent worker boundary and
 records the same lightweight timing shape.
 `run_sparse_nonlinear_gallery_moment_pipeline_smoke` verifies a sparse
 quadratic polynomial gallery operator with known roots on the generic nonlinear
-sparse pipeline. `run_sparse_remote_stored_factor_worker_smoke` combines the
-linear sparse and remote rungs: a
+sparse pipeline. `run_sparse_symbolic_reuse_residual_laurent_smoke` verifies
+the no-store fixed-pattern rung: one sparse factor per side is initialized
+once, refreshed numerically with `reuse_symbolic=true` across contour nodes,
+and still reproduces the generic sparse residual-Laurent update.
+`run_sparse_remote_stored_factor_worker_smoke` combines the linear sparse and
+remote rungs: a
 sparse linear control runs through persistent worker-owned contour partitions,
 the first update creates the expected node-local sparse factors, and the second
 update reuses those factors while matching the serial residual-Laurent update.
 `run_sparse_nonlinear_remote_stored_factor_worker_smoke` repeats that
 stored-factor worker path on the nonlinear sparse quadratic gallery control.
-It does not yet provide symbolic sparse factor reuse, reusable sparse work
-buffers, broad realistic sparse gallery coverage, or benchmark-level
-performance.
+It does not yet provide reusable sparse work buffers, broad realistic sparse
+gallery coverage, or benchmark-level performance.
 
 The first realistic sparse gallery smoke is now
 `run_sparse_schrodinger_moment_gallery_smoke`: it uses the moving-boundary

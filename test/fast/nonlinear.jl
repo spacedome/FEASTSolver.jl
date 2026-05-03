@@ -230,6 +230,37 @@ end
     @test result.cached_stats.left_candidate_cols == result.direct_stats.left_candidate_cols
 end
 
+@testitem "experimental moment RII: sparse symbolic reuse reproduces residual Laurent update" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_sparse_symbolic_reuse_residual_laurent_smoke(; print_rows=false)
+
+    @test result.sparse_matrix
+    @test result.prototype_sparse
+    @test result.expected == 6
+    @test result.direct.matched == result.expected
+    @test result.symbolic.matched == result.expected
+    @test result.symbolic.spurious_good == 0
+    @test result.x_projection_gap <= 5e-12
+    @test result.y_projection_gap <= 5e-12
+    @test result.repeat_x_projection_gap <= 5e-12
+    @test result.repeat_y_projection_gap <= 5e-12
+    @test result.after_first.right_symbolic_initializations == 1
+    @test result.after_first.left_symbolic_initializations == 1
+    @test result.after_second.right_symbolic_initializations == 1
+    @test result.after_second.left_symbolic_initializations == 1
+    @test result.after_first.right_numeric_refactors == 95
+    @test result.after_first.left_numeric_refactors == 95
+    @test result.after_second.right_numeric_refactors == 191
+    @test result.after_second.left_numeric_refactors == 191
+    @test result.after_first.right_solves == 96
+    @test result.after_first.left_solves == 96
+    @test result.after_second.right_solves == 192
+    @test result.after_second.left_solves == 192
+    @test result.symbolic_stats.right_candidate_cols == result.direct_stats.right_candidate_cols
+    @test result.symbolic_stats.left_candidate_cols == result.direct_stats.left_candidate_cols
+end
+
 @testitem "experimental moment RII: sparse nonlinear gallery operator flows through moment pipeline" tags=[:slow] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 

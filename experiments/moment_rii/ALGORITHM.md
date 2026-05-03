@@ -203,6 +203,12 @@ per scalar Ritz value.
   roots are known exactly, and one residual-Laurent update recovers them with
   strict residuals. This pins the nonlinear sparse gallery boundary without
   claiming sparse nonlinear worker storage or benchmark performance.
+- Sparse symbolic-reuse smoke: on the same sparse quadratic gallery control,
+  one reusable UMFPACK factor per side is initialized once and then refreshed
+  numerically across contour nodes with symbolic reuse. The resulting
+  residual-Laurent update matches the generic sparse update and remains stable
+  across a repeated update. This pins the no-store fixed-pattern sparse rung
+  without claiming complete sparse work-buffer reuse or benchmark performance.
 - Sparse stored-factor smoke: the same sparse linear control caches
   contour-node sparse factorizations for the residual-Laurent update. The
   cached update reproduces the generic sparse update to roundoff projection
@@ -333,6 +339,7 @@ Representative tests:
 - `just test --preset moment-core`
 - `just test --slow 'dual linear RII'`
 - `just test --slow 'low-rank compression preserves update'`
+- `just test --slow 'sparse symbolic reuse'`
 - `just test --slow 'sparse nonlinear gallery operator'`
 - `just test --slow 'sparse Schrodinger gallery'`
 - `just test --tags distributed 'remote contour workers'`
