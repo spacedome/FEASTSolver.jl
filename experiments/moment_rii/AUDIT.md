@@ -23,7 +23,7 @@ and claims need both theoretical basis and numerical evidence.
 
 | Requirement | Current Artifact | Evidence | Status |
 | --- | --- | --- | --- |
-| Keep work contained to the experiment | `experiments/moment_rii/run.jl`, `pipeline.jl`, `experiment_matrix.jl`, `ALGORITHM.md` | No public API promotion; new algorithm objects are experiment-layer only. | Satisfied for current work |
+| Keep work contained to the experiment | `experiments/moment_rii/run.jl`, `pipeline.jl`, `experiment_matrix.jl`, `ALGORITHM.md`, `IMPLEMENTATION.md` | No public API promotion; new algorithm objects are experiment-layer only. | Satisfied for current work |
 | Explain unified algorithm family | `ALGORITHM.md`, `DERIVATION.md` | Candidate formula: local dual contour realization + reduced Petrov-Galerkin extraction + residual Laurent repair + chart policy. `DERIVATION.md` now records the contour/Laurent argument and reductions. | Satisfied as candidate |
 | Reduce to linear FEAST / SS-FEAST | `README.md`, `run_linear_ss_feast_control`, slow test `linear SS-FEAST` | Same-probe FEAST returns 4/10, wide FEAST returns 10/10, SS-FEAST with `K=3` returns 10/10 using four physical probes. | Numerically pinned |
 | Pin true dual extraction | `run_dual_reduced_polynomial_control`, slow test `dual reduced extraction`, `ALGORITHM.md` | On a dual-sensitive polynomial, true dual and biorthogonal dual extraction recover all 12 target roots. One-sided Galerkin extraction returns 13 inside reduced Ritz values with reduced residual near `1e-15`, but zero values satisfy the original residual tolerance. | Numerically pinned |
@@ -83,7 +83,8 @@ global block Newton, or rational-coordinate-only fixes.
   has a sparse linear pipeline smoke test showing generic sparse
   `Tmatrix`/`Tsolve` compatibility, but it deliberately does not provide
   reusable sparse factorizations, symbolic reuse, distributed workers, or
-  performance claims.
+  performance claims. `IMPLEMENTATION.md` records the sparse and distributed
+  rungs needed to turn the experiment boundary into a real implementation.
 - Split/shrink chart policy is now a reproducible local refinement rung, not a
   fully optimized adaptive chart cover. Naive half-radius child covers fail on
   the selected count-stressed radius-20 charts; residual candidate centers plus
