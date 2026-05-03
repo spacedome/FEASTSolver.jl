@@ -307,3 +307,63 @@ but it is not yet a decisive theory.
 No additional local implementation task is currently known to resolve that
 gap. Productizing the sparse/distributed rungs or tuning benchmarks should wait
 until the local theorem/novelty question is settled.
+
+## 2026-05-03 Fused Realization Completion Audit
+
+### Objective Restated
+
+Explore fused contour-sample realization until either:
+
+- a final unifying algorithm is found; or
+- the path is stuck.
+
+The required research direction is to include the interpretation of RII as a
+coordinate chart, and to keep the work contained to the experiment.
+
+### Prompt-To-Artifact Checklist
+
+| Requirement | Current Artifact | Evidence | Status |
+| --- | --- | --- | --- |
+| Fuse outer FEAST and inner Beyn/SS contour data | `ALGORITHM.md` sections `Collapsing Outer And Inner Moments` and `Unified Candidate Algorithm`; `ContourSampleCache` in `pipeline.jl` | The final candidate is now a chart-owned contour sample realization iteration. One contour cache supplies physical moments, small projected transfer moments, and residual-update responses. | Satisfied |
+| Avoid solving a projected nonlinear problem as the main path | `ALGORITHM.md`, `DERIVATION.md` | The reduced analytic object `Y^H T(lambda) X` is explicitly demoted to validation, cleanup, or fallback. Extraction is through a small linear realization/SS-Hankel/Loewner/pencil built from the contour transfer data. | Satisfied |
+| Pin fused extraction numerically | `run_fused_contour_sample_realization_diagnostic`, `run_fused_polynomial_contour_sample_realization_diagnostic`, tests `fused contour samples replace inner reduced SS` and `fused contour samples recover matrix polynomial realization` | The analytic diagonal control recovers eight roots from one original contour sample cache and matches the redundant inner reduced SS path. The deficient quadratic MatrixMarket control recovers four roots from the fused projected Hankel path and matches both redundant inner reduced SS and companion reference. | Satisfied |
+| Pin residual update in the same cache | `augment_contour_sample_cache`, `residual_laurent_moments`, `run_fused_cache_residual_augmentation_diagnostic`, test `fused cache augmentation matches residual Laurent update` | Augmenting the cache with compressed residual probes and reducing those probes with inverse-Laurent weights produces the same repaired physical spaces as the explicit residual-Laurent update, with projection gaps at zero in the diagnostic. | Satisfied |
+| Preserve two moment roles | `ALGORITHM.md`, `DERIVATION.md`, `right_moments`, `left_moments`, `residual_laurent_moments` | The implementation and docs now distinguish positive powers for finite realization/extraction from inverse-Laurent powers for residual repair. A failed intermediate attempt clarified that residual probes cannot be treated as ordinary positive moments. | Satisfied |
+| Explore RII as coordinate chart | `ALGORITHM.md` section `RII As A Coordinate Chart`; `DERIVATION.md` section `Fused Contour Realization Interpretation` | RII is stated as the scalar coordinate chart of the contour realization: linear FEAST has a global scalar Ritz chart, canonical NLFEAST has a local Keldysh scalar pole chart, and higher-moment NLFEAST needs coordinate-free residual-Laurent cache augmentation. | Satisfied as algorithmic theory |
+| Maintain focused evidence gate | `test/options.jl` `moment-core` preset | `moment-core` now includes fused contour sample and fused cache augmentation checks. Latest run: `nix develop --command just test --preset moment-core`, `218/218` assertions passed in `3m14.2s`. | Satisfied |
+| Keep work contained to experiment | `experiments/moment_rii/pipeline.jl`, `run.jl`, `ALGORITHM.md`, `DERIVATION.md`; tests under `test/fast/nonlinear.jl` | `ContourSampleCache` and fused diagnostics are experiment-layer objects; no public package API was promoted. | Satisfied |
+
+### Current Algorithmic Conclusion
+
+The fused branch has reached a coherent final algorithmic form:
+
+```text
+chart-owned contour sample cache
+  -> positive-moment finite realization / small linear extractor
+  -> physical residual certification
+  -> compressed residual probes appended to the same cache
+  -> inverse-Laurent residual reductions
+  -> repaired physical spaces
+  -> re-extract finite realization
+```
+
+This resolves the immediate algorithmic issue that motivated the revisit:
+NLFEAST should not first build a projector and then run Beyn/SS as an inner
+contour method on a projected nonlinear problem. The inner and outer contour
+data are the same transfer data and should be fused.
+
+The coordinate-chart interpretation is also now explicit:
+
+```text
+RII is the scalar Ritz-coordinate chart of the contour realization.
+Higher-moment NLFEAST replaces scalar expanded-column RII with
+coordinate-free residual-Laurent cache augmentation.
+```
+
+### Remaining Boundaries
+
+This is an algorithmic completion, not a full convergence proof. The older
+Lemma 5 theorem gap remains if the goal becomes publication-level convergence
+theory. Productizing this into the main solver API also remains future work.
+Those are distinct follow-on projects; they do not block the fused
+contour-sample realization objective.
