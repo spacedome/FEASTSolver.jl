@@ -255,6 +255,79 @@ fallback path, but it should not be the final efficient moment-NLFEAST design.
 The final design should make this collapsed one-contour-sample realization the
 default.
 
+## Unified Candidate Algorithm
+
+The current final candidate is a **chart-owned contour sample realization
+iteration**:
+
+```text
+state per chart:
+    contour nodes and node-local solvers/factorizations
+    active right probe blocks P = [initial probes, residual probes, ...]
+    active left probe blocks Q = [initial probes, residual probes, ...]
+    node responses T(z_j)^(-1) P and T(z_j)^(-H) Q
+
+extract:
+    reduce initial/realization probe responses with positive chart moments
+    form a small two-sided transfer realization H_k = Q^H M_k(P)
+    solve a small linear pencil / Loewner realization / SS-Hankel problem
+    reconstruct physical Ritz data from the same physical moment blocks
+
+certify:
+    check physical right/left residuals, contour count, support, and
+    extractor/layout agreement
+
+repair:
+    compress physical residual blocks to U_X,U_Y
+    append U_X,U_Y as new probe blocks in the same chart cache
+    reduce those residual probe responses with inverse-Laurent weights
+    repair X,Y and re-extract from the updated finite realization
+```
+
+In this formulation there is no conceptual inner nonlinear solve. The reduced
+analytic object `Y^H T(lambda) X` is still useful, but only as a validation,
+cleanup, or fallback coordinate. The main path is:
+
+```text
+one contour sample cache -> finite linear realization -> residual-Laurent
+cache augmentation -> finite linear realization -> ...
+```
+
+This is the cleanest version of the original NLFEAST/Beyn observation: once
+the contour solves have been paid for, running Beyn/SS as an inner method on a
+projected nonlinear problem wastes the transfer data that the outer contour
+already generated.
+
+## RII As A Coordinate Chart
+
+The unifying theoretical interpretation is that RII is not the general state;
+it is a special coordinate chart on the contour realization.
+
+```text
+linear FEAST:
+    T(z)=zI-A gives a global scalar Ritz chart.
+    RII is exactly the FEAST filter in that chart.
+
+canonical NLFEAST:
+    Keldysh gives a local scalar pole chart near simple eigenvalues.
+    Scalar nonlinear RII is a local coordinate update in that chart.
+
+SS/Beyn/Loewner:
+    positive contour moments expose a finite realization with gauge freedom.
+    Extraction is a choice of realization coordinates.
+
+higher-moment NLFEAST:
+    scalar RII on expanded moment columns is generally the wrong chart.
+    The coordinate-free update is physical residual-Laurent cache
+    augmentation followed by re-extraction of the finite realization.
+```
+
+This explains both the success and the failure modes. RII works miraculously
+when the local realization admits a scalar Ritz coordinate chart. In
+higher-moment charts, the realization has gauge freedom and possibly more
+roots than physical dimensions; the update must act on physical residual
+subspaces, not on an arbitrary expanded scalar Ritz list.
+
 ## Next Research Steps: Fused Realization And RII Charts
 
 The fused contour-sample view changes the next research target. The important

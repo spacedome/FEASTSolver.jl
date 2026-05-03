@@ -468,6 +468,55 @@ RII on expanded moment columns. It is a two-sided residual-inverse repair of the
 physical realization, designed to reduce to scalar RII when the chart has only
 one moment/root direction and to reduce to FEAST when the operator is linear.
 
+## Fused Contour Realization Interpretation
+
+The stronger fused-sample view removes the artificial distinction between the
+outer FEAST contour and an inner Beyn/SS contour. A chart owns one set of
+contour-node solves:
+
+```text
+R_j(P) = T(z_j)^(-1) P,
+L_j(Q) = T(z_j)^(-H) Q.
+```
+
+Different algorithmic stages are different reductions of those same node
+responses:
+
+```text
+positive powers of zeta:
+    build the finite contour realization and small two-sided moments
+
+inverse-Laurent powers of zeta:
+    repair physical spaces from compressed residual probes
+```
+
+The state is therefore not `X,Y` plus an independent reduced NEP solver. The
+state is a chart-local transfer data cache plus rules for reducing selected
+probe blocks. The reduced analytic problem `Y^H T(lambda) X` remains useful as
+validation or local cleanup, but the main extraction should come from a small
+linear realization built directly from the contour transfer data.
+
+This makes the coordinate-chart interpretation of RII sharper:
+
+- In linear FEAST, the transfer realization has a global scalar Ritz chart, and
+  the residual identity turns scalar RII into the FEAST rational filter.
+- In canonical NLFEAST, Keldysh supplies a local scalar pole chart near simple
+  roots, explaining why scalar residual inverse updates can work.
+- In higher-moment NLFEAST, the finite realization has gauge freedom; SS,
+  Beyn, Loewner, and companion coordinates are different charts on the same
+  transfer data. Scalar RII on expanded moment columns chooses one arbitrary
+  chart and can fail.
+- Residual-Laurent cache augmentation is the chart-independent survivor of the
+  RII idea: add physical residual probes, apply the same contour resolvent,
+  reduce with inverse-Laurent weights, and re-extract the finite realization.
+
+This is now the central algorithmic claim:
+
+```text
+higher-moment NLFEAST = contour sample realization iteration,
+not projected nonlinear rootfinding wrapped around a contour projector.
+```
+
 ## Diagnostics And Boundaries
 
 The update is not a complete black-box solver by itself. The contour realization
