@@ -589,3 +589,118 @@ function run_fused_schrodinger_dd_scale_smoke(;
         assembly_error=assembly_error,
     )
 end
+
+function run_fused_schrodinger_dd_baseline_comparison(;
+    config=FusedSchrodingerDDConfig(),
+    feast_subspace_multiplier=2,
+    feast_extra_columns=8,
+    feast_iter=4,
+    feast_nodes=64,
+    feast_tol=1e-7,
+    print_rows=true,
+)
+    op = schrodinger_dd_interface_operator(;
+        subdomains=config.subdomains,
+        interior_per_subdomain=config.interior_per_subdomain,
+        potential_amplitude=config.potential_amplitude,
+        potential_frequency=config.potential_frequency,
+    )
+    direct_start = time_ns()
+    full_values = eigvals(op.full_operator)
+    direct_s = (time_ns() - direct_start) / 1e9
+    expected = ComplexF64[λ for λ in full_values if abs(λ - real(config.center)) <= config.radius]
+    target_count = length(expected)
+
+    fused_start = time_ns()
+    fused = run_fused_schrodinger_dd_interface_diagnostic(FusedSchrodingerDDConfig(;
+        subdomains=config.subdomains,
+        interior_per_subdomain=config.interior_per_subdomain,
+        potential_amplitude=config.potential_amplitude,
+        potential_frequency=config.potential_frequency,
+        center=config.center,
+        radius=config.radius,
+        nodes=config.nodes,
+        moment_count=config.moment_count,
+        seed=config.seed,
+        ranktol=config.ranktol,
+        residual_tol=config.residual_tol,
+        match_atol=config.match_atol,
+        print_rows=false,
+    ))
+    fused_s = (time_ns() - fused_start) / 1e9
+
+    Random.seed!(config.seed + 17)
+    subspace_cols = max(feast_subspace_multiplier * target_count + feast_extra_columns, target_count + 4)
+    A_sparse = sparse(Matrix(op.full_operator))
+    X = rand(ComplexF64, size(op.full_operator, 1), subspace_cols)
+    stats = DenseFeastStats()
+    feast_start = time_ns()
+    feast_values, _, feast_residuals = feast!(
+        X,
+        A_sparse;
+        nodes=feast_nodes,
+        iter=feast_iter,
+        c=config.center,
+        r=config.radius,
+        ϵ=feast_tol,
+        store=false,
+        stats=stats,
+    )
+    feast_s = (time_ns() - feast_start) / 1e9
+    feast_matched = match_expected_count(feast_values[feast_residuals .<= feast_tol], expected; atol=config.match_atol)
+
+    if print_rows
+        println()
+        println("Fused Schrodinger/DD baseline comparison")
+        println("  compares compressed nonlinear interface solve against direct full eigvals and sparse full linear FEAST")
+        @printf(
+            "  full_n=%d interface_n=%d compression=%.1f expected=%d\n",
+            size(op.full_operator, 1),
+            length(op.interface),
+            size(op.full_operator, 1) / length(op.interface),
+            target_count,
+        )
+        @printf(
+            "  direct eigvals: count=%d elapsed=%.3fs\n",
+            target_count,
+            direct_s,
+        )
+        @printf(
+            "  fused DD: matched=%d diagnosis=%s residual=%.3e elapsed=%.3fs nodes=%d\n",
+            fused.refined_matched,
+            string(fused.diagnosis),
+            fused.refined_max_inside_residual,
+            fused_s,
+            config.nodes,
+        )
+        @printf(
+            "  full sparse FEAST: returned=%d matched=%d max_res=%.3e elapsed=%.3fs nodes=%d m=%d iterations=%d\n",
+            length(feast_values),
+            feast_matched,
+            isempty(feast_residuals) ? Inf : maximum(feast_residuals),
+            feast_s,
+            feast_nodes,
+            subspace_cols,
+            stats.iterations,
+        )
+    end
+
+    (
+        full_n=size(op.full_operator, 1),
+        interface_n=length(op.interface),
+        expected=target_count,
+        compression_ratio=size(op.full_operator, 1) / length(op.interface),
+        direct_count=target_count,
+        direct_s=direct_s,
+        fused_matched=fused.refined_matched,
+        fused_diagnosis=fused.diagnosis,
+        fused_residual=fused.refined_max_inside_residual,
+        fused_s=fused_s,
+        feast_returned=length(feast_values),
+        feast_matched=feast_matched,
+        feast_max_residual=isempty(feast_residuals) ? Inf : maximum(feast_residuals),
+        feast_s=feast_s,
+        feast_iterations=stats.iterations,
+        feast_subspace_cols=subspace_cols,
+    )
+end

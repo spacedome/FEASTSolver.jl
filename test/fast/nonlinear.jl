@@ -603,6 +603,20 @@ end
     @test result.assembly_error.derivative <= 1e-12
 end
 
+@testitem "experimental moment RII: fused Schrodinger DD baseline comparison is explicit" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_fused_schrodinger_dd_baseline_comparison(; print_rows=false)
+
+    @test result.expected == 13
+    @test result.direct_count == result.expected
+    @test result.fused_matched == result.expected
+    @test result.fused_diagnosis === :cleanup_required
+    @test result.feast_matched == result.expected
+    @test result.feast_max_residual <= 1e-7
+    @test result.compression_ratio > 10
+end
+
 @testitem "experimental moment RII: sparse nonlinear remote workers reuse stored contour factors" tags=[:slow, :distributed] begin
     if !isdefined(Main, :run_sparse_nonlinear_remote_stored_factor_worker_smoke)
         Base.include(Main, joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))

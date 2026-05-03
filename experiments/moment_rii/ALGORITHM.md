@@ -753,6 +753,16 @@ that setting.
   fused algorithm again recovers all 13 target roots after reduced cleanup
   (`cleanup_required`). This is still not an HPC implementation, but it
   verifies the algorithm is compatible with the subdomain-local operator shape.
+- Fused Schrodinger/DD baseline comparison: the experiment now reports direct
+  full `SymTridiagonal` eigvals and sparse full linear FEAST beside the fused
+  compressed interface solve. On the small default DD case all three recover
+  the same 13 roots; full sparse FEAST is faster at this size, which is the
+  expected baseline warning rather than a failure. On the larger local-block
+  smoke, full sparse FEAST is also still faster locally. The capability claim is
+  therefore not a small-machine speed claim: the fused DD path is evidence that
+  the nonlinear interface formulation can be solved automatically, with the
+  scaling proposition depending on larger subdomain-local/HPC workflows where
+  full global solves or linearizations become the bottleneck.
 - Sparse Schrodinger remote stored-factor smoke: the same realistic sparse
   Schrodinger control runs through persistent worker-owned contour partitions.
   The worker factors and node-local solve buffers are created once on the first

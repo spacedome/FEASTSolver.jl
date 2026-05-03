@@ -146,7 +146,11 @@ global block Newton, or rational-coordinate-only fixes.
   `full_n=2111`, `interface_n=63`, compression ratio above 30, and the same
   13-root recovery after cleanup. A small dense-reference check verifies local
   Schur-complement and derivative assembly to roundoff. This is enough
-  implementation evidence for now; it is not a benchmark-maxing result.
+  implementation evidence for now; it is not a benchmark-maxing result. The
+  baseline comparison runner records the expected caveat: on current local
+  small and medium instances, full sparse linear FEAST is still faster while
+  recovering the same roots. The DD result is therefore a capability/scaling
+  formulation result, not yet a performance win on this workstation.
   The experiment deliberately does not yet provide full reusable sparse
   workspaces, broad realistic sparse gallery coverage, or publication-level
   scaling claims.
