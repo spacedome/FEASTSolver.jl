@@ -5147,6 +5147,7 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
     match_atol=1e-6,
     biorthogonalize=false,
     update_mode=:moment_compressed,
+    pipeline_config=nothing,
     basis_config=nothing,
     extraction_config=nothing,
     update_config=nothing,
@@ -5161,6 +5162,14 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
     )
     ctx = analytic_context(cases, chart, operator_builder)
     expected = ctx.expected
+    if pipeline_config !== nothing
+        if basis_config !== nothing || extraction_config !== nothing || update_config !== nothing
+            error("pass either pipeline_config or individual basis/extraction/update configs")
+        end
+        basis_config = pipeline_config.basis
+        extraction_config = pipeline_config.extractor
+        update_config = pipeline_config.update
+    end
     extractor_config = extraction_config === nothing ? ReducedExtractorConfig(
             extractor=extractor,
             determinant_nodes=determinant_nodes,
@@ -5707,10 +5716,19 @@ function run_dual_local_chart_sweep_analytic(;
     skip_empty_expected=centers === nothing,
     print_charts=true,
     print_summary=true,
+    pipeline_config=nothing,
     basis_config=nothing,
     extraction_config=nothing,
     update_config=nothing,
 )
+    if pipeline_config !== nothing
+        if basis_config !== nothing || extraction_config !== nothing || update_config !== nothing
+            error("pass either pipeline_config or individual basis/extraction/update configs")
+        end
+        basis_config = pipeline_config.basis
+        extraction_config = pipeline_config.extractor
+        update_config = pipeline_config.update
+    end
     if basis_config !== nothing
         basis_moments = basis_config.moments
         basis_nodes = basis_config.nodes

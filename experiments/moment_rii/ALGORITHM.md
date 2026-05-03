@@ -64,8 +64,8 @@ given T, T', a circular chart Gamma(c,r), and right/left probes V,W:
 ```
 
 The central implementation path is currently `ContourChart`, `TrialSpaces`,
-`MomentBasisConfig`, `ReducedExtractorConfig`, `ResidualUpdateConfig`,
-`run_dual_moment_compressed_rii_analytic_iteration`, and
+`MomentPipelineConfig` over `MomentBasisConfig`, `ReducedExtractorConfig`, and
+`ResidualUpdateConfig`, `run_dual_moment_compressed_rii_analytic_iteration`, and
 `run_count_driven_policy_diagnostic`. These are experiment objects, not public
 `FEASTSolver` API.
 

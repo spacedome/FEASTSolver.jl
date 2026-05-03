@@ -77,6 +77,12 @@ Base.@kwdef struct ResidualUpdateConfig
     biorthogonalize::Bool = false
 end
 
+Base.@kwdef struct MomentPipelineConfig
+    basis::MomentBasisConfig = MomentBasisConfig()
+    extractor::ReducedExtractorConfig = ReducedExtractorConfig()
+    update::ResidualUpdateConfig = ResidualUpdateConfig()
+end
+
 function analytic_context(cases, chart::ContourChart, operator_builder)
     component_scales = analytic_component_scales(
         cases,

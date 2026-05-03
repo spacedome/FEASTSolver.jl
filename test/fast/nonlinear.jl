@@ -137,6 +137,7 @@ end
     )
 
     configs = moment_pipeline_configs(numerics; seed=1201)
+    @test configs isa MomentPipelineConfig
     @test configs.basis isa MomentBasisConfig
     @test configs.extractor isa ReducedExtractorConfig
     @test configs.update isa ResidualUpdateConfig
@@ -220,9 +221,7 @@ end
     configured = run_dual_moment_compressed_rii_analytic_iteration(;
         common...,
         iterations=numerics.iterations,
-        basis_config=configs.basis,
-        extraction_config=configs.extractor,
-        update_config=configs.update,
+        pipeline_config=configs,
     )
 
     loose_good = good_extraction_values(loose.extraction; residual_tol=1e-8)

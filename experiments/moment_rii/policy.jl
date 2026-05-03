@@ -96,7 +96,7 @@ function residual_update_config(numerics::CountDrivenNumericsConfig)
 end
 
 function moment_pipeline_configs(numerics::CountDrivenNumericsConfig; seed=nothing)
-    (
+    MomentPipelineConfig(
         basis=moment_basis_config(numerics; seed=seed),
         extractor=reduced_extractor_config(numerics),
         update=residual_update_config(numerics),

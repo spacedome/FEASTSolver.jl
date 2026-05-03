@@ -13,12 +13,14 @@ The candidate algorithm is expressed through these experiment objects:
 - `ReducedExtractorConfig`: determinant, counted SS/Hankel, or Loewner
   extraction of `Y' * T(lambda) * X`.
 - `ResidualUpdateConfig`: residual Laurent update of `X,Y`.
+- `MomentPipelineConfig`: one chart-local bundle containing the basis,
+  extractor, and update configs.
 - `CountDrivenPolicyConfig`: chart cover, support, count, and radius-ladder
   policy.
 - `CountDrivenNumericsConfig`: numerical realization/extraction/update choices
   lowered into the basis, extractor, and residual-update configs.
 - `moment_pipeline_configs`: the single lowering helper from one numerics
-  object to the `basis`, `extractor`, and `update` pipeline configs.
+  object to the chart-local `MomentPipelineConfig`.
 
 `pipeline.jl` contains the chart/basis/extractor/update objects. `policy.jl`
 contains the count-driven policy and numerics objects plus the named
