@@ -386,6 +386,65 @@ function run_matrix_polynomial_case(;
     rows
 end
 
+function polynomial_bridge_extractions(
+    coeffs,
+    center,
+    radius;
+    n,
+    basis_moments,
+    basis_nodes,
+    rii_nodes,
+    update_moment_count,
+    basis_ranktol,
+    compression_ranktol,
+    residual_ranktol,
+    newton_steps,
+)
+    z_nodes, z_weights = circular_rule(center, radius, basis_nodes)
+    rii_z_nodes, rii_z_weights = circular_rule(center, radius, rii_nodes)
+
+    Random.seed!(9701 + basis_nodes + 17 * basis_moments)
+    Xprobe = rand(ComplexF64, n, n)
+    Wprobe = rand(ComplexF64, n, n)
+    Tsolve = (z, B) -> polynomial_matrix(coeffs, z) \ B
+    right_moments = initial_moments_generic_scaled(Tsolve, Xprobe, z_nodes, z_weights, center, radius, basis_moments)
+    left_moments = initial_adjoint_moments_polynomial_scaled(coeffs, Wprobe, z_nodes, z_weights, center, radius, basis_moments)
+    Xbasis, _ = moment_block_basis(right_moments, basis_moments; ranktol=basis_ranktol)
+    Ybasis, _ = moment_block_basis(left_moments, basis_moments; ranktol=basis_ranktol)
+    trial = common_square_trial_spaces(TrialSpaces(X=Xbasis, Y=Ybasis, source=:polynomial_initial))
+    size(trial.X, 2) == 0 && return NamedTuple[]
+
+    extraction0 = reduced_polynomial_extraction(coeffs, trial.X, trial.Y, center, radius)
+    extraction0_refined = reduced_polynomial_extraction(
+        coeffs,
+        trial.X,
+        trial.Y,
+        center,
+        radius;
+        refinement=:block_newton,
+        newton_steps=newton_steps,
+    )
+    Xupdated, Yupdated, _ = moment_compressed_dual_rii_bases(
+        coeffs,
+        trial.X,
+        trial.Y,
+        extraction0,
+        rii_z_nodes,
+        rii_z_weights,
+        center,
+        radius;
+        moment_count=update_moment_count,
+        residual_ranktol=residual_ranktol,
+        compression_ranktol=compression_ranktol,
+    )
+    extraction1 = reduced_polynomial_extraction(coeffs, Xupdated, Yupdated, center, radius)
+    (
+        (stage=:initial_extraction, extraction=extraction0),
+        (stage=:block_newton_cleanup, extraction=extraction0_refined),
+        (stage=:laurent_update, extraction=extraction1),
+    )
+end
+
 function run_polynomial_family_bridge_diagnostic(;
     name="many_eigenvalue_nonnormal_polynomial",
     make_problem=many_eigenvalue_nonnormal_polynomial_problem,
@@ -426,6 +485,7 @@ function run_polynomial_family_bridge_diagnostic(;
         returned=length(comp_values),
         good=length(companion_values),
         matched=match_expected_count(companion_values, expected; atol=match_atol),
+        nearest_expected=nearest_expected_distance(companion_values, expected),
         max_feast_residual=isempty(comp_feast_residuals) ? Inf : maximum(comp_feast_residuals),
         max_poly_residual=isempty(comp_poly_residuals) ? Inf : maximum(comp_poly_residuals),
         companion_size=size(C1, 1),
@@ -444,32 +504,56 @@ function run_polynomial_family_bridge_diagnostic(;
         residual_tol=residual_tol,
         match_atol=match_atol,
     )
+    bridge_extractions = polynomial_bridge_extractions(
+        coeffs,
+        center,
+        radius;
+        n=size(coeffs[1], 1),
+        basis_moments=basis_moments,
+        basis_nodes=basis_nodes,
+        rii_nodes=rii_nodes,
+        update_moment_count=update_moment_count,
+        basis_ranktol=basis_ranktol,
+        compression_ranktol=1e-10,
+        residual_ranktol=1e-10,
+        newton_steps=2,
+    )
+    companion_row_distances = map(bridge_extractions) do row
+        extraction = row.extraction
+        good_values = ComplexF64.(extraction.values[extraction.inside .& (extraction.residuals .<= residual_tol)])
+        (
+            stage=row.stage,
+            nearest_companion=nearest_expected_distance(good_values, companion_values),
+        )
+    end
     if print_rows
         println()
         println("Polynomial family bridge diagnostic")
         println("  compares companion-pencil FEAST with polynomial-native reduced extraction/update")
         @printf(
-            "  companion matched=%d/%d good=%d returned=%d max_poly=%.3e\n",
+            "  companion matched=%d/%d good=%d returned=%d nearest_expected=%.3e max_poly=%.3e\n",
             companion_summary.matched,
             companion_summary.expected,
             companion_summary.good,
             companion_summary.returned,
+            companion_summary.nearest_expected,
             companion_summary.max_poly_residual,
         )
-        for row in polynomial_rows
+        for (row, distance) in zip(polynomial_rows, companion_row_distances)
             @printf(
-                "  %-22s matched=%d/%d good=%d spurious=%d max=%.3e %s\n",
+                "  %-22s matched=%d/%d good=%d spurious=%d nearest_companion=%.3e max=%.3e %s\n",
                 string(row.stage),
                 row.matched,
                 row.expected,
                 row.good,
                 row.spurious,
+                distance.nearest_companion,
                 row.max_residual,
                 row.success ? "ok" : "check",
             )
         end
     end
-    (companion=companion_summary, polynomial_rows=polynomial_rows)
+    (companion=companion_summary, polynomial_rows=polynomial_rows, companion_row_distances=companion_row_distances)
 end
 
 function run_sparse_linear_moment_pipeline_smoke(;

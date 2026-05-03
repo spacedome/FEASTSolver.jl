@@ -175,9 +175,10 @@ that setting.
   polynomial bridge diagnostic now compares the degree-eight nonnormal
   polynomial against FEAST on the `32 x 32` companion pencil: companion FEAST,
   polynomial-native initial extraction, reduced block-Newton cleanup, and the
-  residual-Laurent update all recover the same 20 target roots. This pins the
-  polynomial rung between linearized FEAST and the generic analytic charted
-  method.
+  residual-Laurent update all recover the same 20 target roots, and the
+  polynomial-native good values stay within `1e-6` of the companion-FEAST good
+  values. This pins the polynomial rung between linearized FEAST and the
+  generic analytic charted method.
 - Dual extraction control: a dual-sensitive polynomial now records that
   Galerkin one-sided extraction can produce false reduced Ritz data. The
   one-sided run returns 13 inside values with reduced residual near

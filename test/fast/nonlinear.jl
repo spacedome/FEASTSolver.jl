@@ -113,18 +113,23 @@ end
     result = run_polynomial_family_bridge_diagnostic(; print_rows=false)
     companion = result.companion
     rows = result.polynomial_rows
+    distances = result.companion_row_distances
 
     @test companion.expected == 20
     @test companion.companion_size == 32
     @test companion.matched == companion.expected
     @test companion.good >= companion.expected
+    @test companion.nearest_expected <= 1e-8
     @test companion.max_poly_residual <= 1e-8
     @test length(rows) == 3
+    @test length(distances) == length(rows)
     @test [row.stage for row in rows] == [:initial_extraction, :block_newton_cleanup, :laurent_update]
+    @test [distance.stage for distance in distances] == [row.stage for row in rows]
     @test all(row.expected == companion.expected for row in rows)
     @test all(row.matched == companion.expected for row in rows)
     @test all(row.spurious == 0 for row in rows)
     @test all(row.max_residual <= 1e-8 for row in rows)
+    @test all(distance.nearest_companion <= 1e-6 for distance in distances)
 end
 
 @testitem "experimental moment RII: dual reduced extraction rejects one-sided false Ritz data" tags=[:slow] begin
