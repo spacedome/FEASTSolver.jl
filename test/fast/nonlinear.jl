@@ -637,6 +637,23 @@ end
     @test length(result.added_centers) == 1
 end
 
+@testitem "experimental moment RII: count-driven refinement radius ladder repairs sparse coupled cover" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_coupled_two_delay_radius_ladder_refinement(; print_rows=false)
+    first_stage = result.stages[1].result
+    final = result.rows[end]
+
+    @test length(result.stages) == 2
+    @test first_stage.stop_reason == :count_multiplicity_or_unresolved_defect
+    @test first_stage.rows[end].retained == 10
+    @test result.stop_reason == :target_count_complete
+    @test result.count.count_estimate == 12
+    @test result.algebraic_retained_count == result.count.count_estimate
+    @test final.count_complete
+    @test final.retained == result.count.count_estimate
+end
+
 @testitem "experimental moment RII: count-driven refinement handles oracle-free multiplicity" tags=[:slow] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 

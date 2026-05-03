@@ -178,6 +178,11 @@ Representative tests:
   an additional weak candidate, adds one center, and then retains all 12 counted
   roots. The likely policy rung is adaptive overlap/radius selection when
   count deficits occur near the outer contour, not unconditional grid fill-in.
+- The experiment now has a radius-ladder policy prototype: run the usual
+  count-driven refinement with small local charts first; if it stops with an
+  unresolved count deficit, rerun with a larger chart radius/overlap schedule.
+  On the sparse coupled two-delay control this turns a diagnostic `10/12`
+  failure into a certified `12/12` solve without exact roots.
 - Scalar residuals alone are not acceptance evidence in high dynamic-range
   analytic NEPs. Local count, support, target membership, and extractor/layout
   agreement are needed.
@@ -265,7 +270,9 @@ Representative tests:
   `:count_multiplicity_or_unresolved_defect` instead of silently accepting an
   incomplete solve. The missing roots lie near the outer target contour and are
   repaired by allowing a larger local radius `3.0`, which gives enough overlap
-  to generate the needed weak center.
+  to generate the needed weak center. The radius-ladder wrapper captures this
+  as an explicit two-stage policy: diagnose with small charts, then retry with
+  larger overlap only when the count deficit remains unresolved.
 - A near-pole rational triangular control exercises the same no-oracle path
   with meromorphic components whose poles lie just outside the target contour.
   With pole gap `0.01`, the full-operator count is reliable, support retention

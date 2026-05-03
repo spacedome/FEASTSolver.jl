@@ -92,7 +92,9 @@ global block Newton, or rational-coordinate-only fixes.
   but still plateaus at 10 of 12 retained roots. Adding a larger local chart
   radius `3.0` repairs the same case with one weak-center refinement, so the
   useful next policy rung is adaptive radius/overlap selection, not blind
-  densification.
+  densification. `run_coupled_two_delay_radius_ladder_refinement` now makes
+  that rung explicit: first stage diagnoses `10/12`, second stage completes
+  `12/12` with larger chart overlap.
 - Oracle-free target completion and stopping are now covered by the radius-20
   three-function policy path, scalar delay, scalar two-delay, nonnormal
   multi-delay, dense coupled two-delay, near-pole rational, and

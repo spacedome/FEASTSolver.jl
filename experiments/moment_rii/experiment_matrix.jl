@@ -1773,6 +1773,40 @@ function run_count_driven_adaptive_grid_refinement(;
     )
 end
 
+function run_count_driven_radius_ladder(;
+    chart_radii_stages,
+    runner,
+    print_rows=true,
+)
+    stage_results = Any[]
+    for (index, radii) in pairs(chart_radii_stages)
+        result = runner(radii)
+        push!(stage_results, (stage=index, chart_radii=Tuple(radii), result=result))
+        if print_rows
+            final = result.rows[end]
+            @printf(
+                "  radius_stage=%d radii=%s stop=%s retained=%d/%d rounds=%d\n",
+                index,
+                string(collect(radii)),
+                string(result.stop_reason),
+                final.retained,
+                final.target_count,
+                length(result.rows),
+            )
+        end
+        result.stop_reason in (:target_count_complete, :target_algebraic_count_complete, :target_count_unreliable) && break
+    end
+    final = stage_results[end].result
+    (
+        stages=stage_results,
+        result=final,
+        count=final.count,
+        stop_reason=final.stop_reason,
+        algebraic_retained_count=final.algebraic_retained_count,
+        rows=final.rows,
+    )
+end
+
 function run_three_function_count_driven_adaptive_refinement(;
     outer_radius=20.0,
     base_spacing=3.0,
@@ -2038,6 +2072,33 @@ function run_coupled_two_delay_count_driven_adaptive_refinement(;
         residual_tol=residual_tol,
         match_atol=match_atol,
         print_rows=print_rows,
+    )
+end
+
+function run_coupled_two_delay_radius_ladder_refinement(;
+    coupling=1.0,
+    outer_radius=12.0,
+    base_spacing=4.0,
+    chart_radii_stages=((1.2, 2.0), (1.2, 3.0)),
+    max_refinement_rounds=4,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    print_rows && println("\nCoupled two-delay radius-ladder refinement")
+    run_count_driven_radius_ladder(;
+        chart_radii_stages=chart_radii_stages,
+        print_rows=print_rows,
+        runner=radii -> run_coupled_two_delay_count_driven_adaptive_refinement(;
+            coupling=coupling,
+            outer_radius=outer_radius,
+            base_spacing=base_spacing,
+            chart_radii=Tuple(radii),
+            max_refinement_rounds=max_refinement_rounds,
+            residual_tol=residual_tol,
+            match_atol=match_atol,
+            print_rows=false,
+        ),
     )
 end
 
