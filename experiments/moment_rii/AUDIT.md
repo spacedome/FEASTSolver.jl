@@ -283,11 +283,15 @@ the small BenchmarkTools harness all support the claim that the design is not
 inherently wasteful. Further benchmark-maxing would not close the research
 objective.
 
-The remaining requirement is theoretical and novelty-facing. We need either:
+The remaining requirement is theoretical and novelty-facing. After sharpening
+`THEOREM_SKETCH.md`, the minimum sufficient obligation is not a full global
+convergence theorem. We need either:
 
-- a proof of Lemma 5 in `THEOREM_SKETCH.md`, relating contour-filtered
-  compressed residual enrichment to improved re-extracted physical residuals
-  for a captured two-sided finite NEP realization; or
+- a proof of the minimal Lemma 5 range-inclusion estimate in
+  `THEOREM_SKETCH.md`, showing that contour-filtered compressed
+  residual-Laurent enrichment contains the leading JD/RII-style correction
+  directions for a captured two-sided finite NEP realization, up to
+  realization, quadrature, and compression errors; or
 - a known theorem from Jacobi-Davidson, residual inverse iteration, refined
   Rayleigh--Ritz, invariant-pair, Loewner/realization, or contour projection
   theory that implies the same enrichment step under recognizable hypotheses.
