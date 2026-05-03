@@ -3,6 +3,7 @@ using LinearAlgebra
 using MatrixMarket
 using Random
 using Printf
+using SparseArrays
 
 const REPO_ROOT = normpath(joinpath(@__DIR__, "..", ".."))
 

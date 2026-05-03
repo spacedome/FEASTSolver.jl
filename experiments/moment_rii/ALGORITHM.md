@@ -180,6 +180,13 @@ per scalar Ritz value.
   Beyn/SS-style extraction is the lower rung, while the FEAST residual update
   repairs weak/nonnormal physical trial-test spaces when extraction alone is
   insufficient.
+- Sparse pipeline smoke: a sparse diagonal linear operator `T(z)=zI-A` flows
+  through the same experiment pipeline using sparse `Tmatrix` and sparse
+  backslash solves. Initial reduced extraction sees the eight target values but
+  misses the strict residual tolerance; one residual-Laurent update recovers
+  all eight with residuals near machine precision. This is implementation
+  evidence for the generic operator boundary, not a sparse-optimized moment
+  solver.
 - Canonical NLFEAST limit control: a three-component one-root-per-component
   rational NEP compares the existing `nlfeast!`, scalar-expanded residual RII,
   and compressed residual-Laurent update. All three recover the same three

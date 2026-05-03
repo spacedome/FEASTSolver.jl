@@ -171,6 +171,23 @@ end
     end
 end
 
+@testitem "experimental moment RII: sparse linear operator flows through moment pipeline" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_sparse_linear_moment_pipeline_smoke(; print_rows=false)
+
+    @test result.sparse_matrix
+    @test result.expected == 8
+    @test result.initial.inside == result.expected
+    @test result.initial.matched == 0
+    @test result.initial.max_residual > 1e-10
+    @test result.updated.matched == result.expected
+    @test result.updated.spurious_good == 0
+    @test result.updated.max_residual <= 1e-10
+    @test result.updated.right_residual_rank <= result.expected
+    @test result.updated.left_residual_rank <= result.expected
+end
+
 @testitem "nonlinear FEAST: custom contour on linear pencil" setup=[FEASTTestSetup] begin
     using FEASTSolver
     using LinearAlgebra

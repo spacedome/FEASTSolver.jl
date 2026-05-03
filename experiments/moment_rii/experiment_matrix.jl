@@ -472,6 +472,99 @@ function run_polynomial_family_bridge_diagnostic(;
     (companion=companion_summary, polynomial_rows=polynomial_rows)
 end
 
+function run_sparse_linear_moment_pipeline_smoke(;
+    n=24,
+    center=4.5 + 0.0im,
+    radius=4.1,
+    basis_moments=2,
+    basis_nodes=24,
+    update_moment_count=1,
+    rii_nodes=64,
+    residual_tol=1e-10,
+    match_atol=1e-8,
+    print_rows=true,
+)
+    A = spdiagm(0 => ComplexF64.(1:n))
+    Isp = sparse(I, n, n)
+    Tmatrix(z) = z * Isp - A
+    Tderivative(z) = Isp
+    Tsolve(z, B) = Tmatrix(z) \ B
+    Tadjoint_solve(z, B) = Tmatrix(z)' \ B
+    expected = ComplexF64[λ for λ in 1:n if abs(λ - center) <= radius]
+    chart = ContourChart(center, radius)
+    ctx = (
+        Tmatrix=Tmatrix,
+        Tderivative=Tderivative,
+        Tsolve=Tsolve,
+        Tadjoint_solve=Tadjoint_solve,
+        expected=expected,
+        n=n,
+        component_scales=ones(Float64, n),
+    )
+    basis = MomentBasisConfig(;
+        moments=basis_moments,
+        nodes=basis_nodes,
+        ranktol=1e-10,
+        seed=44001,
+    )
+    extractor = ReducedExtractorConfig(;
+        extractor=:ss_counted,
+        determinant_nodes=256,
+        determinant_capacity=n,
+        reduced_moments=8,
+        reduced_nodes=256,
+        residual_normalization=:vector,
+    )
+    update = ResidualUpdateConfig(;
+        moment_count=update_moment_count,
+        rii_nodes=rii_nodes,
+        residual_ranktol=1e-10,
+        compression_ranktol=1e-10,
+    )
+    trial0 = initial_dual_trial_spaces(ctx, chart, basis)
+    extraction0 = extract_reduced_nep(ctx, trial0, chart, extractor)
+    summary0 = dual_scalar_rii_summary(extraction0, expected; residual_tol=residual_tol, match_atol=match_atol)
+    trial1, stats = residual_laurent_update(ctx, trial0, extraction0, chart, update)
+    extraction1 = extract_reduced_nep(ctx, trial1, chart, extractor)
+    summary1 = dual_scalar_rii_summary(extraction1, expected; residual_tol=residual_tol, match_atol=match_atol)
+    result = (
+        expected=length(expected),
+        sparse_matrix=Tmatrix(center + radius * im) isa AbstractSparseMatrix,
+        initial=summary0,
+        updated=merge(
+            (
+                right_residual_rank=stats.right_residual_rank,
+                left_residual_rank=stats.left_residual_rank,
+                right_candidate_cols=stats.right_candidate_cols,
+                left_candidate_cols=stats.left_candidate_cols,
+                right_basis_cols=size(trial1.X, 2),
+                left_basis_cols=size(trial1.Y, 2),
+            ),
+            summary1,
+        ),
+    )
+    if print_rows
+        println()
+        println("Sparse linear moment pipeline smoke")
+        println("  sparse diagonal T(z)=zI-A; validates generic Tmatrix/Tsolve path accepts sparse matrices")
+        @printf(
+            "  n=%d expected=%d sparse=%s initial_matched=%d/%d updated_matched=%d/%d residual_rank=(%d,%d) basis=(%d,%d)\n",
+            n,
+            result.expected,
+            string(result.sparse_matrix),
+            result.initial.matched,
+            result.expected,
+            result.updated.matched,
+            result.expected,
+            result.updated.right_residual_rank,
+            result.updated.left_residual_rank,
+            result.updated.right_basis_cols,
+            result.updated.left_basis_cols,
+        )
+    end
+    result
+end
+
 function run_matrix_analytic_case(;
     name,
     problem_class=:analytic,
