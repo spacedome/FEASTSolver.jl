@@ -44,6 +44,10 @@ bench-dense:
 bench-sparse:
     {{ julia }} --project=benchmark --startup-file=no benchmark/run_sparse.jl
 
+# Run BenchmarkTools-backed moment-NLFEAST experiment benchmarks.
+bench-moment:
+    {{ julia }} --project=benchmark --startup-file=no benchmark/run_moment.jl
+
 # Run the research experiment comparing nonlinear FEAST against NEP-PACK NLEIGS.
 experiment-nleigs:
     {{ julia }} --project=. --startup-file=no experiments/nleigs_comparison/run.jl
@@ -99,6 +103,7 @@ notes:
       'just test uses Pkg.test(); test-only dependencies live in Project.toml extras/targets.' \
       'Run just bench-dense for BenchmarkTools-backed dense FEAST benchmarks.' \
       'Run just bench-sparse for sparse FEAST/UMFPACK profiling.' \
+      'Run just bench-moment for BenchmarkTools-backed moment-NLFEAST experiment benchmarks.' \
       'Run just experiment-nleigs for the research comparison against NEP-PACK NLEIGS.' \
       'Run just experiment-moment-rii for the higher-moment invariant-pair RII prototype.' \
       'Run just experiment-nleigs-smoke for a cheap experiment script sanity check.' \

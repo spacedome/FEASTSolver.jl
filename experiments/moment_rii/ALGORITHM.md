@@ -259,6 +259,12 @@ per scalar Ritz value.
   update, reused on the repeated update, and the remote physical spaces match
   the serial update. This extends the distributed stored-factor evidence beyond
   diagonal controls.
+- Moment benchmark harness: `just bench-moment` runs a BenchmarkTools-backed
+  warmup-plus-timed comparison for the small sparse Schrodinger serial path and
+  remote stored-factor worker path. It prints timing, allocation, correctness,
+  and factor/solve-buffer reuse counters. This is a regression/profiling
+  harness for the current implementation rung, not publication-level scaling
+  evidence.
 - Adjacent implementation recheck: RSRR, SLEPc CISS, and Riesz-projection
   methods all support the current separation between contour-node solves,
   reduced extraction, and selection/observability policy. They do not appear to
@@ -356,6 +362,7 @@ Representative tests:
 - `just test --tags distributed 'sparse remote workers reuse'`
 - `just test --tags distributed 'sparse nonlinear remote workers reuse'`
 - `just test --tags distributed 'sparse Schrodinger remote workers reuse'`
+- `just bench-moment`
 - `just test --preset moment-heavy 'residual Laurent update'`
 - `just test --preset moment-count`
 - `just test --slow 'analytic block Newton'`
@@ -519,8 +526,9 @@ Representative tests:
   without relying on coincident components. The full contour count is `14`,
   the retained set has seven unique roots, and every retained cluster receives
   local multiplicity two.
-- The experiment has strong dense reduced-problem evidence, but no sparse or
-  distributed moment-NLFEAST implementation.
+- The experiment has strong dense reduced-problem evidence and first sparse
+  remote implementation rungs, but no publication-level sparse/distributed
+  moment-NLFEAST scaling evidence.
 - The reduced-extractor interface is still experimental and should not be
   promoted before more problem classes are covered.
 - The literature pass supports this boundary, but adjacent rational Krylov,

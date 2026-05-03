@@ -1,3 +1,4 @@
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 FEASTSolver = "65ce2ba6-bba3-11e9-165b-677ad58e09bb"
+MatrixMarket = "4d4711f2-db25-561a-b6b3-d35e7d4047d3"

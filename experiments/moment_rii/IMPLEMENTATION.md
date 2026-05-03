@@ -171,6 +171,14 @@ verifies a repeated update reuses the same worker-local factors and
 node-local solve buffers. The next prototype should broaden this to larger and
 less benign sparse gallery problems.
 
+`just bench-moment` is the first BenchmarkTools-backed harness for this rung.
+It times the small Schrodinger serial path and the persistent remote
+stored-factor path after an untimed warmup and prints the correctness/reuse
+counters beside timing and allocation summaries. This is a local regression and
+profiling harness, not publication-level scaling evidence. On the current small
+problem it deliberately exposes that remote/process overhead can dominate the
+sparse solve work.
+
 The argument-principle estimator now accepts sparse `T'(z)` outputs by
 densifying only the derivative right-hand side before the trace solve. This
 keeps the contour matrix `T(z)` sparse while avoiding SparseArrays' unsupported

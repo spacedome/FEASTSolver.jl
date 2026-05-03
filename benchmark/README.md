@@ -60,3 +60,23 @@ This harness separately times sparse shifted-matrix construction, fresh
 also reports `stored_factor_count` and `stored_factor_bytes` from FEAST stats
 when `FEAST_SPARSE_BENCH_STORE=true`. It is intended to catch accidental
 symbolic-analysis or sparse-structure allocation inside the contour loop.
+
+## Moment-NLFEAST Experiment Harness
+
+```sh
+just bench-moment
+```
+
+Useful environment variables:
+
+- `FEAST_MOMENT_BENCH_PROBLEM=schrodinger`
+- `FEAST_MOMENT_BENCH_WORKERS=2`
+- `FEAST_MOMENT_BENCH_SAMPLES=1`
+
+This harness times the experiment-layer residual-Laurent update path on the
+sparse moving-boundary Schrodinger control. It reports BenchmarkTools
+wall-clock/allocation summaries for the serial diagnostic and the persistent
+remote stored-factor diagnostic, plus correctness and reuse counters from the
+experiment result. It is not a publication benchmark; its purpose is to make
+performance regressions and worker-owned factor/buffer reuse visible while the
+moment algorithm remains under `experiments/moment_rii`.
