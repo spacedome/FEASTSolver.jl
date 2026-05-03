@@ -168,7 +168,11 @@ per scalar Ritz value.
   local chart covers plus residual Laurent updates recover the target roots.
 - Residual-Laurent compression control: on a rank-deficient analytic chart, the
   moment update recovers all roots with fewer candidate columns and a larger
-  observable physical realization than scalar expanded RII, which fails.
+  observable physical realization than scalar expanded RII, which fails. The
+  diagnostic now returns an explicit efficiency scorecard: candidate columns
+  saved, candidate-column ratios, basis-size gains, low residual-rank
+  completeness, and a flag showing scalar-expanded RII is worse despite using
+  more candidate columns.
 - Residual-Laurent update ladder: on the radius-20 upper-triangular nonnormal
   analytic chart cover, reduced extraction alone (`iterations=0`) recovers
   `34/44` target roots, one residual-Laurent update recovers `42/44`, and two

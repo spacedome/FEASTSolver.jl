@@ -1023,6 +1023,13 @@ end
     @test result.compressed_updated.right_candidate_cols < result.scalar_updated.right_candidate_cols
     @test result.compressed_updated.left_candidate_cols < result.scalar_updated.left_candidate_cols
     @test result.compressed_updated.right_basis_cols > result.scalar_updated.right_basis_cols
+    @test result.efficiency.right_candidate_saved > 0
+    @test result.efficiency.left_candidate_saved > 0
+    @test result.efficiency.right_candidate_ratio < 1
+    @test result.efficiency.left_candidate_ratio < 1
+    @test result.efficiency.right_basis_gain > 0
+    @test result.efficiency.residual_rank_complete
+    @test result.efficiency.scalar_expanded_worse
 end
 
 @testitem "experimental moment RII: residual Laurent update repairs nonnormal chart cover" tags=[:slow, :moment_heavy] begin

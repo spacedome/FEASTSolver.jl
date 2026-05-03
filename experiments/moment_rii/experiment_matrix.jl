@@ -3584,6 +3584,19 @@ function run_residual_laurent_compression_diagnostic(;
     compressed_updated = compressed.summaries[end]
     scalar_initial = scalar.summaries[1]
     scalar_updated = scalar.summaries[end]
+    efficiency = (
+        right_candidate_saved=scalar_updated.right_candidate_cols - compressed_updated.right_candidate_cols,
+        left_candidate_saved=scalar_updated.left_candidate_cols - compressed_updated.left_candidate_cols,
+        right_candidate_ratio=compressed_updated.right_candidate_cols / max(scalar_updated.right_candidate_cols, 1),
+        left_candidate_ratio=compressed_updated.left_candidate_cols / max(scalar_updated.left_candidate_cols, 1),
+        right_basis_gain=compressed_updated.right_basis_cols - scalar_updated.right_basis_cols,
+        left_basis_gain=compressed_updated.left_basis_cols - scalar_updated.left_basis_cols,
+        residual_rank_complete=compressed_updated.right_residual_rank < length(compressed.expected) &&
+            compressed_updated.left_residual_rank < length(compressed.expected),
+        scalar_expanded_worse=scalar_updated.matched < length(compressed.expected) &&
+            scalar_updated.right_candidate_cols > compressed_updated.right_candidate_cols &&
+            scalar_updated.left_candidate_cols > compressed_updated.left_candidate_cols,
+    )
     if print_rows
         println()
         println("Residual Laurent compression diagnostic")
@@ -3610,6 +3623,17 @@ function run_residual_laurent_compression_diagnostic(;
             scalar_updated.right_residual_rank,
             scalar_updated.left_residual_rank,
         )
+        @printf(
+            "  efficiency: candidate_saved=(%d,%d) candidate_ratio=(%.3f,%.3f) basis_gain=(%d,%d) residual_rank_complete=%s scalar_expanded_worse=%s\n",
+            efficiency.right_candidate_saved,
+            efficiency.left_candidate_saved,
+            efficiency.right_candidate_ratio,
+            efficiency.left_candidate_ratio,
+            efficiency.right_basis_gain,
+            efficiency.left_basis_gain,
+            string(efficiency.residual_rank_complete),
+            string(efficiency.scalar_expanded_worse),
+        )
     end
     (
         compressed=compressed,
@@ -3618,6 +3642,7 @@ function run_residual_laurent_compression_diagnostic(;
         compressed_updated=compressed_updated,
         scalar_initial=scalar_initial,
         scalar_updated=scalar_updated,
+        efficiency=efficiency,
         expected=length(compressed.expected),
     )
 end
