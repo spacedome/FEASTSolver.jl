@@ -149,6 +149,12 @@ per scalar Ritz value.
   contains a weak target cluster, and records local count warnings. One
   weak-center refinement retains all 16 target roots while keeping the
   outside-domain residual-small values out of the accepted set.
+- Oracle-free dense multi-delay stress: a fully dense 3x3 NEP couples two
+  scalar delay components and one two-delay component through analytic
+  off-diagonal terms. The base cover sees 11 residual-small values for a
+  nine-root target count, retains only five target roots, and has four weak
+  target clusters. One weak-center refinement retains all nine target roots
+  while leaving the two outside-domain residual-small values as diagnostics.
 - Oracle-free multiplicity control: a duplicate delay NEP with triangular
   nonnormal coupling has algebraic contour count six, three retained geometric
   values, and local count multiplicity two on each value without any exact-root
@@ -175,6 +181,7 @@ Representative tests:
 - `just test 'without root oracle'`
 - `just test 'oracle-free nonnormal delay'`
 - `just test 'fully coupled mixed diagnostics'`
+- `just test 'dense multi-delay weak support'`
 - `just test 'oracle-free multiplicity'`
 - `just test 'oracle-free near-pole rational'`
 

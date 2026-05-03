@@ -2171,6 +2171,48 @@ function coupled_two_delay_operator_builder(; coupling=0.15)
     end
 end
 
+function dense_multi_delay_cases()
+    (
+        scalar_delay_case(; a=0.4, b=2.0, tau=1.0),
+        scalar_delay_case(; a=-0.2, b=1.4, tau=0.8),
+        scalar_two_delay_case(; a=0.1, b=1.2, tau=0.9, c=0.6, sigma=1.5),
+    )
+end
+
+function dense_multi_delay_operator_builder(; coupling=0.5)
+    function builder(cases; component_scales=nothing)
+        length(cases) == 3 || error("dense multi-delay control expects exactly three cases")
+        scales = component_scales === nothing ? ones(Float64, 3) : Float64.(component_scales)
+        function row_scaled(M)
+            Diagonal(ComplexF64.(1 ./ scales)) * M
+        end
+        function C(z)
+            ComplexF64[
+                0 1 + 0.1z exp(-0.2z)
+                0.7 * exp(-0.15z) 0 0.8 - 0.05z
+                0.4 + 0.08z 0.6 * exp(-0.25z) 0
+            ]
+        end
+        function Cderivative(z)
+            ComplexF64[
+                0 0.1 -0.2 * exp(-0.2z)
+                -0.105 * exp(-0.15z) 0 -0.05
+                0.08 -0.15 * exp(-0.25z) 0
+            ]
+        end
+        function Tmatrix(z)
+            row_scaled(Diagonal(ComplexF64[cases[i].f(z) for i in eachindex(cases)]) + coupling * C(z))
+        end
+        function Tderivative(z)
+            row_scaled(Diagonal(ComplexF64[cases[i].df(z) for i in eachindex(cases)]) + coupling * Cderivative(z))
+        end
+        Tsolve(z, B) = Tmatrix(z) \ B
+        Tadjoint_solve(z, B) = adjoint(Tmatrix(z)) \ B
+        expected_roots(center, radius) = ComplexF64[]
+        Tmatrix, Tderivative, Tsolve, Tadjoint_solve, expected_roots
+    end
+end
+
 function run_coupled_two_delay_count_driven_adaptive_refinement(;
     coupling=0.15,
     outer_radius=6.0,
@@ -2289,6 +2331,71 @@ function run_coupled_two_delay_mixed_policy_stress(;
             diagnostic.final.retained,
             diagnostic.final.weak_inside_clusters,
             diagnostic.final.selected_count_error_bad,
+        )
+    end
+    (
+        result=result,
+        diagnostic=diagnostic,
+        rows=result.rows,
+        count=result.count,
+        stop_reason=result.stop_reason,
+        algebraic_retained_count=result.algebraic_retained_count,
+        added_centers=result.added_centers,
+    )
+end
+
+function run_dense_multi_delay_weak_support_stress(;
+    coupling=0.5,
+    outer_radius=6.0,
+    base_spacing=3.0,
+    chart_radii=(1.2, 2.0),
+    max_refinement_rounds=4,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    result = run_count_driven_adaptive_grid_refinement(;
+        label="Dense multi-delay weak-support stress",
+        cases=dense_multi_delay_cases(),
+        outer_radius=outer_radius,
+        operator_builder=dense_multi_delay_operator_builder(; coupling=coupling),
+        operator_label="dense multi-delay(coupling=$coupling)",
+        base_spacing=base_spacing,
+        chart_radii=chart_radii,
+        max_refinement_rounds=max_refinement_rounds,
+        iterations=2,
+        basis_moments=8,
+        basis_nodes=64,
+        rii_nodes=128,
+        determinant_nodes=768,
+        determinant_capacity=128,
+        reduced_moments=16,
+        reduced_nodes=768,
+        residual_normalization=:operator,
+        component_scaling=:none,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=print_rows,
+    )
+    diagnostic = count_driven_chart_diagnostic_summary(
+        result;
+        outer_radius=outer_radius,
+        match_atol=match_atol,
+    )
+    if print_rows
+        println("  dense diagnostic:")
+        @printf(
+            "    base union=%d retained=%d weak=%d target=%d\n",
+            diagnostic.base.union_good,
+            diagnostic.base.retained,
+            diagnostic.base.weak_inside_clusters,
+            result.count.count_estimate,
+        )
+        @printf(
+            "    final union=%d retained=%d weak=%d\n",
+            diagnostic.final.union_good,
+            diagnostic.final.retained,
+            diagnostic.final.weak_inside_clusters,
         )
     end
     (
