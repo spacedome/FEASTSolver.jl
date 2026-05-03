@@ -2,7 +2,7 @@
 
 julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "9407a5a9ed72e02288f7d25351a15ad0d80a615f"
+project_hash = "8aa3d3db9b351a0a0278cfe65364db7c317b78a9"
 
 [[deps.ArnoldiMethod]]
 deps = ["LinearAlgebra", "Random", "StaticArrays"]
@@ -61,7 +61,7 @@ uuid = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
 version = "0.9.5"
 
 [[deps.FEASTSolver]]
-deps = ["Distributed", "FastGaussQuadrature", "FastLapackInterface", "IterativeSolvers", "LinearAlgebra", "MatrixMarket", "NonlinearEigenproblems", "Random", "SparseArrays"]
+deps = ["Distributed", "FastGaussQuadrature", "FastLapackInterface", "IterativeSolvers", "LinearAlgebra", "MatrixMarket", "NonlinearEigenproblems", "Printf", "Random", "SparseArrays"]
 path = ".."
 uuid = "65ce2ba6-bba3-11e9-165b-677ad58e09bb"
 version = "0.1.0"
