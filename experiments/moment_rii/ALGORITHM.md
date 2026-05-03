@@ -27,6 +27,26 @@ iterative state. The iterative state is instead:
 - a residual Laurent update that repairs `X` and `Y`;
 - chart diagnostics and a reproducible policy for retention/refinement.
 
+## Claim Status
+
+This experiment has a coherent candidate answer to the higher-moment NLFEAST
+update problem: FEAST-style iteration survives as a two-sided residual-Laurent
+repair of physical trial/test spaces, not as scalar RII on every expanded
+moment column. This is the algorithmic boundary supported by the current tests.
+
+The claim is deliberately narrower than "a black-box NEP solver." General
+analytic NEPs still need chart policy, count diagnostics, extractor agreement,
+and occasional escalation to refinement or multiplicity handling. Those are
+not hacks around the update; they are the acceptance and realization layers
+needed once the problem is no longer a single global linear invariant subspace.
+
+The remaining bar for a publication-level claim is not another ad-hoc solver
+trick. It is a tighter proof/novelty pass showing that the residual-Laurent
+physical-space repair is genuinely distinct from known contour projection,
+Loewner/realization, invariant-pair Newton, and refined Rayleigh--Ritz
+formulations, plus broader evidence that the chart policy selects reliable
+local realizations across representative NEP classes.
+
 ## Reference Algorithm
 
 For one local chart, the experiment-level solver loop is:
