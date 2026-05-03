@@ -1476,6 +1476,20 @@ end
     @test result.final_error > 1.0
 end
 
+@testitem "experimental moment RII: residual Laurent update closes on exact realization" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_residual_laurent_realization_closure_diagnostic(; print_rows=false)
+
+    @test result.right_residual_rank == 0
+    @test result.left_residual_rank == 0
+    @test result.right_candidate_cols == result.original_dim
+    @test result.left_candidate_cols == result.original_dim
+    @test result.updated_dim == result.original_dim
+    @test result.x_projection_gap <= 1e-12
+    @test result.y_projection_gap <= 1e-12
+end
+
 @testitem "experimental moment RII: residual Laurent update decomposes across contour partitions" tags=[:slow] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 

@@ -241,6 +241,11 @@ that setting.
   `T(z)^(-1)` has interior poles. This supports the current proof direction:
   finite update order must be argued through the captured contour realization,
   recurrence/rank, and the exact lower-rung FEAST identities.
+- Exact realization closure: on an exact linear left/right eigenspace, the
+  physical residual blocks have zero numerical rank and the residual-Laurent
+  update adds no physical directions. The updated `X,Y` spaces have
+  roundoff-level projection gaps from the original spaces. This pins the
+  realization-closure proof obligation in the simplest setting.
 - Residual-Laurent update ladder: on the radius-20 upper-triangular nonnormal
   analytic chart cover, reduced extraction alone (`iterations=0`) recovers
   `34/44` target roots, one residual-Laurent update recovers `42/44`, and two
@@ -413,6 +418,7 @@ Representative tests:
 - `just test --slow 'low-rank compression preserves update'`
 - `just test --slow 'residual-coordinate invariant'`
 - `just test --slow 'scalar Laurent truncation alone'`
+- `just test --slow 'closes on exact realization'`
 - `just test --slow 'sparse symbolic reuse'`
 - `just test --slow 'sparse nonlinear gallery operator'`
 - `just test --slow 'sparse Schrodinger gallery'`

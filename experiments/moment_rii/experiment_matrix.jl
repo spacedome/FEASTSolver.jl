@@ -4948,6 +4948,60 @@ function run_residual_laurent_scalar_truncation_boundary_diagnostic(;
     result
 end
 
+function run_residual_laurent_realization_closure_diagnostic(; print_rows=true)
+    values = ComplexF64[-0.5 + 0.0im, 0.15 + 0.0im, 0.55 + 0.0im]
+    outside = ComplexF64[1.7 + 0.0im, -1.4 + 0.0im]
+    spectrum = vcat(values, outside)
+    A = Diagonal(spectrum)
+    n = length(spectrum)
+    X = Matrix{ComplexF64}(I, n, length(values))
+    Y = Matrix{ComplexF64}(I, n, length(values))
+    trial = TrialSpaces(X=X, Y=Y, source=:exact_linear_realization)
+    extraction = (
+        values=values,
+        inside=trues(length(values)),
+        right_vectors=X,
+        left_vectors=Y,
+    )
+    ctx = (
+        Tsolve=(z, B) -> (z * I - A) \ B,
+        Tadjoint_solve=(z, B) -> (z * I - A)' \ B,
+        Tmatrix=z -> Matrix(z * I - A),
+    )
+    chart = ContourChart(0.0 + 0.0im, 1.0)
+    config = ResidualUpdateConfig(moment_count=3, rii_nodes=64, residual_ranktol=1e-12, compression_ranktol=1e-12)
+    updated, stats = residual_laurent_update(ctx, trial, extraction, chart, config)
+    Px = trial.X * trial.X' - updated.X * updated.X'
+    Py = trial.Y * trial.Y' - updated.Y * updated.Y'
+    result = (
+        right_residual_rank=stats.right_residual_rank,
+        left_residual_rank=stats.left_residual_rank,
+        right_candidate_cols=stats.right_candidate_cols,
+        left_candidate_cols=stats.left_candidate_cols,
+        x_projection_gap=opnorm(Px),
+        y_projection_gap=opnorm(Py),
+        original_dim=size(trial.X, 2),
+        updated_dim=size(updated.X, 2),
+    )
+    if print_rows
+        println()
+        println("Residual Laurent realization closure diagnostic")
+        println("  exact linear eigenspaces should have zero residual rank and add no physical directions")
+        @printf(
+            "  residual_rank=(%d,%d) candidate_cols=(%d,%d) dim=%d->%d projection_gap=(%.3e, %.3e)\n",
+            result.right_residual_rank,
+            result.left_residual_rank,
+            result.right_candidate_cols,
+            result.left_candidate_cols,
+            result.original_dim,
+            result.updated_dim,
+            result.x_projection_gap,
+            result.y_projection_gap,
+        )
+    end
+    result
+end
+
 function partitioned_residual_laurent_update(
     ctx,
     trial::TrialSpaces,
