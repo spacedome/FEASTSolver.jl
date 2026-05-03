@@ -304,6 +304,14 @@ The next concrete steps are:
    just test --slow 'fused contour samples'
    ```
 
+   `run_fused_polynomial_contour_sample_realization_diagnostic` adds the
+   polynomial lower rung on the deficient quadratic MatrixMarket control. The
+   fused projected Hankel path recovers the same four roots as the redundant
+   inner reduced SS path and the companion reference. This is important because
+   polynomial problems have an exact companion linearization, so the fused
+   realization can be checked against the linear FEAST/RII ladder rather than
+   only against scalar analytic rootfinding.
+
 3. **Make extraction linear by construction.** The extractor should consume a
    small moment/Loewner sequence and return a small linear pencil or equivalent
    finite realization. Direct solution of `Y^H T(lambda) X` should be a
