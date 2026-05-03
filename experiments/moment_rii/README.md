@@ -200,6 +200,11 @@ Most of this path has now been absorbed into the experiment:
 
 ## Findings So Far
 
+The rest of this README is a chronological research log. Some bullets describe
+failed or superseded prototypes; `ALGORITHM.md`, `DERIVATION.md`, and
+`AUDIT.md` are the current compact statements of the candidate algorithm,
+derivation, and evidence checklist.
+
 - Lifted normalization is essential. Normalizing only the physical block `X`
   collapses the deficient quadratic experiment from four interior eigenvalues
   to two. Normalizing the lifted block `[X; X*S; ...; X*S^(K-1)]` recovers all
@@ -730,7 +735,7 @@ This gives us a concrete reduction requirement for nonlinear work: any
 candidate higher-moment NLFEAST update must become the formula above when
 `T(z)=zI-A`.
 
-## Angles Of Attack
+## Historical Angles Of Attack
 
 - Treat the contour moments as a realization problem for the multiplication
   operator on the residue quotient space. The Hankel/SS step is then a
@@ -780,9 +785,9 @@ candidate higher-moment NLFEAST update must become the formula above when
   explainable as a stable SS-moment version of linear FEAST before being ported
   back to nonlinear invariant pairs.
 
-## Current Algorithm Boundary
+## Experiment Architecture Boundary
 
-The next serious prototype should be factored into explicit stages:
+The old invariant-pair prototype plan was factored into explicit stages:
 
 1. Accumulate right moments `Q_k` with contour-scaled coordinates.
 2. Observe them with a left probe `W` to form projected Hankel matrices.
@@ -794,12 +799,12 @@ The next serious prototype should be factored into explicit stages:
 6. Only after the gauge is stable, deflate, retain, or replace states using
    rank/residual/history evidence.
 
-The linear control says stages 1--3 are sound. The first nonlinear polynomial
-tests say stage 4 is viable when it is treated as a realization update rather
-than scalar RII. The scalar stress tests say stage 5 is not optional: without a
-stable gauge, small pair residuals can hide unusable scalar Ritz values. Stage 6
-should not become ad-hoc scalar pruning unless the natural realization tools
-stall.
+The linear control says stages 1--3 are sound. Later experiments changed the
+interpretation of stages 4--6: the active candidate now repairs the left/right
+physical spaces with residual Laurent moments and treats invariant-pair Newton,
+gauge balancing, and deflation as reduced refinement or escalation rungs.
+Scalar pruning should not become the default replacement for chart/count/support
+diagnostics.
 
 The first implementation pass of this boundary is now factored into
 `pipeline.jl` for the analytic experiments. The code has explicit
@@ -988,7 +993,11 @@ Current first-pass matrix result:
   yet the policy still completes from the full-operator argument-principle count
   and chart support rather than exact roots.
 
-## Nonlinear Experiment Plan
+## Historical Nonlinear Experiment Plan
+
+This list is retained as a record of how the experiment evolved. The current
+actionable plan is tracked in `AUDIT.md`; items below that say "in progress"
+may already be partially superseded by the charted residual-Laurent candidate.
 
 1. Done: use the projected two-sided Hankel extraction as the default nonlinear
    experiment path. The one-sided full Hankel should remain only as a reference
