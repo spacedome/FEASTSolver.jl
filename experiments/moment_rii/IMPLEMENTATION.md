@@ -15,6 +15,13 @@ The candidate algorithm is expressed through these experiment objects:
 - `ResidualUpdateConfig`: residual Laurent update of `X,Y`.
 - `CountDrivenPolicyConfig`: chart cover, support, count, and radius-ladder
   policy.
+- `CountDrivenNumericsConfig`: numerical realization/extraction/update choices
+  lowered into the basis, extractor, and residual-update configs.
+
+`pipeline.jl` contains the chart/basis/extractor/update objects. `policy.jl`
+contains the count-driven policy and numerics objects plus the named
+count-stressed chart refinement rule. `experiment_matrix.jl` contains the
+diagnostic runners that exercise those objects.
 
 The sparse linear smoke confirms that generic sparse `Tmatrix` and sparse
 `Tsolve` can pass through this pipeline, but it is not sparse optimized.

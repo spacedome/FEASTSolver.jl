@@ -5493,6 +5493,7 @@ function run_dual_local_chart_sweep_analytic(;
     selection=:matched,
     skip_empty_expected=centers === nothing,
     print_charts=true,
+    print_summary=true,
     basis_config=nothing,
     extraction_config=nothing,
     update_config=nothing,
@@ -5540,19 +5541,21 @@ function run_dual_local_chart_sweep_analytic(;
         "supplied centers; validates local chart sufficiency"
     end
 
-    println()
-    println("Dual local-chart sweep analytic update")
-    println("  operator=$operator_label; centers=$source; $purpose")
-    @printf(
-        "  outer_center=%.6g%+.6gi outer_radius=%.3g expected_unique=%d radii=%s residual_normalization=%s component_scaling=%s\n",
-        real(outer_center),
-        imag(outer_center),
-        outer_radius,
-        length(expected_global),
-        string(collect(radii)),
-        string(residual_normalization),
-        string(component_scaling),
-    )
+    if print_summary
+        println()
+        println("Dual local-chart sweep analytic update")
+        println("  operator=$operator_label; centers=$source; $purpose")
+        @printf(
+            "  outer_center=%.6g%+.6gi outer_radius=%.3g expected_unique=%d radii=%s residual_normalization=%s component_scaling=%s\n",
+            real(outer_center),
+            imag(outer_center),
+            outer_radius,
+            length(expected_global),
+            string(collect(radii)),
+            string(residual_normalization),
+            string(component_scaling),
+        )
+    end
 
     found = ComplexF64[]
     found_entries = NamedTuple[]
@@ -5712,18 +5715,20 @@ function run_dual_local_chart_sweep_analytic(;
     )
     support2_matched = match_expected_count(support2_values, expected_global; atol=match_atol)
     support2_global_matched = match_expected_count(support2_global_values, expected_global; atol=match_atol)
-    @printf(
-        "  union_good=%d matched_global=%d/%d support2_good=%d support2_matched=%d/%d support2_global_good=%d support2_global_matched=%d/%d\n",
-        length(found_unique),
-        matched_global,
-        length(expected_global),
-        length(support2_values),
-        support2_matched,
-        length(expected_global),
-        length(support2_global_values),
-        support2_global_matched,
-        length(expected_global),
-    )
+    if print_summary
+        @printf(
+            "  union_good=%d matched_global=%d/%d support2_good=%d support2_matched=%d/%d support2_global_good=%d support2_global_matched=%d/%d\n",
+            length(found_unique),
+            matched_global,
+            length(expected_global),
+            length(support2_values),
+            support2_matched,
+            length(expected_global),
+            length(support2_global_values),
+            support2_global_matched,
+            length(expected_global),
+        )
+    end
     (
         records=records,
         selected_records=selected_records,
@@ -5747,19 +5752,22 @@ function run_dual_grid_chart_cover_analytic(;
     spacing=2.4,
     chart_radius=1.8,
     chart_radii=(chart_radius,),
+    print_summary=true,
     kwargs...,
 )
     centers = disk_grid_centers(outer_center, outer_radius, spacing)
-    println()
-    @printf(
-        "Grid chart cover: outer_center=%.6g%+.6gi outer_radius=%.3g spacing=%.3g chart_radii=%s centers=%d\n",
-        real(outer_center),
-        imag(outer_center),
-        outer_radius,
-        spacing,
-        string(collect(chart_radii)),
-        length(centers),
-    )
+    if print_summary
+        println()
+        @printf(
+            "Grid chart cover: outer_center=%.6g%+.6gi outer_radius=%.3g spacing=%.3g chart_radii=%s centers=%d\n",
+            real(outer_center),
+            imag(outer_center),
+            outer_radius,
+            spacing,
+            string(collect(chart_radii)),
+            length(centers),
+        )
+    end
     run_dual_local_chart_sweep_analytic(;
         outer_center=outer_center,
         outer_radius=outer_radius,
@@ -5769,6 +5777,7 @@ function run_dual_grid_chart_cover_analytic(;
         selection=:residual,
         skip_empty_expected=false,
         print_charts=false,
+        print_summary=print_summary,
         kwargs...,
     )
 end
@@ -6735,6 +6744,7 @@ function run_scalar_sine_scaled_sweep(; radius=10.0, node_values=(16, 24, 32, 48
     end
 end
 
+include("policy.jl")
 include("experiment_matrix.jl")
 
 function main()

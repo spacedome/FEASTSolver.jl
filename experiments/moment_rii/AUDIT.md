@@ -23,7 +23,7 @@ and claims need both theoretical basis and numerical evidence.
 
 | Requirement | Current Artifact | Evidence | Status |
 | --- | --- | --- | --- |
-| Keep work contained to the experiment | `experiments/moment_rii/run.jl`, `pipeline.jl`, `experiment_matrix.jl`, `ALGORITHM.md`, `IMPLEMENTATION.md` | No public API promotion; new algorithm objects are experiment-layer only. | Satisfied for current work |
+| Keep work contained to the experiment | `experiments/moment_rii/run.jl`, `pipeline.jl`, `policy.jl`, `experiment_matrix.jl`, `ALGORITHM.md`, `IMPLEMENTATION.md` | No public API promotion; new algorithm objects are experiment-layer only. | Satisfied for current work |
 | Explain unified algorithm family | `ALGORITHM.md`, `DERIVATION.md` | Candidate formula: local dual contour realization + reduced Petrov-Galerkin extraction + residual Laurent repair + chart policy. `DERIVATION.md` now records the contour/Laurent argument and reductions. | Satisfied as candidate |
 | Reduce to linear FEAST / SS-FEAST | `README.md`, `run_linear_ss_feast_control`, `run_linear_dual_rii_reduction_diagnostic`, slow tests `linear SS-FEAST` and `dual linear RII` | Same-probe FEAST returns 4/10, wide FEAST returns 10/10, SS-FEAST with `K=3` returns 10/10 using four physical probes. The dual RII reduction diagnostic verifies that scalar residual-inverse iteration equals the FEAST contour filter on extracted right/left Ritz vectors for diagonal and nonnormal Grcar controls. | Numerically pinned |
 | Pin true dual extraction | `run_dual_reduced_polynomial_control`, slow test `dual reduced extraction`, `ALGORITHM.md` | On a dual-sensitive polynomial, true dual and biorthogonal dual extraction recover all 12 target roots. One-sided Galerkin extraction returns 13 inside reduced Ritz values with reduced residual near `1e-15`, but zero values satisfy the original residual tolerance. | Numerically pinned |
@@ -166,14 +166,13 @@ update story. This is not yet a decisive final solver or proof. The next
 productive steps are:
 
 1. Continue tightening the experiment interface around a small set of stable
-   objects: chart, basis, extractor, update, policy, and diagnostic. `CountDrivenPolicyConfig`
-   now covers the basic refinement knobs and the optional radius ladder, while
-   `CountDrivenNumericsConfig` lowers into `MomentBasisConfig`,
-   `ReducedExtractorConfig`, and `ResidualUpdateConfig`. The local chart sweep
+   objects: chart, basis, extractor, update, policy, and diagnostic.
+   `pipeline.jl` now holds the chart/basis/extractor/update objects, while
+   `policy.jl` holds `CountDrivenPolicyConfig`, `CountDrivenNumericsConfig`,
+   and the named count-stressed chart-refinement rule. The local chart sweep
    and central analytic iteration now pass basis/extractor/update objects
-   through directly. Older helper
-   harnesses still expose many loose keywords and should be migrated
-   opportunistically.
+   through directly. Older helper harnesses still expose many loose keywords
+   and should be migrated opportunistically.
 2. Add performance/implementation evidence for the candidate update beyond
    dense toy controls. The current compression diagnostic shows why the
    low-rank residual Laurent update is better than scalar-expanded RII, but
