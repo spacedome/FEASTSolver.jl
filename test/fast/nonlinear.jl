@@ -63,6 +63,32 @@ end
     @test result.history[end].rank == length(expected)
 end
 
+@testitem "experimental moment RII: linear SS-FEAST reduces to FEAST residual correction" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_linear_ss_feast_control(
+        "many_eigenvalue_diagonal",
+        many_eigenvalue_diagonal_matrix;
+        nodes=32,
+        iterations=4,
+        moment_count=3,
+        ranktol=1e-11,
+        residual_tol=1e-10,
+        target_count=true,
+    )
+
+    @test result.expected == 10
+    @test result.probe_cols == 4
+    @test result.feast_returned < result.expected
+    @test result.wide_feast_converged == result.expected
+    @test result.initial.rank == result.expected
+    @test result.initial.converged_inside == 0
+    @test result.final.rank == result.expected
+    @test result.final.converged_inside == result.expected
+    @test result.final.max_inside_residual <= 1e-10
+    @test result.final.pair_residual < result.initial.pair_residual
+end
+
 @testitem "nonlinear FEAST: sparse linear polynomial uses sparse path" setup=[FEASTTestSetup] begin
     using FEASTSolver
     using LinearAlgebra
@@ -277,6 +303,19 @@ end
     @test result.updated_support[2].spurious == 0
 end
 
+@testitem "experimental moment RII: rational coordinates do not replace Loewner realization" tags=[:slow, :moment_heavy] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_rational_coordinate_boundary_diagnostic(; print_rows=false)
+
+    @test result.loewner.success
+    @test result.inverse.matched == 0
+    @test result.mobius_plus.matched < result.mobius_plus.expected
+    @test result.mobius_minus.matched == result.mobius_minus.expected
+    @test result.mobius_minus.spurious > 0
+    @test !result.mobius_minus.success
+end
+
 @testitem "experimental moment RII: global Loewner layout support removes in-target artifacts" tags=[:slow] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 
@@ -390,7 +429,7 @@ end
     @test refined.centers < 57
 end
 
-@testitem "experimental moment RII: target-limited refinement repairs radius-20 analytic support" tags=[:slow] begin
+@testitem "experimental moment RII: target-limited refinement repairs radius-20 analytic support" tags=[:slow, :moment_heavy] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 
     result = run_three_function_adaptive_grid_loewner_refinement(;
@@ -415,7 +454,157 @@ end
     @test refined.centers < 161
 end
 
-@testitem "experimental moment RII: adaptive radius-20 analytic solve is Loewner-layout stable" tags=[:slow] begin
+@testitem "experimental moment RII: count-driven refinement stops without exact roots" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_three_function_count_driven_adaptive_refinement(; print_rows=false)
+    base = result.rows[1]
+    final = result.rows[end]
+
+    @test result.count.count_estimate == result.count.expected
+    @test result.count.count_error <= 1e-8
+    @test result.stop_reason == :target_count_complete
+    @test result.algebraic_retained_count == result.count.count_estimate
+    @test isempty(result.multiplicities)
+    @test !base.count_complete
+    @test final.count_complete
+    @test final.retained == final.target_count
+    @test final.validation_success
+    @test final.validation_matched == final.expected
+    @test length(result.rows) == 3
+end
+
+@testitem "experimental moment RII: count-driven refinement accounts for multiplicity" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_triangular_count_driven_adaptive_refinement(; print_rows=false)
+    base = result.rows[1]
+    final = result.rows[end]
+
+    @test result.count.count_estimate == result.count.expected + 1
+    @test result.count.count_error <= 1e-2
+    @test result.stop_reason == :target_algebraic_count_complete
+    @test result.algebraic_retained_count == result.count.count_estimate
+    @test count(item -> item.multiplicity == 2, result.multiplicities) == 1
+    @test count(item -> item.multiplicity == 1, result.multiplicities) == final.retained - 1
+    @test !base.count_complete
+    @test !final.count_complete
+    @test final.retained + 1 == final.target_count
+    @test final.validation_success
+    @test final.validation_matched == final.expected
+    @test length(result.rows) == 3
+end
+
+@testitem "experimental moment RII: count-driven refinement handles repeated analytic roots" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_squared_sine_count_driven_adaptive_refinement(; print_rows=false)
+    base = result.rows[1]
+    final = result.rows[end]
+
+    @test result.count.count_estimate == 2 * result.count.expected
+    @test result.count.count_error <= 1e-8
+    @test result.stop_reason == :target_algebraic_count_complete
+    @test result.algebraic_retained_count == result.count.count_estimate
+    @test all(item.multiplicity == 2 for item in result.multiplicities)
+    @test !base.count_complete
+    @test !final.count_complete
+    @test final.retained == final.expected
+    @test final.validation_success
+    @test final.validation_matched == final.expected
+    @test length(result.rows) == 2
+end
+
+@testitem "experimental moment RII: count-driven refinement works without root oracle" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_delay_count_driven_adaptive_refinement(; print_rows=false)
+    final = result.rows[end]
+
+    @test result.count.expected == 0
+    @test result.count.count_estimate == 3
+    @test result.count.count_error <= 1e-8
+    @test result.stop_reason == :target_count_complete
+    @test result.algebraic_retained_count == result.count.count_estimate
+    @test isempty(result.multiplicities)
+    @test final.count_complete
+    @test final.retained == result.count.count_estimate
+    @test final.target_count == result.count.count_estimate
+    @test final.validation_matched == 0
+    @test length(result.rows) == 1
+end
+
+@testitem "experimental moment RII: count-driven refinement handles oracle-free nonnormal delay" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_multi_delay_count_driven_adaptive_refinement(; print_rows=false)
+    final = result.rows[end]
+
+    @test result.count.expected == 0
+    @test result.count.count_estimate == 9
+    @test result.count.count_error <= 1e-8
+    @test result.stop_reason == :target_count_complete
+    @test result.algebraic_retained_count == result.count.count_estimate
+    @test isempty(result.multiplicities)
+    @test final.count_complete
+    @test final.retained == result.count.count_estimate
+    @test final.target_count == result.count.count_estimate
+    @test final.validation_matched == 0
+    @test length(result.rows) == 1
+end
+
+@testitem "experimental moment RII: count-driven refinement handles oracle-free multiplicity" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_duplicate_delay_count_driven_adaptive_refinement(; print_rows=false)
+    final = result.rows[end]
+
+    @test result.count.expected == 0
+    @test result.count.count_estimate == 6
+    @test result.count.count_error <= 1e-8
+    @test result.stop_reason == :target_algebraic_count_complete
+    @test result.algebraic_retained_count == result.count.count_estimate
+    @test final.retained == 3
+    @test !final.count_complete
+    @test all(item.multiplicity == 2 for item in result.multiplicities)
+    @test length(result.multiplicities) == final.retained
+    @test final.validation_matched == 0
+    @test length(result.rows) == 1
+end
+
+@testitem "experimental moment RII: count-driven refinement handles oracle-free near-pole rational" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_near_pole_rational_count_driven_adaptive_refinement(; print_rows=false)
+    final = result.rows[end]
+
+    @test result.count.expected == 0
+    @test result.count.count_estimate == 5
+    @test result.count.count_error <= 1e-6
+    @test result.stop_reason == :target_count_complete
+    @test result.algebraic_retained_count == result.count.count_estimate
+    @test isempty(result.multiplicities)
+    @test final.count_complete
+    @test final.retained == result.count.count_estimate
+    @test final.target_count == result.count.count_estimate
+    @test final.validation_matched == 0
+    @test length(result.rows) == 1
+end
+
+@testitem "experimental moment RII: near-pole rational count diagnostic rejects too-close poles" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_near_pole_rational_count_driven_adaptive_refinement(; gap=0.005, print_rows=false)
+
+    @test result.count.expected == 0
+    @test result.count.count_estimate == 5
+    @test result.count.count_error > 1e-6
+    @test result.stop_reason == :target_count_unreliable
+    @test result.algebraic_retained_count == 0
+    @test isempty(result.multiplicities)
+end
+
+@testitem "experimental moment RII: adaptive radius-20 analytic solve is Loewner-layout stable" tags=[:slow, :moment_heavy] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 
     result = run_three_function_adaptive_grid_loewner_layout_sweep(;
@@ -433,27 +622,39 @@ end
     @test result.summary.success
 end
 
-@testitem "experimental moment RII: adaptive retention score distinguishes support and local count stress" tags=[:slow] begin
+@testitem "experimental moment RII: adaptive retention score distinguishes support and local count stress" tags=[:slow, :moment_heavy] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 
     result = run_three_function_retention_score_diagnostic(; print_rows=false)
     summary = result.summary
 
     @test summary.exact_support2_global
+    @test summary.target_count_estimate == summary.expected
+    @test summary.target_count_error <= 1e-8
+    @test summary.target_count_reliable
     @test summary.support1_global_matched == summary.expected
     @test summary.support2_global_matched == summary.expected
     @test summary.support2_global == summary.expected
+    @test summary.support2_count_complete
     @test summary.support3_global < summary.expected
+    @test !summary.support3_count_complete
     @test summary.weak_inside_clusters == 0
     @test summary.count_deficit_records > 0
+    @test summary.selected_count_deficit_records > 0
     @test summary.max_count_error > 1e-2
     @test summary.max_record_residual <= 1e-7
+    @test result.plan.retained_count == summary.expected
+    @test result.plan.weak_target_count == 0
+    @test result.plan.count_stressed_count == summary.selected_count_deficit_records
+    @test :split_or_shrink_count_stressed_charts in result.plan.actions
+    @test :do_not_raise_support_threshold_without_cover_density in result.plan.actions
     @test result.evidence.support_and_target
+    @test result.evidence.oracle_free_count_complete
     @test result.evidence.local_count_warning
     @test result.evidence.residual_ok
 end
 
-@testitem "experimental moment RII: automatic retention policy escalates count warnings to agreement checks" tags=[:slow] begin
+@testitem "experimental moment RII: automatic retention policy escalates count warnings to agreement checks" tags=[:slow, :moment_heavy] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 
     result = run_three_function_automatic_retention_policy(; print_rows=false)
@@ -463,8 +664,12 @@ end
     @test initial.status == :escalate
     @test :request_loewner_layout_agreement in initial.actions
     @test :request_reduced_extractor_agreement in initial.actions
+    @test :do_not_raise_support_threshold_without_cover_density in initial.actions
+    @test :split_or_shrink_count_stressed_charts_before_strict_acceptance in initial.actions
     @test final.status == :accept_with_chart_warnings
     @test final.retained == final.expected
+    @test final.expected == final.validation_expected
+    @test final.target_count_error <= 1e-8
     @test final.support_ok
     @test final.residual_ok
     @test final.local_count_warning
@@ -472,9 +677,74 @@ end
     @test final.extractor_ok
     @test :layout_agreement_certified in final.actions
     @test :extractor_agreement_certified in final.actions
+    @test :split_or_shrink_count_stressed_charts_before_strict_acceptance in final.actions
 end
 
-@testitem "experimental moment RII: adaptive radius-20 analytic solve agrees across reduced extractors" tags=[:slow] begin
+@testitem "experimental moment RII: candidate-centered split repairs count-stressed chart" tags=[:slow, :moment_heavy] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_count_stressed_split_probe(; print_rows=false)
+
+    @test result.base.plan.count_stressed_count > 0
+    @test length(result.child_centers) == 4
+    @test result.child_radius == result.parent.radius / 2
+    @test length(result.candidate_centers) == result.parent.good
+    @test length(result.refinement_centers) > length(result.candidate_centers)
+    @test result.parent.good < result.parent.count_estimate
+    @test length(result.naive_child.found) == 0
+    @test result.naive_child.matched == 0
+    @test result.candidate_child.matched == length(result.candidate_child.expected)
+    @test result.candidate_child.support2_global_matched == length(result.candidate_child.expected)
+    @test all(row.naive_child.matched == 0 for row in result.rows)
+    @test all(row.candidate_child.matched == row.expected for row in result.rows)
+    @test all(row.candidate_child.support2_global_matched == row.expected for row in result.rows)
+end
+
+@testitem "experimental moment RII: count-error-only split preserves nonnormal chart radius" tags=[:slow, :moment_heavy] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_triangular_count_error_split_probe(; print_rows=false)
+
+    @test result.parent.stress === :count_error
+    @test result.parent.good == result.parent.count_estimate
+    @test result.parent.count_error > 1e-2
+    @test maximum(result.parent.candidate_radii) == result.parent.radius
+    @test result.shrink_child.matched < length(result.shrink_child.expected)
+    @test result.policy_child.matched == length(result.policy_child.expected)
+    @test result.policy_child.support2_global_matched == length(result.policy_child.expected)
+end
+
+@testitem "experimental moment RII: near-pole rational chart is stable" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_near_pole_rational_boundary_diagnostic(; print_rows=false)
+
+    @test result.gap == 0.005
+    @test length(result.rows) == 8
+    @test result.success
+    @test all(row.matched == row.expected for row in result.rows)
+    @test all(row.spurious == 0 for row in result.rows)
+    @test all(row.max_residual <= 1e-8 for row in result.rows)
+end
+
+@testitem "experimental moment RII: residual Laurent update preserves compact realization" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_residual_laurent_compression_diagnostic(; print_rows=false)
+
+    @test result.expected == 20
+    @test result.compressed_initial.good == 0
+    @test result.compressed_updated.matched == result.expected
+    @test result.compressed_updated.spurious_good == 0
+    @test result.scalar_updated.matched < result.expected
+    @test result.compressed_updated.right_residual_rank < result.expected
+    @test result.compressed_updated.left_residual_rank < result.expected
+    @test result.compressed_updated.right_candidate_cols < result.scalar_updated.right_candidate_cols
+    @test result.compressed_updated.left_candidate_cols < result.scalar_updated.left_candidate_cols
+    @test result.compressed_updated.right_basis_cols > result.scalar_updated.right_basis_cols
+end
+
+@testitem "experimental moment RII: adaptive radius-20 analytic solve agrees across reduced extractors" tags=[:slow, :moment_heavy] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 
     result = run_three_function_adaptive_grid_extractor_agreement(;
@@ -490,4 +760,16 @@ end
     @test result.summary.matched == result.summary.expected
     @test result.summary.supported == result.summary.expected
     @test result.summary.success
+end
+
+@testitem "experimental moment RII: analytic block Newton is only a local refinement rung" tags=[:slow, :moment_heavy] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_analytic_block_newton_boundary_diagnostic(; print_rows=false)
+
+    @test first(result.small_block_initial.newton_ratios) < 1
+    @test result.small_block_updated.matched == result.small.expected
+    @test result.large_none_updated.matched < result.large.expected
+    @test result.large_block_updated.matched < result.large_none_updated.matched
+    @test first(result.large_block_updated.newton_ratios) == 1
 end
