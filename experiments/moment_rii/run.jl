@@ -4856,24 +4856,14 @@ function run_dual_moment_compressed_rii_analytic_iteration(;
     compression_ranktol = residual_config.compression_ranktol
     update_mode = residual_config.mode
     biorthogonalize = residual_config.biorthogonalize
-    trial = initial_dual_trial_spaces(
-        ctx,
-        chart;
-        basis_moments=basis_moments,
-        basis_nodes=basis_nodes,
-        basis_ranktol=basis_ranktol,
+    basis_config = MomentBasisConfig(
+        moments=basis_moments,
+        nodes=basis_nodes,
+        ranktol=basis_ranktol,
         seed=9801 + round(Int, radius * 10) + 17 * length(cases),
+        biorthogonalize=biorthogonalize,
     )
-    if biorthogonalize
-        Xbi, Ybi, cross_singulars = biorthogonalize_bases(trial.X, trial.Y)
-        trial = TrialSpaces(
-            X=Xbi,
-            Y=Ybi,
-            right_singulars=Float64.(cross_singulars),
-            left_singulars=Float64.(cross_singulars),
-            source=:biorthogonalized_initial_contour_moments,
-        )
-    end
+    trial = initial_dual_trial_spaces(ctx, chart, basis_config)
     initial_summary = trial_space_summary(trial)
 
     if verbose

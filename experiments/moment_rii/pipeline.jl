@@ -25,6 +25,14 @@ Base.@kwdef struct TrialSpaces
     source::Symbol = :unknown
 end
 
+Base.@kwdef struct MomentBasisConfig
+    moments::Int = 4
+    nodes::Int = 8
+    ranktol::Float64 = 0.5
+    seed::Union{Nothing, Int} = nothing
+    biorthogonalize::Bool = false
+end
+
 function common_square_trial_spaces(trial::TrialSpaces)
     common = min(size(trial.X, 2), size(trial.Y, 2))
     TrialSpaces(
@@ -113,6 +121,28 @@ function initial_dual_trial_spaces(
         left_singulars=left_singulars,
         source=:initial_contour_moments,
     ))
+end
+
+function initial_dual_trial_spaces(ctx, chart::ContourChart, config::MomentBasisConfig)
+    trial = initial_dual_trial_spaces(
+        ctx,
+        chart;
+        basis_moments=config.moments,
+        basis_nodes=config.nodes,
+        basis_ranktol=config.ranktol,
+        seed=config.seed,
+    )
+    if config.biorthogonalize
+        Xbi, Ybi, cross_singulars = biorthogonalize_bases(trial.X, trial.Y)
+        return TrialSpaces(
+            X=Xbi,
+            Y=Ybi,
+            right_singulars=Float64.(cross_singulars),
+            left_singulars=Float64.(cross_singulars),
+            source=:biorthogonalized_initial_contour_moments,
+        )
+    end
+    trial
 end
 
 function extract_reduced_nep(ctx, trial::TrialSpaces, chart::ContourChart, config::ReducedExtractorConfig)
