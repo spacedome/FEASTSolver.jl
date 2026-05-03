@@ -4864,6 +4864,90 @@ function run_residual_laurent_residual_coordinate_invariance_diagnostic(;
     result
 end
 
+function run_residual_laurent_scalar_truncation_boundary_diagnostic(;
+    nodes=512,
+    moment_counts=(2, 4, 8, 16, 32),
+    print_rows=true,
+)
+    center = 0.0 + 0.0im
+    radius = 1.0
+    A = Diagonal(ComplexF64[-0.75 - 0.05im, -0.35 + 0.2im, 0.25 - 0.15im, 0.65 + 0.05im])
+    Tsolve = (z, B) -> (z * I - A) \ B
+    z_nodes, z_weights = circular_rule(center, radius, nodes)
+    values = ComplexF64[-0.22 + 0.12im, 0.18 - 0.18im, 0.31 + 0.08im]
+    coeffs = ComplexF64[
+        1.0 0.3-0.2im -0.4+0.1im
+        -0.2+0.5im 0.8 0.1-0.3im
+    ]
+    U = ComplexF64[
+        1.0 0.2-0.1im
+        0.3+0.4im -0.5
+        -0.2 0.7+0.2im
+        0.6-0.1im 0.1+0.5im
+    ]
+    direct = zeros(ComplexF64, size(U, 1), length(values))
+    for (z, weight) in zip(z_nodes, z_weights)
+        solved = Tsolve(z, U)
+        for j in eachindex(values)
+            direct[:, j] .-= (weight / (z - values[j])) .* (solved * coeffs[:, j])
+        end
+    end
+
+    rows = NamedTuple[]
+    previous_error = Inf
+    for moment_count in moment_counts
+        right_moments, _ = residual_laurent_moment_blocks_generic(
+            Tsolve,
+            Tsolve,
+            U,
+            zeros(ComplexF64, size(U, 1), 0),
+            z_nodes,
+            z_weights,
+            center,
+            radius;
+            moment_count=moment_count,
+        )
+        reconstructed = zeros(ComplexF64, size(direct))
+        for j in eachindex(values)
+            α = (values[j] - center) / radius
+            α_power = one(ComplexF64)
+            for k in 1:moment_count
+                reconstructed[:, j] .-= α_power .* (right_moments[k] * coeffs[:, j])
+                α_power *= α
+            end
+        end
+        relative_error = norm(direct - reconstructed) / norm(direct)
+        push!(
+            rows,
+            (
+                moment_count=moment_count,
+                relative_error=relative_error,
+                improved=relative_error < previous_error,
+            ),
+        )
+        previous_error = relative_error
+    end
+    result = (
+        nodes=nodes,
+        max_alpha=maximum(abs.((values .- center) ./ radius)),
+        rows=Tuple(rows),
+        initial_error=first(rows).relative_error,
+        final_error=last(rows).relative_error,
+        monotone=all(row.improved for row in rows[2:end]),
+        naive_truncation_failed=last(rows).relative_error > 1.0,
+    )
+    if print_rows
+        println()
+        println("Residual Laurent scalar truncation boundary diagnostic")
+        println("  demonstrates that a denominator-only Laurent tail bound is not enough when T(z)^(-1) has interior poles")
+        @printf("  max |alpha|=%.3f nodes=%d\n", result.max_alpha, result.nodes)
+        for row in result.rows
+            @printf("  K=%d relative_error=%.3e improved=%s\n", row.moment_count, row.relative_error, string(row.improved))
+        end
+    end
+    result
+end
+
 function partitioned_residual_laurent_update(
     ctx,
     trial::TrialSpaces,

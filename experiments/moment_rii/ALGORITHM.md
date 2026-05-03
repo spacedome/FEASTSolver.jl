@@ -235,6 +235,12 @@ that setting.
   pins the first proof obligation in `DERIVATION.md`: the update depends on
   the physical residual subspace, not on the scalar Ritz coordinate list used
   to present it.
+- Scalar Laurent truncation boundary: a small linear diagnostic verifies that
+  finite denominator expansion alone is not the proof of the method. Even with
+  small chart coordinates, truncating only `1/(z-lambda)` can fail when
+  `T(z)^(-1)` has interior poles. This supports the current proof direction:
+  finite update order must be argued through the captured contour realization,
+  recurrence/rank, and the exact lower-rung FEAST identities.
 - Residual-Laurent update ladder: on the radius-20 upper-triangular nonnormal
   analytic chart cover, reduced extraction alone (`iterations=0`) recovers
   `34/44` target roots, one residual-Laurent update recovers `42/44`, and two
@@ -406,6 +412,7 @@ Representative tests:
 - `just test --slow 'dual linear RII'`
 - `just test --slow 'low-rank compression preserves update'`
 - `just test --slow 'residual-coordinate invariant'`
+- `just test --slow 'scalar Laurent truncation alone'`
 - `just test --slow 'sparse symbolic reuse'`
 - `just test --slow 'sparse nonlinear gallery operator'`
 - `just test --slow 'sparse Schrodinger gallery'`

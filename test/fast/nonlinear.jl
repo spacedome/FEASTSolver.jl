@@ -1465,6 +1465,17 @@ end
     @test result.left_residual_rank == result.left_mixed_residual_rank
 end
 
+@testitem "experimental moment RII: scalar Laurent truncation alone is not the proof" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_residual_laurent_scalar_truncation_boundary_diagnostic(; print_rows=false)
+
+    @test result.max_alpha < 0.35
+    @test !result.monotone
+    @test result.naive_truncation_failed
+    @test result.final_error > 1.0
+end
+
 @testitem "experimental moment RII: residual Laurent update decomposes across contour partitions" tags=[:slow] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 
