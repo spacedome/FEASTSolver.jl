@@ -63,6 +63,51 @@ end
     @test result.history[end].rank == length(expected)
 end
 
+@testitem "experimental moment RII: retention policy exposes acceptance contract" begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    base = (
+        target_count_reliable=true,
+        support2_count_complete=true,
+        support3_count_complete=false,
+        weak_inside_clusters=0,
+        count_deficit_records=0,
+        count_error_bad=0,
+        max_record_residual=1e-12,
+        support2_global=3,
+        target_count_estimate=3,
+        expected=3,
+        target_count_error=0.0,
+    )
+
+    accepted = retention_policy_decision(base)
+    @test accepted.status === :accept
+    @test accepted.support_ok
+    @test accepted.residual_ok
+    @test :retain_support2_global in accepted.actions
+    @test :do_not_raise_support_threshold_without_cover_density in accepted.actions
+
+    warned_summary = merge(base, (count_error_bad=1,))
+    warned = retention_policy_decision(warned_summary; layout_agreement=true, extractor_agreement=true)
+    @test warned.status === :accept_with_chart_warnings
+    @test warned.local_count_warning
+    @test warned.layout_ok
+    @test warned.extractor_ok
+    @test :split_or_shrink_count_stressed_charts_before_strict_acceptance in warned.actions
+
+    incomplete_summary = merge(base, (support2_count_complete=false, support2_global=2))
+    incomplete = retention_policy_decision(incomplete_summary)
+    @test incomplete.status === :refine
+    @test !incomplete.support_ok
+    @test :refine_weak_target_support in incomplete.actions
+
+    high_residual_summary = merge(base, (max_record_residual=1e-4,))
+    high_residual = retention_policy_decision(high_residual_summary; residual_tol=1e-8)
+    @test high_residual.status === :escalate
+    @test !high_residual.residual_ok
+    @test :tighten_or_refine_high_residual_charts in high_residual.actions
+end
+
 @testitem "experimental moment RII: linear SS-FEAST reduces to FEAST residual correction" tags=[:slow] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 
