@@ -539,6 +539,45 @@ end
     @test length(result.rows) == 1
 end
 
+@testitem "experimental moment RII: count-driven refinement swaps reduced extractor without root oracle" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    policy = CountDrivenPolicyConfig(;
+        base_spacing=1.8,
+        chart_radii=(1.2, 2.0),
+    )
+    numerics = CountDrivenNumericsConfig(;
+        basis_moments=6,
+        basis_nodes=48,
+        determinant_capacity=64,
+        extractor=:ss_counted,
+        reduced_moments=12,
+        reduced_nodes=512,
+        component_scaling=:none,
+    )
+    diagnostic = run_count_driven_policy_diagnostic(;
+        label="SS extractor no-oracle delay",
+        cases=(scalar_delay_case(),),
+        outer_radius=6.0,
+        policy=policy,
+        numerics=numerics,
+        print_rows=false,
+    )
+    result = diagnostic.result
+    final = result.rows[end]
+
+    @test result.count.expected == 0
+    @test result.count.count_estimate == 3
+    @test result.count.count_error <= 1e-8
+    @test result.stop_reason == :target_count_complete
+    @test result.algebraic_retained_count == result.count.count_estimate
+    @test isempty(result.multiplicities)
+    @test final.count_complete
+    @test final.retained == result.count.count_estimate
+    @test final.validation_matched == 0
+    @test diagnostic.diagnostic.final.retained == result.count.count_estimate
+end
+
 @testitem "experimental moment RII: count-driven refinement handles oracle-free nonnormal delay" tags=[:slow] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 

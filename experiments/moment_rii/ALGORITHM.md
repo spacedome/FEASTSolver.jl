@@ -138,6 +138,11 @@ per scalar Ritz value.
 - Oracle-free control: a scalar delay NEP with no exact-root list stops from
   the full-operator argument-principle count alone, validating that the
   count-driven loop is not secretly supervised by analytic roots.
+- Oracle-free extractor swap: the same scalar delay control also completes with
+  `CountDrivenNumericsConfig(extractor=:ss_counted)`, pinning that the
+  count-driven numerics object can switch from Loewner-counted to counted
+  SS/Hankel reduced extraction without changing the stopping policy or using a
+  root oracle.
 - Oracle-free nonnormal control: three distinct delay components with
   triangular nonnormal coupling retain all nine algebraic/geometric values from
   support and contour count alone. The pinned stress version starts from a
