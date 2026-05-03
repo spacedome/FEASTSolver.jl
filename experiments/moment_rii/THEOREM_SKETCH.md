@@ -95,6 +95,23 @@ accepted roots, while one compressed residual-Laurent enrichment improves the
 residual scale by more than `1e8` and recovers the full target set. This is the
 main numerical clue for the analytic local correction estimate.
 
+For now this should be treated as an experimental conjecture, not a proved
+theorem. The current evidence supports the following narrower claim:
+
+```text
+When contour samples capture the correct finite local realization but the raw
+realization coordinates produce large physical residuals, a reduced analytic
+cleanup of Tred(lambda)=Y^H T(lambda) X and/or residual-Laurent physical-space
+enrichment is the correct FEAST-compatible repair layer.
+```
+
+The Schrodinger domain-decomposition diagnostic is the strongest current
+stress for this claim. The fused realization captures the correct rank and all
+13 inside candidates, but the raw physical residuals are large; reduced `Tred`
+cleanup recovers all 13 roots once contour quadrature is sufficiently resolved.
+The same sweep also shows the boundary: if contour quadrature is still
+underresolved, cleanup does not magically complete the solve.
+
 ## Why This Is Not Just Block Newton
 
 Invariant-pair or block Newton methods are still the right local refinement

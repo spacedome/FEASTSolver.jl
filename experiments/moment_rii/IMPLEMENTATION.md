@@ -179,6 +179,17 @@ verifies a repeated update reuses the same worker-local factors and
 node-local solve buffers. The next prototype should broaden this to larger and
 less benign sparse gallery problems.
 
+The fused Schrodinger/DD hard case now has its own local-block interface
+operator in `fused_hard_cases.jl`. Instead of forming one dense eliminated
+interior block, `SchrodingerDDInterfaceOperator` stores one local interior
+block per subdomain and materializes the interface Schur complement by summing
+local contributions. This is still an experiment-level dense interface solve,
+but the expensive nonlinear dependence has the right decomposition boundary:
+local subdomain solves plus a smaller interface problem. The scale smoke
+currently exercises `full_n=2111`, `interface_n=63`, 64 local blocks of size
+32, verifies local assembly against a dense reference on a small case, and
+recovers the 13 target roots after reduced cleanup.
+
 `just bench-moment` is the first BenchmarkTools-backed harness for this rung.
 It times the small Schrodinger serial path and the persistent remote
 stored-factor path after an untimed warmup and prints the correctness/reuse

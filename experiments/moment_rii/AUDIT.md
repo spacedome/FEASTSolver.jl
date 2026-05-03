@@ -141,8 +141,12 @@ global block Newton, or rational-coordinate-only fixes.
   physical residuals. Its refinement sweep records the useful calibration:
   64 and 96 contour nodes identify the right rank but remain underresolved
   after cleanup, while 128 nodes plus `Tred` cleanup recovers all targets. This
-  is enough implementation evidence for now; it is not a benchmark-maxing
-  result.
+  path now has a more faithful local-block assembly rung: the larger scale
+  smoke uses 64 independent local interior blocks of size 32, giving
+  `full_n=2111`, `interface_n=63`, compression ratio above 30, and the same
+  13-root recovery after cleanup. A small dense-reference check verifies local
+  Schur-complement and derivative assembly to roundoff. This is enough
+  implementation evidence for now; it is not a benchmark-maxing result.
   The experiment deliberately does not yet provide full reusable sparse
   workspaces, broad realistic sparse gallery coverage, or publication-level
   scaling claims.

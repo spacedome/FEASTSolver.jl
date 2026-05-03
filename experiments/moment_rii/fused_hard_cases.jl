@@ -147,6 +147,167 @@ function run_fused_schrodinger_refinement_sweep(;
     )
 end
 
+struct SchrodingerDDLocalBlock
+    interface_positions::Vector{Int}
+    AII::Matrix{ComplexF64}
+    AIB::Matrix{ComplexF64}
+    ABI::Matrix{ComplexF64}
+    I::Matrix{ComplexF64}
+end
+
+struct SchrodingerDDInterfaceOperator
+    full_operator::SymTridiagonal{Float64, Vector{Float64}}
+    interface::Vector{Int}
+    ABB::Matrix{ComplexF64}
+    Ibd::Matrix{ComplexF64}
+    blocks::Vector{SchrodingerDDLocalBlock}
+    local_poles::Vector{Float64}
+end
+
+Base.@kwdef struct FusedSchrodingerDDConfig
+    subdomains::Int = 16
+    interior_per_subdomain::Int = 12
+    potential_amplitude::Float64 = 8.0
+    potential_frequency::Float64 = 19.0
+    center::ComplexF64 = 900.0 + 0.0im
+    radius::Float64 = 1000.0
+    nodes::Int = 128
+    moment_count::Int = 3
+    seed::Int = 20260506
+    ranktol::Float64 = 1e-10
+    residual_tol::Float64 = 1e-8
+    match_atol::Float64 = 1e-7
+    print_rows::Bool = true
+end
+
+function schrodinger_dd_full_operator(subdomains, interior_per_subdomain, potential_amplitude, potential_frequency)
+    block = interior_per_subdomain + 1
+    nfull = subdomains * block - 1
+    h = inv(nfull + 1)
+    x = collect((1:nfull) .* h)
+    potential = potential_amplitude .* (1 .+ sin.(potential_frequency .* x) .+ 0.25 .* cos.(0.37 * potential_frequency .* x))
+    SymTridiagonal(2.0 ./ h^2 .+ potential, -ones(nfull - 1) ./ h^2)
+end
+
+function schrodinger_dd_interface_operator(;
+    subdomains=16,
+    interior_per_subdomain=12,
+    potential_amplitude=8.0,
+    potential_frequency=19.0,
+)
+    subdomains >= 2 || error("domain-decomposition Schrodinger control needs at least two subdomains")
+    interior_per_subdomain >= 2 || error("each subdomain needs at least two interior points")
+    block = interior_per_subdomain + 1
+    A = schrodinger_dd_full_operator(subdomains, interior_per_subdomain, potential_amplitude, potential_frequency)
+    nfull = size(A, 1)
+    interface = collect(block:block:(nfull - 1))
+    interface_lookup = Dict(index => pos for (pos, index) in pairs(interface))
+    ABB = Matrix{ComplexF64}(A[interface, interface])
+    Ibd = Matrix{ComplexF64}(I, length(interface), length(interface))
+
+    blocks = SchrodingerDDLocalBlock[]
+    local_poles = Float64[]
+    for subdomain in 1:subdomains
+        first_index = (subdomain - 1) * block + 1
+        last_index = subdomain == subdomains ? nfull : subdomain * block - 1
+        interiors = collect(first_index:last_index)
+        local_interface_indices = Int[]
+        if subdomain > 1
+            push!(local_interface_indices, first_index - 1)
+        end
+        if subdomain < subdomains
+            push!(local_interface_indices, last_index + 1)
+        end
+        interface_positions = [interface_lookup[index] for index in local_interface_indices]
+        AII = Matrix{ComplexF64}(A[interiors, interiors])
+        AIB = Matrix{ComplexF64}(A[interiors, local_interface_indices])
+        ABI = Matrix{ComplexF64}(A[local_interface_indices, interiors])
+        Iint = Matrix{ComplexF64}(I, length(interiors), length(interiors))
+        append!(local_poles, eigvals(Symmetric(real.(AII))))
+        push!(blocks, SchrodingerDDLocalBlock(interface_positions, AII, AIB, ABI, Iint))
+    end
+
+    SchrodingerDDInterfaceOperator(A, interface, ABB, Ibd, blocks, sort!(local_poles))
+end
+
+function materialize!(M, op::SchrodingerDDInterfaceOperator, z; derivative=false)
+    if derivative
+        copyto!(M, -op.Ibd)
+    else
+        copyto!(M, op.ABB)
+        M .-= z .* op.Ibd
+    end
+    for block in op.blocks
+        K = block.AII .- z .* block.I
+        if derivative
+            KinvAIB = K \ block.AIB
+            contribution = -block.ABI * (K \ KinvAIB)
+        else
+            contribution = -block.ABI * (K \ block.AIB)
+        end
+        M[block.interface_positions, block.interface_positions] .+= contribution
+    end
+    M
+end
+
+function materialize(op::SchrodingerDDInterfaceOperator, z; derivative=false)
+    M = similar(op.ABB)
+    materialize!(M, op, z; derivative=derivative)
+end
+
+function schrodinger_dd_dense_reference_materialize(op::SchrodingerDDInterfaceOperator, z; derivative=false)
+    A = Matrix(op.full_operator)
+    interface = op.interface
+    interiors = setdiff(1:size(A, 1), interface)
+    AII = Matrix{ComplexF64}(A[interiors, interiors])
+    AIB = Matrix{ComplexF64}(A[interiors, interface])
+    ABI = Matrix{ComplexF64}(A[interface, interiors])
+    ABB = Matrix{ComplexF64}(A[interface, interface])
+    Iint = Matrix{ComplexF64}(I, length(interiors), length(interiors))
+    Ibd = Matrix{ComplexF64}(I, length(interface), length(interface))
+    K = AII .- z .* Iint
+    if derivative
+        KinvAIB = K \ AIB
+        -Ibd .- ABI * (K \ KinvAIB)
+    else
+        ABB .- z .* Ibd .- ABI * (K \ AIB)
+    end
+end
+
+function schrodinger_dd_local_assembly_error(op::SchrodingerDDInterfaceOperator, z)
+    local_T = materialize(op, z)
+    dense_T = schrodinger_dd_dense_reference_materialize(op, z)
+    local_dT = materialize(op, z; derivative=true)
+    dense_dT = schrodinger_dd_dense_reference_materialize(op, z; derivative=true)
+    (
+        T=norm(local_T - dense_T) / max(norm(dense_T), eps(Float64)),
+        derivative=norm(local_dT - dense_dT) / max(norm(dense_dT), eps(Float64)),
+    )
+end
+
+function fused_schrodinger_dd_diagnosis(;
+    expected,
+    rank,
+    raw_good,
+    refined_good,
+    refined_matched,
+    refined_max_inside_residual,
+    residual_tol,
+    pole_boundary_margin,
+)
+    if pole_boundary_margin <= 0
+        :unsafe_contour_pole
+    elseif rank != expected
+        :rank_mismatch
+    elseif refined_matched != expected || refined_good != expected || refined_max_inside_residual > residual_tol
+        :underresolved_or_ill_conditioned
+    elseif raw_good != expected
+        :cleanup_required
+    else
+        :raw_sufficient
+    end
+end
+
 function schrodinger_dd_interface_context(;
     subdomains=16,
     interior_per_subdomain=12,
@@ -155,46 +316,27 @@ function schrodinger_dd_interface_context(;
     center=900.0 + 0.0im,
     radius=1000.0,
 )
-    subdomains >= 2 || error("domain-decomposition Schrodinger control needs at least two subdomains")
-    interior_per_subdomain >= 2 || error("each subdomain needs at least two interior points")
-    block = interior_per_subdomain + 1
-    nfull = subdomains * block - 1
-    h = inv(nfull + 1)
-    x = collect((1:nfull) .* h)
-    potential = potential_amplitude .* (1 .+ sin.(potential_frequency .* x) .+ 0.25 .* cos.(0.37 * potential_frequency .* x))
-    A = SymTridiagonal(2.0 ./ h^2 .+ potential, -ones(nfull - 1) ./ h^2) |> Matrix{Float64}
+    op = schrodinger_dd_interface_operator(;
+        subdomains=subdomains,
+        interior_per_subdomain=interior_per_subdomain,
+        potential_amplitude=potential_amplitude,
+        potential_frequency=potential_frequency,
+    )
 
-    interface = collect(block:block:(nfull - 1))
-    interiors = setdiff(1:nfull, interface)
-    AII = Matrix{ComplexF64}(A[interiors, interiors])
-    AIB = Matrix{ComplexF64}(A[interiors, interface])
-    ABI = Matrix{ComplexF64}(A[interface, interiors])
-    ABB = Matrix{ComplexF64}(A[interface, interface])
-    Iint = Matrix{ComplexF64}(I, length(interiors), length(interiors))
-    Ibd = Matrix{ComplexF64}(I, length(interface), length(interface))
-
-    function Tmatrix(z)
-        K = AII .- z .* Iint
-        ABB .- z .* Ibd .- ABI * (K \ AIB)
-    end
-    function Tderivative(z)
-        K = AII .- z .* Iint
-        KinvAIB = K \ AIB
-        -Ibd .- ABI * (K \ KinvAIB)
-    end
+    Tmatrix = z -> materialize(op, z)
+    Tderivative = z -> materialize(op, z; derivative=true)
     Tsolve = (z, B) -> Tmatrix(z) \ B
     Tadjoint_solve = (z, B) -> adjoint(Tmatrix(z)) \ B
 
-    full_values = eigvals(Symmetric(A))
+    full_values = eigvals(op.full_operator)
     expected = ComplexF64[λ for λ in full_values if abs(λ - real(center)) <= radius]
-    local_poles = eigvals(AII)
-    pole_dist = isempty(local_poles) ? Inf : minimum(abs.(ComplexF64.(local_poles) .- center))
+    pole_dist = isempty(op.local_poles) ? Inf : minimum(abs.(ComplexF64.(op.local_poles) .- center))
     pole_boundary_margin = pole_dist - radius
 
     (
-        full_matrix=A,
-        interface=interface,
-        interiors=interiors,
+        operator=op,
+        full_matrix=op.full_operator,
+        interface=op.interface,
         chart=ContourChart(center, radius),
         expected=expected,
         pole_distance=pole_dist,
@@ -205,33 +347,23 @@ function schrodinger_dd_interface_context(;
             Tsolve=Tsolve,
             Tadjoint_solve=Tadjoint_solve,
             expected=expected,
-            n=length(interface),
-            component_scales=ones(Float64, length(interface)),
+            n=length(op.interface),
+            component_scales=ones(Float64, length(op.interface)),
         ),
     )
 end
 
-function run_fused_schrodinger_dd_interface_diagnostic(;
-    subdomains=16,
-    interior_per_subdomain=12,
-    center=900.0 + 0.0im,
-    radius=1000.0,
-    nodes=128,
-    moment_count=3,
-    seed=20260506,
-    ranktol=1e-10,
-    residual_tol=1e-8,
-    match_atol=1e-7,
-    print_rows=true,
-)
+function run_fused_schrodinger_dd_interface_diagnostic(config::FusedSchrodingerDDConfig)
     problem = schrodinger_dd_interface_context(;
-        subdomains=subdomains,
-        interior_per_subdomain=interior_per_subdomain,
-        center=center,
-        radius=radius,
+        subdomains=config.subdomains,
+        interior_per_subdomain=config.interior_per_subdomain,
+        potential_amplitude=config.potential_amplitude,
+        potential_frequency=config.potential_frequency,
+        center=config.center,
+        radius=config.radius,
     )
     target_count = length(problem.expected)
-    Random.seed!(seed)
+    Random.seed!(config.seed)
     probe_cols = max(target_count + 2, problem.ctx.n)
     right_probe = rand(ComplexF64, problem.ctx.n, probe_cols)
     left_probe = rand(ComplexF64, problem.ctx.n, probe_cols)
@@ -241,30 +373,30 @@ function run_fused_schrodinger_dd_interface_diagnostic(;
         right_probe,
         left_probe,
         problem.chart,
-        nodes;
+        config.nodes;
         source=:fused_schrodinger_dd_interface,
     )
-    right_blocks = right_moments(cache, moment_count)
-    left_blocks = left_moments(cache, moment_count)
+    right_blocks = right_moments(cache, config.moment_count)
+    left_blocks = left_moments(cache, config.moment_count)
 
     Xfused, Sfused, fused_rank, fused_singulars = projected_hankel_pair_identity(
         right_blocks,
         left_probe,
-        moment_count;
-        ranktol=ranktol,
+        config.moment_count;
+        ranktol=config.ranktol,
         maxrank=target_count,
     )
     Ffused = eigen(Sfused)
-    raw_values = center .+ radius .* ComplexF64.(Ffused.values)
+    raw_values = config.center .+ config.radius .* ComplexF64.(Ffused.values)
     raw_vectors = Xfused * Ffused.vectors
     normalize_columns_local!(raw_vectors)
     raw_residuals = matrix_vector_residuals(problem.ctx.Tmatrix, raw_values, raw_vectors; normalization=:vector)
-    raw_inside = FEASTSolver.in_contour(raw_values, center, radius)
-    raw_good = raw_inside .& (raw_residuals .<= residual_tol)
-    raw_matched = match_expected_count(raw_values[raw_good], problem.expected; atol=match_atol)
+    raw_inside = FEASTSolver.in_contour(raw_values, config.center, config.radius)
+    raw_good = raw_inside .& (raw_residuals .<= config.residual_tol)
+    raw_matched = match_expected_count(raw_values[raw_good], problem.expected; atol=config.match_atol)
 
-    Xbasis, _ = moment_block_basis(right_blocks, moment_count; ranktol=ranktol)
-    Ybasis, _ = moment_block_basis(left_blocks, moment_count; ranktol=ranktol)
+    Xbasis, _ = moment_block_basis(right_blocks, config.moment_count; ranktol=config.ranktol)
+    Ybasis, _ = moment_block_basis(left_blocks, config.moment_count; ranktol=config.ranktol)
     d = min(size(Xbasis, 2), size(Ybasis, 2))
     Xbasis = Xbasis[:, 1:d]
     Ybasis = Ybasis[:, 1:d]
@@ -275,30 +407,42 @@ function run_fused_schrodinger_dd_interface_diagnostic(;
         Tred_derivative,
         raw_values;
         steps=6,
-        step_limit=0.25 * radius,
+        step_limit=0.25 * config.radius,
     )
     _, refined_right = reduced_left_right_singular_vectors(Tred, refined_values)
     refined_vectors = Xbasis * refined_right
     normalize_columns_local!(refined_vectors)
     refined_residuals = matrix_vector_residuals(problem.ctx.Tmatrix, refined_values, refined_vectors; normalization=:vector)
-    refined_inside = FEASTSolver.in_contour(refined_values, center, radius)
-    refined_good = refined_inside .& (refined_residuals .<= residual_tol)
-    refined_matched = match_expected_count(refined_values[refined_good], problem.expected; atol=match_atol)
+    refined_inside = FEASTSolver.in_contour(refined_values, config.center, config.radius)
+    refined_good = refined_inside .& (refined_residuals .<= config.residual_tol)
+    refined_matched = match_expected_count(refined_values[refined_good], problem.expected; atol=config.match_atol)
+    refined_max_inside = any(refined_inside) ? maximum(refined_residuals[refined_inside]) : Inf
+    diagnosis = fused_schrodinger_dd_diagnosis(;
+        expected=target_count,
+        rank=fused_rank,
+        raw_good=count(raw_good),
+        refined_good=count(refined_good),
+        refined_matched=refined_matched,
+        refined_max_inside_residual=refined_max_inside,
+        residual_tol=config.residual_tol,
+        pole_boundary_margin=problem.pole_boundary_margin,
+    )
 
-    if print_rows
+    if config.print_rows
         println()
         println("Fused Schrodinger domain-decomposition interface diagnostic")
         println("  Schur-complement NEP from eliminating local interiors of a linear Schrodinger operator")
         println("  contour is kept below the first eliminated-interior pole so the sampled NEP is analytic")
         @printf(
-            "  full_n=%d interface_n=%d expected=%d pole_margin=%.3e nodes=%d rank=%d basis=%d\n",
+            "  full_n=%d interface_n=%d expected=%d pole_margin=%.3e nodes=%d rank=%d basis=%d diagnosis=%s\n",
             size(problem.full_matrix, 1),
             problem.ctx.n,
             target_count,
             problem.pole_boundary_margin,
-            nodes,
+            config.nodes,
             fused_rank,
             d,
+            string(diagnosis),
         )
         @printf(
             "  raw good=%d matched=%d max=%.3e refined good=%d matched=%d max=%.3e max_corr=%.3e\n",
@@ -307,7 +451,7 @@ function run_fused_schrodinger_dd_interface_diagnostic(;
             any(raw_inside) ? maximum(raw_residuals[raw_inside]) : Inf,
             count(refined_good),
             refined_matched,
-            any(refined_inside) ? maximum(refined_residuals[refined_inside]) : Inf,
+            refined_max_inside,
             isempty(corrections) ? 0.0 : maximum(corrections),
         )
     end
@@ -327,10 +471,18 @@ function run_fused_schrodinger_dd_interface_diagnostic(;
         refined_inside=count(refined_inside),
         refined_good=count(refined_good),
         refined_matched=refined_matched,
-        refined_max_inside_residual=any(refined_inside) ? maximum(refined_residuals[refined_inside]) : Inf,
+        refined_max_inside_residual=refined_max_inside,
         max_refinement_correction=isempty(corrections) ? 0.0 : maximum(corrections),
+        diagnosis=diagnosis,
+        compression_ratio=size(problem.full_matrix, 1) / problem.ctx.n,
+        local_blocks=length(problem.operator.blocks),
+        max_local_block_size=maximum(block -> size(block.AII, 1), problem.operator.blocks),
         fused_singulars=Float64.(fused_singulars),
     )
+end
+
+function run_fused_schrodinger_dd_interface_diagnostic(; kwargs...)
+    run_fused_schrodinger_dd_interface_diagnostic(FusedSchrodingerDDConfig(; kwargs...))
 end
 
 function run_fused_schrodinger_dd_interface_refinement_sweep(;
@@ -373,5 +525,67 @@ function run_fused_schrodinger_dd_interface_refinement_sweep(;
         nodes_values=nodes_values,
         moment_count=moment_count,
         rows=rows,
+    )
+end
+
+function run_fused_schrodinger_dd_scale_smoke(;
+    config=FusedSchrodingerDDConfig(;
+        subdomains=64,
+        interior_per_subdomain=32,
+        nodes=128,
+        residual_tol=1e-7,
+        match_atol=1e-6,
+    ),
+    print_rows=true,
+)
+    local_result = run_fused_schrodinger_dd_interface_diagnostic(;
+        subdomains=config.subdomains,
+        interior_per_subdomain=config.interior_per_subdomain,
+        potential_amplitude=config.potential_amplitude,
+        potential_frequency=config.potential_frequency,
+        center=config.center,
+        radius=config.radius,
+        nodes=config.nodes,
+        moment_count=config.moment_count,
+        seed=config.seed,
+        ranktol=config.ranktol,
+        residual_tol=config.residual_tol,
+        match_atol=config.match_atol,
+        print_rows=false,
+    )
+    small_op = schrodinger_dd_interface_operator(;
+        subdomains=8,
+        interior_per_subdomain=6,
+        potential_amplitude=config.potential_amplitude,
+        potential_frequency=config.potential_frequency,
+    )
+    assembly_error = schrodinger_dd_local_assembly_error(small_op, config.center + 0.31 * config.radius * im)
+
+    if print_rows
+        println()
+        println("Fused Schrodinger domain-decomposition scale smoke")
+        @printf(
+            "  full_n=%d interface_n=%d compression=%.1f local_blocks=%d block_n=%d diagnosis=%s\n",
+            local_result.full_n,
+            local_result.interface_n,
+            local_result.compression_ratio,
+            local_result.local_blocks,
+            local_result.max_local_block_size,
+            string(local_result.diagnosis),
+        )
+        @printf(
+            "  expected=%d rank=%d refined_matched=%d refined_max=%.3e local_assembly_error=(T %.3e, dT %.3e)\n",
+            local_result.expected,
+            local_result.rank,
+            local_result.refined_matched,
+            local_result.refined_max_inside_residual,
+            assembly_error.T,
+            assembly_error.derivative,
+        )
+    end
+
+    (;
+        local_result...,
+        assembly_error=assembly_error,
     )
 end

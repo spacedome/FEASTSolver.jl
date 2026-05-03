@@ -575,11 +575,32 @@ end
     @test result.rank == result.expected
     @test result.raw_inside == result.expected
     @test result.raw_good < result.expected
+    @test result.diagnosis === :cleanup_required
     @test result.refined_inside == result.expected
     @test result.refined_good == result.expected
     @test result.refined_matched == result.expected
     @test result.refined_max_inside_residual <= 1e-8
     @test result.refined_max_inside_residual < result.raw_max_inside_residual
+end
+
+@testitem "experimental moment RII: fused Schrodinger DD local assembly scales" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_fused_schrodinger_dd_scale_smoke(; print_rows=false)
+
+    @test result.full_n == 2111
+    @test result.interface_n == 63
+    @test result.compression_ratio > 30
+    @test result.local_blocks == 64
+    @test result.max_local_block_size == 32
+    @test result.expected == 13
+    @test result.rank == result.expected
+    @test result.raw_good < result.expected
+    @test result.diagnosis === :cleanup_required
+    @test result.refined_matched == result.expected
+    @test result.refined_max_inside_residual <= 1e-7
+    @test result.assembly_error.T <= 1e-12
+    @test result.assembly_error.derivative <= 1e-12
 end
 
 @testitem "experimental moment RII: sparse nonlinear remote workers reuse stored contour factors" tags=[:slow, :distributed] begin

@@ -744,6 +744,15 @@ that setting.
   current run), while 128 nodes plus reduced `Tred` cleanup recovers all 13.
   Reduced cleanup is therefore necessary but not a replacement for sufficient
   contour sampling on this harder rational interface problem.
+- Fused Schrodinger domain-decomposition scale smoke: the DD interface operator
+  is now assembled from independent local interior blocks rather than a single
+  dense eliminated-interior solve. On the current scale smoke,
+  `full_n=2111`, `interface_n=63`, and 64 local blocks of size 32 give a
+  compression ratio above 30. The local-block assembly matches the dense Schur
+  complement and derivative to roundoff on a small reference check, and the
+  fused algorithm again recovers all 13 target roots after reduced cleanup
+  (`cleanup_required`). This is still not an HPC implementation, but it
+  verifies the algorithm is compatible with the subdomain-local operator shape.
 - Sparse Schrodinger remote stored-factor smoke: the same realistic sparse
   Schrodinger control runs through persistent worker-owned contour partitions.
   The worker factors and node-local solve buffers are created once on the first
