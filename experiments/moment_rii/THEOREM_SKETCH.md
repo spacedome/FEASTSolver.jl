@@ -241,6 +241,62 @@ If that estimate cannot be proved, the algorithm should be reported as a
 strong empirical FEAST-family synthesis rather than a solved general
 moment-NLFEAST theory.
 
+## Lean Handoff Note
+
+The current Lean theory suggests the next useful bridge is not another global
+algorithm wrapper.  The experiment should be interpreted through a local
+certificate of the form
+
+```text
+Corr o Rlin = P_packet + E
+```
+
+where `P_packet` is the projector/filter induced by the fused contour
+realization and `E` is the realized residual-Laurent implementation or chart
+defect.  Lean already proves the downstream residual-chart consequences once
+this boundary is supplied: the exact correction leaves the packet complement,
+while the perturbed correction leaves the packet complement minus `E`; under
+FEAST-ratio filtering the persistent obstruction is the projector-visible
+component `P_packet(E v)`.
+
+For the next numerical pass, hard cases should therefore report whether the
+fused cache and reduced extractor identify the same physical packet projector,
+and whether the residual-Laurent update error is mostly projector-invisible.
+If `P_packet(E v)` is large, treat that as a chart/transport or extraction
+defect rather than as generic moment instability.  Keep the two moment roles
+separate: positive powers build the finite realization, inverse-Laurent powers
+repair physical residual spaces.
+
+Since the last Lean pass, the most actionable new layer is the fused Laurent
+schedule monitor.  It packages a run by outer iterate and asks the numerical
+code to expose four quantities:
+
+```text
+Biterate[j] >= || Q_packet current_j ||
+Brepair[j]  >= || Q_packet E(current_j) ||
+innerBudget[j] >= |nu/mu|^innerSteps[j] * (Biterate[j] + Brepair[j])
+outerBudget[j] >= contraction^j * || P_packet E(current_0) ||
+```
+
+The theorem then says the scheduled normalized repair update is bounded by
+`innerBudget[j] + outerBudget[j]`.  In the exact-chart case
+`P_packet E(current_j) = 0`, the outer visible-error budget drops out and the
+inner FEAST-ratio budget alone controls the update.  This gives the next Julia
+checkpoint: for each hard case, log an estimated `||P_packet E(current)||`,
+`||P_packet correction(current)||`, `||Q_packet current||`,
+`||Q_packet E(current)||`, `innerSteps`, and the observed scheduled repair
+norm.  The useful question is whether chart fixes reduce the visible component
+`P_packet E(current)` specifically; if they only reduce the total residual, the
+Lean certificate does not yet explain the success.
+
+A practical approximation is acceptable at this stage.  Use the fused positive
+realization/extractor to build the packet projector used for diagnostics, keep
+that projector fixed while comparing candidate corrections, and report the
+positive-moment realization evidence separately from the inverse-Laurent repair
+evidence.  Do not merge these into a single generic residual score, because the
+Lean split is exactly what distinguishes a good chart with invisible repair
+error from a bad chart whose correction has a packet-visible defect.
+
 ## Closest Known Proof Language
 
 The closest adjacent proof language now appears to be Jacobi-Davidson and
