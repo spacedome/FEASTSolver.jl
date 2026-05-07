@@ -704,3 +704,215 @@ function run_fused_schrodinger_dd_baseline_comparison(;
         feast_subspace_cols=subspace_cols,
     )
 end
+
+function fused_schrodinger_dd_packet_state(config::FusedSchrodingerDDConfig)
+    problem = schrodinger_dd_interface_context(;
+        subdomains=config.subdomains,
+        interior_per_subdomain=config.interior_per_subdomain,
+        potential_amplitude=config.potential_amplitude,
+        potential_frequency=config.potential_frequency,
+        center=config.center,
+        radius=config.radius,
+    )
+    target_count = length(problem.expected)
+    Random.seed!(config.seed)
+    probe_cols = max(target_count + 2, problem.ctx.n)
+    right_probe = rand(ComplexF64, problem.ctx.n, probe_cols)
+    left_probe = rand(ComplexF64, problem.ctx.n, probe_cols)
+    cache = build_contour_sample_cache(
+        problem.ctx.Tsolve,
+        problem.ctx.Tadjoint_solve,
+        right_probe,
+        left_probe,
+        problem.chart,
+        config.nodes;
+        source=:fused_schrodinger_dd_packet_state,
+    )
+    right_blocks = right_moments(cache, config.moment_count)
+    left_blocks = left_moments(cache, config.moment_count)
+    Xbasis, _ = moment_block_basis(right_blocks, config.moment_count; ranktol=config.ranktol)
+    Ybasis, _ = moment_block_basis(left_blocks, config.moment_count; ranktol=config.ranktol)
+    d = min(size(Xbasis, 2), size(Ybasis, 2))
+    Xbasis = Xbasis[:, 1:d]
+    Ybasis = Ybasis[:, 1:d]
+
+    Xfused, Sfused, fused_rank, fused_singulars = projected_hankel_pair_identity(
+        right_blocks,
+        left_probe,
+        config.moment_count;
+        ranktol=config.ranktol,
+        maxrank=target_count,
+    )
+    Ffused = eigen(Sfused)
+    raw_values = config.center .+ config.radius .* ComplexF64.(Ffused.values)
+    Tred = z -> adjoint(Ybasis) * problem.ctx.Tmatrix(z) * Xbasis
+    Tred_derivative = z -> adjoint(Ybasis) * problem.ctx.Tderivative(z) * Xbasis
+    raw_left_reduced, raw_right_reduced = reduced_left_right_singular_vectors(Tred, raw_values)
+    raw_right = Xbasis * raw_right_reduced
+    raw_left = Ybasis * raw_left_reduced
+    normalize_columns_local!(raw_right)
+    normalize_columns_local!(raw_left)
+    raw_residuals = matrix_vector_residuals(problem.ctx.Tmatrix, raw_values, raw_right; normalization=:vector)
+    raw_inside = FEASTSolver.in_contour(raw_values, config.center, config.radius)
+    raw_good = raw_inside .& (raw_residuals .<= config.residual_tol)
+
+    refined_values, corrections = refine_reduced_analytic_triplets(
+        Tred,
+        Tred_derivative,
+        raw_values;
+        steps=6,
+        step_limit=0.25 * config.radius,
+    )
+    refined_left_reduced, refined_right_reduced = reduced_left_right_singular_vectors(Tred, refined_values)
+    refined_right = Xbasis * refined_right_reduced
+    refined_left = Ybasis * refined_left_reduced
+    normalize_columns_local!(refined_right)
+    normalize_columns_local!(refined_left)
+    refined_residuals = matrix_vector_residuals(problem.ctx.Tmatrix, refined_values, refined_right; normalization=:vector)
+    refined_inside = FEASTSolver.in_contour(refined_values, config.center, config.radius)
+    refined_good = refined_inside .& (refined_residuals .<= config.residual_tol)
+    refined_matched = match_expected_count(refined_values[refined_good], problem.expected; atol=config.match_atol)
+
+    (
+        problem=problem,
+        target_count=target_count,
+        rank=fused_rank,
+        singulars=Float64.(fused_singulars),
+        Xbasis=Xbasis,
+        Ybasis=Ybasis,
+        raw=(values=raw_values, right=raw_right, left=raw_left, residuals=raw_residuals, inside=raw_inside, good=raw_good),
+        refined=(
+            values=refined_values,
+            right=refined_right,
+            left=refined_left,
+            residuals=refined_residuals,
+            inside=refined_inside,
+            good=refined_good,
+            matched=refined_matched,
+            corrections=corrections,
+        ),
+    )
+end
+
+function oblique_packet_projector(right, left; ranktol=1e-10)
+    X, _ = physical_basis_from_columns(right; ranktol=ranktol)
+    Y, _ = physical_basis_from_columns(left; ranktol=ranktol)
+    d = min(size(X, 2), size(Y, 2))
+    d == 0 && return zeros(ComplexF64, size(right, 1), size(right, 1))
+    X = X[:, 1:d]
+    Y = Y[:, 1:d]
+    X * pinv(adjoint(Y) * X) * adjoint(Y)
+end
+
+function projector_defect_split(Pcandidate, Preference)
+    defect = Pcandidate - Preference
+    defect_norm = norm(defect)
+    if defect_norm <= eps(Float64)
+        return (total=0.0, visible=0.0, invisible=0.0, visible_ratio=0.0, invisible_ratio=0.0)
+    end
+    visible = norm(Preference * defect)
+    invisible = norm((I - Preference) * defect)
+    (
+        total=defect_norm,
+        visible=visible,
+        invisible=invisible,
+        visible_ratio=visible / defect_norm,
+        invisible_ratio=invisible / defect_norm,
+    )
+end
+
+function run_fused_schrodinger_dd_packet_defect_diagnostic(;
+    config=FusedSchrodingerDDConfig(),
+    reference_nodes=256,
+    candidate_nodes=(64, 96, 128),
+    print_rows=true,
+)
+    reference_config = FusedSchrodingerDDConfig(;
+        subdomains=config.subdomains,
+        interior_per_subdomain=config.interior_per_subdomain,
+        potential_amplitude=config.potential_amplitude,
+        potential_frequency=config.potential_frequency,
+        center=config.center,
+        radius=config.radius,
+        nodes=reference_nodes,
+        moment_count=config.moment_count,
+        seed=config.seed,
+        ranktol=config.ranktol,
+        residual_tol=config.residual_tol,
+        match_atol=config.match_atol,
+        print_rows=false,
+    )
+    reference = fused_schrodinger_dd_packet_state(reference_config)
+    Preference = oblique_packet_projector(reference.refined.right, reference.refined.left; ranktol=config.ranktol)
+    rows = map(candidate_nodes) do nodes
+        candidate_config = FusedSchrodingerDDConfig(;
+            subdomains=config.subdomains,
+            interior_per_subdomain=config.interior_per_subdomain,
+            potential_amplitude=config.potential_amplitude,
+            potential_frequency=config.potential_frequency,
+            center=config.center,
+            radius=config.radius,
+            nodes=nodes,
+            moment_count=config.moment_count,
+            seed=config.seed,
+            ranktol=config.ranktol,
+            residual_tol=config.residual_tol,
+            match_atol=config.match_atol,
+            print_rows=false,
+        )
+        candidate = fused_schrodinger_dd_packet_state(candidate_config)
+        Praw = oblique_packet_projector(candidate.raw.right, candidate.raw.left; ranktol=config.ranktol)
+        Prefined = oblique_packet_projector(candidate.refined.right, candidate.refined.left; ranktol=config.ranktol)
+        raw_split = projector_defect_split(Praw, Preference)
+        refined_split = projector_defect_split(Prefined, Preference)
+        (
+            nodes=nodes,
+            rank=candidate.rank,
+            raw_good=count(candidate.raw.good),
+            raw_max=any(candidate.raw.inside) ? maximum(candidate.raw.residuals[candidate.raw.inside]) : Inf,
+            refined_good=count(candidate.refined.good),
+            refined_matched=candidate.refined.matched,
+            refined_max=any(candidate.refined.inside) ? maximum(candidate.refined.residuals[candidate.refined.inside]) : Inf,
+            max_correction=isempty(candidate.refined.corrections) ? 0.0 : maximum(candidate.refined.corrections),
+            raw_defect=raw_split,
+            refined_defect=refined_split,
+        )
+    end
+
+    if print_rows
+        println()
+        println("Fused Schrodinger/DD packet-defect diagnostic")
+        println("  Lean-facing proxy: split candidate packet-projector defect into reference-packet-visible and invisible parts")
+        @printf(
+            "  reference_nodes=%d expected=%d reference_rank=%d reference_matched=%d\n",
+            reference_nodes,
+            reference.target_count,
+            reference.rank,
+            reference.refined.matched,
+        )
+        for row in rows
+            @printf(
+                "  nodes=%d rank=%d raw_good=%d raw_max=%.3e refined=%d/%d refined_max=%.3e raw_visible=%.3e refined_visible=%.3e raw_vis_ratio=%.3f refined_vis_ratio=%.3f\n",
+                row.nodes,
+                row.rank,
+                row.raw_good,
+                row.raw_max,
+                row.refined_matched,
+                reference.target_count,
+                row.refined_max,
+                row.raw_defect.visible,
+                row.refined_defect.visible,
+                row.raw_defect.visible_ratio,
+                row.refined_defect.visible_ratio,
+            )
+        end
+    end
+
+    (
+        expected=reference.target_count,
+        reference_nodes=reference_nodes,
+        reference_rank=reference.rank,
+        reference_matched=reference.refined.matched,
+        rows=rows,
+    )
+end

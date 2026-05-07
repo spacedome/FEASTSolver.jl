@@ -617,6 +617,23 @@ end
     @test result.compression_ratio > 10
 end
 
+@testitem "experimental moment RII: fused Schrodinger DD tracks packet-visible defect" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_fused_schrodinger_dd_packet_defect_diagnostic(; print_rows=false)
+    coarse, middle, fine = result.rows
+
+    @test result.expected == 13
+    @test result.reference_rank == result.expected
+    @test result.reference_matched == result.expected
+    @test coarse.refined_matched < result.expected
+    @test coarse.refined_defect.visible > 1e-1
+    @test middle.refined_defect.visible < middle.raw_defect.visible
+    @test fine.refined_matched == result.expected
+    @test fine.refined_defect.visible < fine.raw_defect.visible
+    @test fine.refined_defect.visible <= 1e-10
+end
+
 @testitem "experimental moment RII: sparse nonlinear remote workers reuse stored contour factors" tags=[:slow, :distributed] begin
     if !isdefined(Main, :run_sparse_nonlinear_remote_stored_factor_worker_smoke)
         Base.include(Main, joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))

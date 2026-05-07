@@ -150,7 +150,12 @@ global block Newton, or rational-coordinate-only fixes.
   baseline comparison runner records the expected caveat: on current local
   small and medium instances, full sparse linear FEAST is still faster while
   recovering the same roots. The DD result is therefore a capability/scaling
-  formulation result, not yet a performance win on this workstation.
+  formulation result, not yet a performance win on this workstation. The
+  packet-defect diagnostic now connects the Julia experiment back to the
+  adjacent Lean certificate boundary: using a high-resolution fused/refined
+  packet projector as reference, successful `Tred` cleanup removes the
+  packet-visible defect on the 128-node DD solve, while the underresolved
+  64-node solve keeps a large visible defect.
   The experiment deliberately does not yet provide full reusable sparse
   workspaces, broad realistic sparse gallery coverage, or publication-level
   scaling claims.

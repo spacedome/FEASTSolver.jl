@@ -763,6 +763,15 @@ that setting.
   the nonlinear interface formulation can be solved automatically, with the
   scaling proposition depending on larger subdomain-local/HPC workflows where
   full global solves or linearizations become the bottleneck.
+- Fused Schrodinger/DD packet-defect diagnostic: the Lean-facing checkpoint is
+  now implemented numerically. A high-resolution fused/refined run defines a
+  reference packet projector; lower-node raw and `Tred`-refined packet
+  projectors are compared by splitting the defect into reference-packet-visible
+  and invisible parts. On the current DD case, the successful 128-node cleanup
+  reduces packet-visible defect to roundoff, while the underresolved 64-node
+  case retains large packet-visible defect. This distinguishes "cleanup fixed
+  the chart coordinate" from "the chart is still underresolved" more sharply
+  than residual norms alone.
 - Sparse Schrodinger remote stored-factor smoke: the same realistic sparse
   Schrodinger control runs through persistent worker-owned contour partitions.
   The worker factors and node-local solve buffers are created once on the first

@@ -297,6 +297,16 @@ evidence.  Do not merge these into a single generic residual score, because the
 Lean split is exactly what distinguishes a good chart with invisible repair
 error from a bad chart whose correction has a packet-visible defect.
 
+Julia checkpoint: `run_fused_schrodinger_dd_packet_defect_diagnostic` now
+implements this as an experiment-level proxy. It builds a high-resolution
+fused/refined reference packet projector for the Schrodinger/DD interface NEP,
+then compares lower-node raw and `Tred`-refined packet projectors by splitting
+the projector defect into reference-packet-visible and invisible parts. The
+current run supports the Lean interpretation: at 128 nodes, reduced cleanup
+drives the packet-visible defect to roundoff while recovering all 13 roots; at
+64 nodes, the refined solve remains underresolved and the packet-visible defect
+stays large.
+
 ## Closest Known Proof Language
 
 The closest adjacent proof language now appears to be Jacobi-Davidson and
