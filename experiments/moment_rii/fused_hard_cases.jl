@@ -821,6 +821,36 @@ function projector_defect_split(Pcandidate, Preference)
     )
 end
 
+function packet_schedule_proxy(Praw, Prefined, Preference)
+    raw_defect = Praw - Preference
+    refined_defect = Prefined - Preference
+    repair = Prefined - Praw
+    Qreference = I - Preference
+    raw_visible = Preference * raw_defect
+    repair_visible = Preference * repair
+    (
+        q_current=norm(Qreference * Praw),
+        q_error=norm(Qreference * raw_defect),
+        q_repair=norm(Qreference * repair),
+        visible_error=norm(raw_visible),
+        visible_repair=norm(repair_visible),
+        observed_repair=norm(repair),
+        # Lean predicts the scheduled repair is biased by -P_packet(E current).
+        visible_bias_residual=norm(repair_visible + raw_visible),
+        refined_visible_error=norm(Preference * refined_defect),
+    )
+end
+
+function packet_defect_status(row, expected; visible_tol=1e-8)
+    if row.refined_matched == expected && row.refined_defect.visible <= visible_tol
+        :accepted_visible_removed
+    elseif row.refined_defect.visible > visible_tol
+        :packet_visible_defect
+    else
+        :packet_invisible_acceptance_gap
+    end
+end
+
 function run_fused_schrodinger_dd_packet_defect_diagnostic(;
     config=FusedSchrodingerDDConfig(),
     reference_nodes=256,
@@ -865,7 +895,8 @@ function run_fused_schrodinger_dd_packet_defect_diagnostic(;
         Prefined = oblique_packet_projector(candidate.refined.right, candidate.refined.left; ranktol=config.ranktol)
         raw_split = projector_defect_split(Praw, Preference)
         refined_split = projector_defect_split(Prefined, Preference)
-        (
+        schedule = packet_schedule_proxy(Praw, Prefined, Preference)
+        row = (
             nodes=nodes,
             rank=candidate.rank,
             raw_good=count(candidate.raw.good),
@@ -876,7 +907,9 @@ function run_fused_schrodinger_dd_packet_defect_diagnostic(;
             max_correction=isempty(candidate.refined.corrections) ? 0.0 : maximum(candidate.refined.corrections),
             raw_defect=raw_split,
             refined_defect=refined_split,
+            schedule=schedule,
         )
+        merge(row, (status=packet_defect_status(row, reference.target_count),))
     end
 
     if print_rows
@@ -892,8 +925,9 @@ function run_fused_schrodinger_dd_packet_defect_diagnostic(;
         )
         for row in rows
             @printf(
-                "  nodes=%d rank=%d raw_good=%d raw_max=%.3e refined=%d/%d refined_max=%.3e raw_visible=%.3e refined_visible=%.3e raw_vis_ratio=%.3f refined_vis_ratio=%.3f\n",
+                "  nodes=%d status=%s rank=%d raw_good=%d raw_max=%.3e refined=%d/%d refined_max=%.3e raw_visible=%.3e refined_visible=%.3e q_current=%.3e q_repair=%.3e visible_repair=%.3e bias_residual=%.3e\n",
                 row.nodes,
+                string(row.status),
                 row.rank,
                 row.raw_good,
                 row.raw_max,
@@ -902,8 +936,10 @@ function run_fused_schrodinger_dd_packet_defect_diagnostic(;
                 row.refined_max,
                 row.raw_defect.visible,
                 row.refined_defect.visible,
-                row.raw_defect.visible_ratio,
-                row.refined_defect.visible_ratio,
+                row.schedule.q_current,
+                row.schedule.q_repair,
+                row.schedule.visible_repair,
+                row.schedule.visible_bias_residual,
             )
         end
     end
