@@ -772,6 +772,13 @@ that setting.
   case retains large packet-visible defect. This distinguishes "cleanup fixed
   the chart coordinate" from "the chart is still underresolved" more sharply
   than residual norms alone.
+- Fused Schrodinger/DD packet policy diagnostic: the packet-visible status now
+  drives a first action policy. `packet_visible_defect` means increase contour
+  nodes or refine the chart, `packet_invisible_acceptance_gap` means the packet
+  is essentially right but extraction/acceptance needs work, and
+  `accepted_visible_removed` accepts the solve. On the current DD sweep this
+  policy rejects 64 nodes, flags 96 nodes as an acceptance/refinement gap, and
+  selects 128 nodes.
 - Sparse Schrodinger remote stored-factor smoke: the same realistic sparse
   Schrodinger control runs through persistent worker-owned contour partitions.
   The worker factors and node-local solve buffers are created once on the first

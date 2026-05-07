@@ -851,6 +851,13 @@ function packet_defect_status(row, expected; visible_tol=1e-8)
     end
 end
 
+function packet_defect_policy_action(status)
+    status === :accepted_visible_removed && return :accept
+    status === :packet_visible_defect && return :increase_nodes_or_refine_chart
+    status === :packet_invisible_acceptance_gap && return :refine_extraction_or_acceptance
+    :inspect
+end
+
 function run_fused_schrodinger_dd_packet_defect_diagnostic(;
     config=FusedSchrodingerDDConfig(),
     reference_nodes=256,
@@ -950,5 +957,58 @@ function run_fused_schrodinger_dd_packet_defect_diagnostic(;
         reference_rank=reference.rank,
         reference_matched=reference.refined.matched,
         rows=rows,
+    )
+end
+
+function run_fused_schrodinger_dd_packet_policy_diagnostic(;
+    config=FusedSchrodingerDDConfig(),
+    reference_nodes=256,
+    candidate_nodes=(64, 96, 128),
+    print_rows=true,
+)
+    diagnostic = run_fused_schrodinger_dd_packet_defect_diagnostic(;
+        config=config,
+        reference_nodes=reference_nodes,
+        candidate_nodes=candidate_nodes,
+        print_rows=false,
+    )
+    rows = map(diagnostic.rows) do row
+        action = packet_defect_policy_action(row.status)
+        merge(row, (action=action,))
+    end
+    accepted_index = findfirst(row -> row.action === :accept, rows)
+    selected = accepted_index === nothing ? nothing : rows[accepted_index]
+
+    if print_rows
+        println()
+        println("Fused Schrodinger/DD packet policy diagnostic")
+        println("  Lean-guided action policy using packet-visible defect status")
+        for row in rows
+            @printf(
+                "  nodes=%d status=%s action=%s matched=%d/%d visible=%.3e q_current=%.3e bias_residual=%.3e\n",
+                row.nodes,
+                string(row.status),
+                string(row.action),
+                row.refined_matched,
+                diagnostic.expected,
+                row.refined_defect.visible,
+                row.schedule.q_current,
+                row.schedule.visible_bias_residual,
+            )
+        end
+        if selected === nothing
+            println("  selected: none")
+        else
+            @printf("  selected: nodes=%d action=%s\n", selected.nodes, string(selected.action))
+        end
+    end
+
+    (
+        expected=diagnostic.expected,
+        reference_nodes=diagnostic.reference_nodes,
+        rows=rows,
+        selected_nodes=selected === nothing ? nothing : selected.nodes,
+        selected_status=selected === nothing ? nothing : selected.status,
+        selected_action=selected === nothing ? nothing : selected.action,
     )
 end

@@ -155,7 +155,10 @@ global block Newton, or rational-coordinate-only fixes.
   adjacent Lean certificate boundary: using a high-resolution fused/refined
   packet projector as reference, successful `Tred` cleanup removes the
   packet-visible defect on the 128-node DD solve, while the underresolved
-  64-node solve keeps a large visible defect.
+  64-node solve keeps a large visible defect. The first policy wrapper now
+  turns that split into actions: increase nodes/refine chart for visible packet
+  defects, refine extraction/acceptance for packet-invisible gaps, and accept
+  when the visible defect is removed.
   The experiment deliberately does not yet provide full reusable sparse
   workspaces, broad realistic sparse gallery coverage, or publication-level
   scaling claims.

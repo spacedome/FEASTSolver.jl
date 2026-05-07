@@ -307,6 +307,14 @@ drives the packet-visible defect to roundoff while recovering all 13 roots; at
 64 nodes, the refined solve remains underresolved and the packet-visible defect
 stays large.
 
+The first policy use of this information is
+`run_fused_schrodinger_dd_packet_policy_diagnostic`. It maps
+`packet_visible_defect` to `increase_nodes_or_refine_chart`,
+`packet_invisible_acceptance_gap` to `refine_extraction_or_acceptance`, and
+`accepted_visible_removed` to `accept`. This is not yet a complete adaptive
+parameter controller, but it demonstrates that the Lean-facing split is already
+algorithmically actionable rather than only retrospective explanation.
+
 ## Closest Known Proof Language
 
 The closest adjacent proof language now appears to be Jacobi-Davidson and

@@ -634,6 +634,23 @@ end
     @test fine.refined_defect.visible <= 1e-10
 end
 
+@testitem "experimental moment RII: fused Schrodinger DD packet policy selects convergence path" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_fused_schrodinger_dd_packet_policy_diagnostic(; print_rows=false)
+    coarse, middle, fine = result.rows
+
+    @test result.expected == 13
+    @test coarse.status === :packet_visible_defect
+    @test coarse.action === :increase_nodes_or_refine_chart
+    @test middle.status === :packet_invisible_acceptance_gap
+    @test middle.action === :refine_extraction_or_acceptance
+    @test fine.status === :accepted_visible_removed
+    @test fine.action === :accept
+    @test result.selected_nodes == fine.nodes
+    @test result.selected_action === :accept
+end
+
 @testitem "experimental moment RII: sparse nonlinear remote workers reuse stored contour factors" tags=[:slow, :distributed] begin
     if !isdefined(Main, :run_sparse_nonlinear_remote_stored_factor_worker_smoke)
         Base.include(Main, joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
