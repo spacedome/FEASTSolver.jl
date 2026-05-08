@@ -799,7 +799,10 @@ that setting.
   update stage would receive more work before acceptance. It also reports
   trial/test compatibility gaps, mirroring the Lean boundary where right packet
   vectors stay in the declared physical trial space and left packet vectors
-  stay in the declared physical test space.
+  stay in the declared physical test space. A companion chart-ladder diagnostic
+  guards target identity: if a changed chart accepts only after changing the
+  spectral packet count, the policy reports `chart_changes_packet` rather than
+  accepting the original fixed-target solve.
 - Sparse Schrodinger remote stored-factor smoke: the same realistic sparse
   Schrodinger control runs through persistent worker-owned contour partitions.
   The worker factors and node-local solve buffers are created once on the first

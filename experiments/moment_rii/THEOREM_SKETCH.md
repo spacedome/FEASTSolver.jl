@@ -384,6 +384,13 @@ consume a candidate chart/node ladder, classify the packet defect, choose the
 update stage that should receive more work, and stop only when the acceptance
 envelope passes.
 
+The chart-ladder diagnostic adds a necessary guard to that steering story:
+changing the chart radius can make a low-node DD solve acceptable by changing
+which spectral packet is being solved. The packet policy therefore treats
+accepted changed-count charts as `chart_changes_packet`, not as acceptance for
+the original target. For fixed-target steering, the target count/packet identity
+has to stay part of the acceptance envelope.
+
 ## Closest Known Proof Language
 
 The closest adjacent proof language now appears to be Jacobi-Davidson and

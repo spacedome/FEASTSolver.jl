@@ -734,6 +734,30 @@ end
     @test result.steering.trace[3].accepted
 end
 
+@testitem "experimental moment RII: fused Schrodinger DD chart ladder guards target packet" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_fused_schrodinger_dd_packet_chart_ladder_diagnostic(;
+        reference_nodes=192,
+        nodes=64,
+        radius_ladder=(800.0, 1000.0, 1200.0),
+        print_rows=false,
+    )
+    small, target, large = result.rows
+
+    @test result.target_expected == 13
+    @test small.expected < result.target_expected
+    @test target.expected == result.target_expected
+    @test large.expected > result.target_expected
+    @test target.status === :packet_visible_defect
+    @test !target.acceptance.accepted
+    @test large.acceptance.accepted
+    @test result.trace.action === :chart_changes_packet
+    @test !result.trace.accepted_same_packet
+    @test result.trace.accepted_any_packet
+    @test result.trace.selected.radius == large.radius
+end
+
 @testitem "experimental moment RII: sparse nonlinear remote workers reuse stored contour factors" tags=[:slow, :distributed] begin
     if !isdefined(Main, :run_sparse_nonlinear_remote_stored_factor_worker_smoke)
         Base.include(Main, joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))

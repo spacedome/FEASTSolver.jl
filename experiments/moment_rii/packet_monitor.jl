@@ -194,3 +194,32 @@ function packet_steering_trace(rows)
         trace=trace,
     )
 end
+
+function packet_chart_ladder_trace(rows, target_expected)
+    same_packet_index = findfirst(row -> row.expected == target_expected && row.acceptance.accepted, rows)
+    accepted_index = findfirst(row -> row.acceptance.accepted, rows)
+    changed_packet_index = findfirst(row -> row.expected != target_expected && row.acceptance.accepted, rows)
+    if same_packet_index !== nothing
+        action = :accept_same_packet
+        selected = rows[same_packet_index]
+    elseif changed_packet_index !== nothing
+        action = :chart_changes_packet
+        selected = rows[changed_packet_index]
+    elseif any(row -> row.status === :packet_invisible_acceptance_gap, rows)
+        action = :refine_extraction_or_acceptance
+        selected = nothing
+    else
+        action = :increase_nodes_or_refine_chart
+        selected = nothing
+    end
+    (
+        action=action,
+        accepted_same_packet=same_packet_index !== nothing,
+        accepted_any_packet=accepted_index !== nothing,
+        selected=selected,
+        selected_index=selected === nothing ? nothing : findfirst(==(selected), rows),
+        target_expected=target_expected,
+        component_expected=Tuple(row.expected for row in rows),
+        component_statuses=Tuple(row.status for row in rows),
+    )
+end

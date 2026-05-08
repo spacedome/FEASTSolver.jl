@@ -175,7 +175,10 @@ global block Newton, or rational-coordinate-only fixes.
   before accepting the first full envelope pass. The same monitor now reports
   trial/test compatibility gaps, matching the Lean requirement that right
   packet vectors stay in the declared physical trial space and left packet
-  vectors stay in the declared physical test space.
+  vectors stay in the declared physical test space. The chart-ladder diagnostic
+  adds a fixed-target guard: accepted changed-radius charts that change the
+  packet count are classified as `chart_changes_packet`, not accepted for the
+  original target.
   The experiment deliberately does not yet provide full reusable sparse
   workspaces, broad realistic sparse gallery coverage, or publication-level
   scaling claims.
@@ -372,6 +375,11 @@ Prompt-to-artifact checklist:
   `packet_update_stage` and `packet_steering_trace` turn packet information
   into update-stage actions: rebuild packet/update geometry, continue local
   repair, improve extraction/acceptance, or accept.
+- Fixed-target chart steering:
+  `run_fused_schrodinger_dd_packet_chart_ladder_diagnostic` checks nearby chart
+  radii at fixed low nodes and classifies accepted changed-count charts as
+  `chart_changes_packet`, preventing chart changes from silently accepting a
+  different spectral packet.
 - Hard-case validation:
   the Schrodinger domain-decomposition packet diagnostics are covered by the
   focused test command `nix develop --command just test --slow 'packet'`.

@@ -1039,3 +1039,75 @@ function run_fused_schrodinger_dd_packet_steering_diagnostic(;
         selected_nodes=result.selected_nodes,
     )
 end
+
+function run_fused_schrodinger_dd_packet_chart_ladder_diagnostic(;
+    config=FusedSchrodingerDDConfig(),
+    reference_nodes=192,
+    nodes=64,
+    radius_ladder=(0.8 * config.radius, config.radius, 1.2 * config.radius),
+    print_rows=true,
+)
+    rows = map(radius_ladder) do radius
+        chart_config = FusedSchrodingerDDConfig(;
+            subdomains=config.subdomains,
+            interior_per_subdomain=config.interior_per_subdomain,
+            potential_amplitude=config.potential_amplitude,
+            potential_frequency=config.potential_frequency,
+            center=config.center,
+            radius=radius,
+            nodes=config.nodes,
+            moment_count=config.moment_count,
+            seed=config.seed,
+            ranktol=config.ranktol,
+            residual_tol=config.residual_tol,
+            match_atol=config.match_atol,
+            print_rows=false,
+        )
+        result = run_fused_schrodinger_dd_packet_policy_diagnostic(;
+            config=chart_config,
+            reference_nodes=reference_nodes,
+            candidate_nodes=(nodes,),
+            print_rows=false,
+        )
+        row = only(result.rows)
+        merge(row, (radius=radius, expected=result.expected))
+    end
+    target_index = findfirst(radius -> radius == config.radius, radius_ladder)
+    target_expected = target_index === nothing ? rows[1].expected : rows[target_index].expected
+    trace = packet_chart_ladder_trace(rows, target_expected)
+
+    if print_rows
+        println()
+        println("Fused Schrodinger/DD packet chart ladder diagnostic")
+        println("  fixed low-node solve across nearby chart radii; accepted changed-count packets are not accepted for the original target")
+        @printf(
+            "  nodes=%d reference_nodes=%d target_radius=%.3e target_expected=%d action=%s\n",
+            nodes,
+            reference_nodes,
+            config.radius,
+            target_expected,
+            string(trace.action),
+        )
+        for row in rows
+            @printf(
+                "  radius=%.3e expected=%d status=%s accepted=%s matched=%d visible=%.3e contraction=%.3e\n",
+                row.radius,
+                row.expected,
+                string(row.status),
+                string(row.acceptance.accepted),
+                row.refined_matched,
+                row.refined_defect.visible,
+                row.schedule.visible_contraction,
+            )
+        end
+    end
+
+    (
+        target_expected=target_expected,
+        reference_nodes=reference_nodes,
+        nodes=nodes,
+        radius_ladder=radius_ladder,
+        rows=rows,
+        trace=trace,
+    )
+end
