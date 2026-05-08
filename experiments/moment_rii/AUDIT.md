@@ -384,9 +384,10 @@ Prompt-to-artifact checklist:
 - Hard-case validation:
   the Schrodinger domain-decomposition packet diagnostics are covered by the
   focused test command `nix develop --command just test --slow 'packet'`.
-  The latest run passed 70 assertions in `test/fast/nonlinear.jl`, including
+  The latest run passed 81 assertions in `test/fast/nonlinear.jl`, including
   packet-visible defect tracking, packet policy steering, product merge policy,
-  schedule monitor fields, and trial/test compatibility.
+  schedule monitor fields, trial/test compatibility, and the fixed-target
+  chart guard.
 - Containment:
   all implementation remains under `experiments/moment_rii`, with tests in
   `test/fast/nonlinear.jl`.
