@@ -326,7 +326,7 @@ gaps against the moment realization bases.
 
 The first policy use of this information is
 `run_fused_schrodinger_dd_packet_policy_diagnostic`. It maps
-`packet_visible_defect` to `increase_nodes_or_refine_chart`,
+`packet_visible_defect` to `increase_contour_resolution`,
 `packet_invisible_acceptance_gap` to `refine_extraction_or_acceptance`, and
 `accepted_visible_removed` to `accept`. This is not yet a complete adaptive
 parameter controller, but it demonstrates that the Lean-facing split is already
@@ -361,7 +361,7 @@ Julia experiment.
 The update-stage steering is now explicit:
 
 - visible defect or missing visible contraction means rebuild the packet/update
-  geometry by increasing contour resolution or refining the chart;
+  geometry by increasing contour resolution;
 - invisible packet defect with failed contraction/correction-coordinate checks
   means continue the local repair schedule;
 - invisible packet defect with failed membership or residual checks means
@@ -384,12 +384,13 @@ consume a candidate chart/node ladder, classify the packet defect, choose the
 update stage that should receive more work, and stop only when the acceptance
 envelope passes.
 
-The chart-ladder diagnostic adds a necessary guard to that steering story:
+The chart-ladder diagnostic is a negative control, not an automatic strategy:
 changing the chart radius can make a low-node DD solve acceptable by changing
 which spectral packet is being solved. The packet policy therefore treats
 accepted changed-count charts as `chart_changes_packet`, not as acceptance for
 the original target. For fixed-target steering, the target count/packet identity
-has to stay part of the acceptance envelope.
+has to stay part of the acceptance envelope, and contour resolution is the safe
+first response to a packet-visible defect.
 
 ## Closest Known Proof Language
 
@@ -530,8 +531,13 @@ The constants must depend on:
 - nonnormal left/right eigenvector conditioning.
 
 Status: not proved. The sparse diagonal and rank-deficient analytic diagnostics
-show exactly the behavior the lemma should explain, but they are not proof.
-This lemma is the current theorem gap.
+show exactly the behavior the lemma should explain, but they are not proof. The
+new correction-space diagnostic sharpens the numerical target: on the
+rank-deficient analytic chart, the Ritz components outside the old trial/test
+spaces after successful re-extraction are contained in the residual-Laurent
+enrichment spaces to roundoff. This supports the "contains useful correction
+directions" form of the lemma, while still not proving the analytic
+perturbation estimate. This lemma remains the current theorem gap.
 
 ### Minimal Sufficient Form Of Lemma 5
 

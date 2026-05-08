@@ -168,7 +168,7 @@ end
     )
     visible_defect = (
         status=:packet_visible_defect,
-        action=:increase_nodes_or_refine_chart,
+        action=:increase_contour_resolution,
         update_stage=:rebuild_packet_update,
         acceptance=rejected,
     )
@@ -188,7 +188,7 @@ end
 
     rebuild = merge_packet_policy_reports((invisible_gap, visible_defect))
     @test !rebuild.accepted
-    @test rebuild.action === :increase_nodes_or_refine_chart
+    @test rebuild.action === :increase_contour_resolution
     @test rebuild.update_stage === :rebuild_packet_update
     @test rebuild.component_update_stages == (:continue_local_repair_schedule, :rebuild_packet_update)
 end
@@ -692,7 +692,7 @@ end
 
     @test result.expected == 13
     @test coarse.status === :packet_visible_defect
-    @test coarse.action === :increase_nodes_or_refine_chart
+    @test coarse.action === :increase_contour_resolution
     @test coarse.update_stage === :rebuild_packet_update
     @test !coarse.acceptance.accepted
     @test !coarse.acceptance.visible_ok
@@ -1707,6 +1707,22 @@ end
     @test result.compressed_stats.left_residual_rank < result.full_stats.left_residual_rank
     @test result.compressed_stats.right_candidate_cols < result.full_stats.right_candidate_cols
     @test result.compressed_stats.left_candidate_cols < result.full_stats.left_candidate_cols
+end
+
+@testitem "experimental moment RII: residual Laurent enrichment contains Ritz corrections" tags=[:slow] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_residual_laurent_correction_space_diagnostic(; print_rows=false)
+
+    @test result.expected == 20
+    @test result.initial.matched == 0
+    @test result.updated.matched == result.expected
+    @test result.updated.spurious_good == 0
+    @test result.right_correction_norm > 1e-3
+    @test result.left_correction_norm > 1e-3
+    @test result.right_added_dim == result.stats.right_residual_rank
+    @test result.left_added_dim == result.stats.left_residual_rank
+    @test result.max_gap <= 1e-12
 end
 
 @testitem "experimental moment RII: residual Laurent update is residual-coordinate invariant" tags=[:slow] begin

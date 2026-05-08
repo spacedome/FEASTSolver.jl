@@ -121,7 +121,7 @@ end
 function packet_defect_policy_action(status, acceptance)
     acceptance.accepted && return :accept
     status === :accepted_visible_removed && return :accept
-    status === :packet_visible_defect && return :increase_nodes_or_refine_chart
+    status === :packet_visible_defect && return :increase_contour_resolution
     status === :packet_invisible_acceptance_gap && return :refine_extraction_or_acceptance
     :inspect
 end
@@ -141,7 +141,7 @@ function packet_update_stage(row)
 end
 
 function merged_packet_action(actions)
-    :increase_nodes_or_refine_chart in actions && return :increase_nodes_or_refine_chart
+    :increase_contour_resolution in actions && return :increase_contour_resolution
     :refine_extraction_or_acceptance in actions && return :refine_extraction_or_acceptance
     :accept in actions && all(==(:accept), actions) && return :accept
     :inspect
@@ -209,7 +209,7 @@ function packet_chart_ladder_trace(rows, target_expected)
         action = :refine_extraction_or_acceptance
         selected = nothing
     else
-        action = :increase_nodes_or_refine_chart
+        action = :increase_contour_resolution
         selected = nothing
     end
     (

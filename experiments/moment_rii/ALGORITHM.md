@@ -627,6 +627,13 @@ that setting.
   preserving the updated right/left physical spaces to roundoff projection
   gaps. This pins residual compression as an efficiency transformation, not a
   numerical branch of the algorithm.
+- Correction-space diagnostic: on the same rank-deficient analytic chart, the
+  reduced extraction initially recovers no target roots, while one
+  residual-Laurent update recovers all 20. The components of the new right and
+  left Ritz vectors outside the old trial/test spaces lie in the added
+  residual-Laurent enrichment spaces to roundoff. This is the closest current
+  numerical proxy for Lemma 5: the update is not only improving residuals, it
+  is supplying the physical correction directions used by re-extraction.
 - Residual-coordinate invariance: the reduced Ritz residual columns can be
   mixed by independent nonsingular right/left coordinate changes before
   compression, and the residual-Laurent update still recovers the same roots
@@ -774,7 +781,7 @@ that setting.
   than residual norms alone.
 - Fused Schrodinger/DD packet policy diagnostic: the packet-visible status now
   drives a first action policy. `packet_visible_defect` means increase contour
-  nodes or refine the chart, `packet_invisible_acceptance_gap` means the packet
+  resolution, `packet_invisible_acceptance_gap` means the packet
   is essentially right but extraction/acceptance needs work, and
   `accepted_visible_removed` accepts the solve. On the current DD sweep this
   policy rejects 64 nodes, flags 96 nodes as an acceptance/refinement gap, and
@@ -800,9 +807,9 @@ that setting.
   trial/test compatibility gaps, mirroring the Lean boundary where right packet
   vectors stay in the declared physical trial space and left packet vectors
   stay in the declared physical test space. A companion chart-ladder diagnostic
-  guards target identity: if a changed chart accepts only after changing the
-  spectral packet count, the policy reports `chart_changes_packet` rather than
-  accepting the original fixed-target solve.
+  is kept as a negative control for target identity: if a changed chart accepts
+  only after changing the spectral packet count, the policy reports
+  `chart_changes_packet` rather than accepting the original fixed-target solve.
 - Sparse Schrodinger remote stored-factor smoke: the same realistic sparse
   Schrodinger control runs through persistent worker-owned contour partitions.
   The worker factors and node-local solve buffers are created once on the first

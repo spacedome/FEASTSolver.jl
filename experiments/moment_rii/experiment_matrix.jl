@@ -4774,6 +4774,101 @@ function run_residual_laurent_low_rank_equivalence_diagnostic(;
     result
 end
 
+function correction_component_membership_gap(new_vectors, old_basis, enriched_basis; ranktol=1e-10)
+    Qold, _ = physical_basis_from_columns(old_basis; ranktol=ranktol)
+    correction = new_vectors - Qold * (adjoint(Qold) * new_vectors)
+    correction_norm = norm(correction)
+    correction_norm <= eps(Float64) && return (gap=0.0, correction_norm=0.0, added_dim=0)
+    added_raw = enriched_basis - Qold * (adjoint(Qold) * enriched_basis)
+    Qadded, _ = physical_basis_from_columns(added_raw; ranktol=ranktol)
+    size(Qadded, 2) == 0 && return (gap=1.0, correction_norm=correction_norm, added_dim=0)
+    gap = norm(correction - Qadded * (adjoint(Qadded) * correction)) / correction_norm
+    (gap=gap, correction_norm=correction_norm, added_dim=size(Qadded, 2))
+end
+
+function run_residual_laurent_correction_space_diagnostic(;
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    cases = (scalar_sine_case(), scalar_cosine_case(), scalar_shifted_sine_case())
+    chart = ContourChart(0.0 + 0.0im, 10.0)
+    ctx = analytic_context(cases, chart, similarity_analytic_tools)
+    basis = MomentBasisConfig(moments=4, nodes=8, ranktol=0.5, seed=9911)
+    extractor = ReducedExtractorConfig(;
+        extractor=:loewner_counted,
+        determinant_nodes=512,
+        determinant_capacity=64,
+        reduced_moments=12,
+        reduced_nodes=512,
+        loewner_points=6,
+        loewner_radius=1.3,
+        residual_normalization=:vector,
+    )
+    update = ResidualUpdateConfig(;
+        moment_count=1,
+        rii_nodes=128,
+        residual_ranktol=1e-10,
+        compression_ranktol=1e-10,
+    )
+    trial0 = initial_dual_trial_spaces(ctx, chart, basis)
+    extraction0 = extract_reduced_nep(ctx, trial0, chart, extractor)
+    summary0 = dual_scalar_rii_summary(extraction0, ctx.expected; residual_tol=residual_tol, match_atol=match_atol)
+    trial1, stats = residual_laurent_update(ctx, trial0, extraction0, chart, update)
+    extraction1 = extract_reduced_nep(ctx, trial1, chart, extractor)
+    summary1 = dual_scalar_rii_summary(extraction1, ctx.expected; residual_tol=residual_tol, match_atol=match_atol)
+    selected = extraction1.inside .& (extraction1.residuals .<= residual_tol)
+    right_gap = correction_component_membership_gap(
+        Matrix(extraction1.right_vectors[:, selected]),
+        trial0.X,
+        trial1.X;
+        ranktol=1e-10,
+    )
+    left_gap = correction_component_membership_gap(
+        Matrix(extraction1.left_vectors[:, selected]),
+        trial0.Y,
+        trial1.Y;
+        ranktol=1e-10,
+    )
+    result = (
+        expected=length(ctx.expected),
+        initial=summary0,
+        updated=summary1,
+        right_gap=right_gap.gap,
+        left_gap=left_gap.gap,
+        max_gap=max(right_gap.gap, left_gap.gap),
+        right_correction_norm=right_gap.correction_norm,
+        left_correction_norm=left_gap.correction_norm,
+        right_added_dim=right_gap.added_dim,
+        left_added_dim=left_gap.added_dim,
+        stats=stats,
+    )
+    if print_rows
+        println()
+        println("Residual Laurent correction-space diagnostic")
+        println("  probes Lemma 5: new Ritz-vector components outside the old trial/test spaces should lie in the residual-Laurent enrichment spaces")
+        @printf(
+            "  expected=%d initial=%d/%d max=%.3e updated=%d/%d max=%.3e correction_gap=(%.3e, %.3e) correction_norm=(%.3e, %.3e) added_dim=(%d,%d) residual_rank=(%d,%d)\n",
+            result.expected,
+            result.initial.matched,
+            result.expected,
+            result.initial.max_residual,
+            result.updated.matched,
+            result.expected,
+            result.updated.max_residual,
+            result.right_gap,
+            result.left_gap,
+            result.right_correction_norm,
+            result.left_correction_norm,
+            result.right_added_dim,
+            result.left_added_dim,
+            result.stats.right_residual_rank,
+            result.stats.left_residual_rank,
+        )
+    end
+    result
+end
+
 function run_residual_laurent_residual_coordinate_invariance_diagnostic(;
     residual_tol=1e-8,
     match_atol=1e-6,
