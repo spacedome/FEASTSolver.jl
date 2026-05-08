@@ -839,6 +839,7 @@ function run_fused_schrodinger_dd_packet_defect_diagnostic(;
         raw_split = projector_defect_split(Praw, Preference)
         refined_split = projector_defect_split(Prefined, Preference)
         schedule = packet_schedule_proxy(Praw, Prefined, Preference)
+        monitor = packet_schedule_monitor(schedule; inner_steps=nodes)
         row = (
             nodes=nodes,
             rank=candidate.rank,
@@ -851,6 +852,7 @@ function run_fused_schrodinger_dd_packet_defect_diagnostic(;
             raw_defect=raw_split,
             refined_defect=refined_split,
             schedule=schedule,
+            monitor=monitor,
         )
         status = packet_defect_status(row, reference.target_count)
         acceptance = packet_acceptance_certificate(row, reference.target_count)
@@ -871,7 +873,7 @@ function run_fused_schrodinger_dd_packet_defect_diagnostic(;
         )
         for row in rows
             @printf(
-                "  nodes=%d status=%s rank=%d raw_good=%d raw_max=%.3e refined=%d/%d refined_max=%.3e raw_visible=%.3e refined_visible=%.3e contraction=%.3e q_current=%.3e visible_repair=%.3e coord_relerr=%.3e\n",
+                "  nodes=%d status=%s rank=%d raw_good=%d raw_max=%.3e refined=%d/%d refined_max=%.3e raw_visible=%.3e refined_visible=%.3e contraction=%.3e q_current=%.3e q_error=%.3e visible_repair=%.3e repair=%.3e coord_relerr=%.3e\n",
                 row.nodes,
                 string(row.status),
                 row.rank,
@@ -884,7 +886,9 @@ function run_fused_schrodinger_dd_packet_defect_diagnostic(;
                 row.refined_defect.visible,
                 row.schedule.visible_contraction,
                 row.schedule.q_current,
+                row.schedule.q_error,
                 row.schedule.visible_repair,
+                row.monitor.observed_scheduled_repair,
                 row.schedule.correction_coordinate_relative_error,
             )
         end
@@ -924,7 +928,7 @@ function run_fused_schrodinger_dd_packet_policy_diagnostic(;
         println("  Lean-guided action policy using packet-visible defect status")
         for row in rows
             @printf(
-                "  nodes=%d status=%s action=%s update_stage=%s accepted=%s score=%d/%d matched=%d/%d visible=%.3e contraction=%.3e q_current=%.3e coord_relerr=%.3e\n",
+                "  nodes=%d status=%s action=%s update_stage=%s accepted=%s score=%d/%d matched=%d/%d visible=%.3e contraction=%.3e q_current=%.3e q_error=%.3e repair=%.3e outer_budget=%.3e coord_relerr=%.3e\n",
                 row.nodes,
                 string(row.status),
                 string(row.action),
@@ -937,6 +941,9 @@ function run_fused_schrodinger_dd_packet_policy_diagnostic(;
                 row.refined_defect.visible,
                 row.schedule.visible_contraction,
                 row.schedule.q_current,
+                row.schedule.q_error,
+                row.monitor.observed_scheduled_repair,
+                row.monitor.outer_visible_budget,
                 row.schedule.correction_coordinate_relative_error,
             )
         end

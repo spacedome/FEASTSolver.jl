@@ -52,6 +52,24 @@ function packet_schedule_proxy(Praw, Prefined, Preference)
     )
 end
 
+function packet_schedule_monitor(schedule; inner_steps, feast_ratio=nothing, outer_index=1, contraction=schedule.visible_contraction)
+    inner_multiplier = feast_ratio === nothing ? nothing : feast_ratio^inner_steps
+    inner_budget = inner_multiplier === nothing ? nothing : inner_multiplier * (schedule.q_current + schedule.q_error)
+    outer_budget = contraction^outer_index * schedule.visible_error
+    (
+        biterate=schedule.q_current,
+        brepair=schedule.q_error,
+        inner_steps=inner_steps,
+        feast_ratio=feast_ratio,
+        inner_budget=inner_budget,
+        outer_index=outer_index,
+        contraction=contraction,
+        outer_visible_budget=outer_budget,
+        observed_scheduled_repair=schedule.observed_repair,
+        observed_total_budget=inner_budget === nothing ? outer_budget : inner_budget + outer_budget,
+    )
+end
+
 function packet_defect_status(row, expected; visible_tol=1e-8)
     if row.refined_matched == expected && row.refined_defect.visible <= visible_tol
         :accepted_visible_removed

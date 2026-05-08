@@ -690,6 +690,12 @@ end
     @test coarse.update_stage === :rebuild_packet_update
     @test !coarse.acceptance.accepted
     @test !coarse.acceptance.visible_ok
+    @test coarse.monitor.inner_steps == coarse.nodes
+    @test coarse.monitor.biterate == coarse.schedule.q_current
+    @test coarse.monitor.brepair == coarse.schedule.q_error
+    @test coarse.monitor.inner_budget === nothing
+    @test coarse.monitor.observed_scheduled_repair == coarse.schedule.observed_repair
+    @test coarse.monitor.outer_visible_budget >= coarse.schedule.refined_visible_error
     @test coarse.schedule.visible_contraction > 0.5
     @test middle.status === :packet_invisible_acceptance_gap
     @test middle.action === :refine_extraction_or_acceptance
@@ -697,6 +703,7 @@ end
     @test !middle.acceptance.accepted
     @test middle.acceptance.visible_ok
     @test !middle.acceptance.membership_ok
+    @test middle.monitor.outer_visible_budget >= middle.schedule.refined_visible_error
     @test middle.schedule.visible_contraction <= 1e-5
     @test middle.schedule.correction_coordinate_relative_error <= 1e-5
     @test fine.status === :accepted_visible_removed
@@ -704,6 +711,7 @@ end
     @test fine.update_stage === :accept
     @test fine.acceptance.accepted
     @test fine.acceptance.score == fine.acceptance.total
+    @test fine.monitor.outer_visible_budget >= fine.schedule.refined_visible_error
     @test fine.schedule.visible_contraction <= 1e-7
     @test fine.schedule.correction_coordinate_relative_error <= 1e-7
     @test result.selected_nodes == fine.nodes

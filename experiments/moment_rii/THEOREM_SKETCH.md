@@ -311,7 +311,12 @@ The reusable Julia machinery for this handoff now lives in `packet_monitor.jl`.
 Hard cases such as the Schrodinger/DD interface operator supply the packet
 states and reference projectors; the monitor then provides the visible/invisible
 split, correction-coordinate proxy, acceptance envelope, update-stage steering,
-and explicit product/direct-sum merge policy.
+explicit schedule-monitor fields, and product/direct-sum merge policy. The
+current schedule monitor records the Lean quantities `Biterate`, `Brepair`,
+`innerSteps`, observed repair norm, and the observed outer visible-error budget.
+It deliberately leaves the FEAST-ratio inner budget optional because estimating
+that ratio requires a problem-specific inside/outside separation, not a generic
+packet-projector norm.
 
 The first policy use of this information is
 `run_fused_schrodinger_dd_packet_policy_diagnostic`. It maps

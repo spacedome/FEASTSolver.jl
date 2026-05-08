@@ -791,7 +791,10 @@ that setting.
   in `packet_monitor.jl`; the DD case is the hard validation case, not the only
   consumer. Product/direct-sum packet reports are merged by an explicit
   conservative policy rather than by silently treating componentwise Lean
-  certificates as one global schedule.
+  certificates as one global schedule. The monitor also exposes the Lean
+  schedule terms `Biterate`, `Brepair`, `innerSteps`, observed repair norm, and
+  observed outer visible budget; the FEAST-ratio inner budget is optional
+  because it needs a problem-specific separation estimate.
 - Sparse Schrodinger remote stored-factor smoke: the same realistic sparse
   Schrodinger control runs through persistent worker-owned contour partitions.
   The worker factors and node-local solve buffers are created once on the first

@@ -167,6 +167,10 @@ global block Newton, or rational-coordinate-only fixes.
   extraction/acceptance, or accept. The reusable monitor now lives in
   `packet_monitor.jl`, and product/direct-sum packet schedules require an
   explicit conservative merge policy rather than an implicit global certificate.
+  It also exposes the Lean schedule-monitor quantities `Biterate`, `Brepair`,
+  `innerSteps`, observed repair norm, and observed outer visible-error budget;
+  the FEAST-ratio inner budget remains optional pending a problem-specific
+  separation estimate.
   The experiment deliberately does not yet provide full reusable sparse
   workspaces, broad realistic sparse gallery coverage, or publication-level
   scaling claims.
