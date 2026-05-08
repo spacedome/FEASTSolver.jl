@@ -316,6 +316,83 @@ Jacobi-Davidson methods do not already contain the same update in different
 notation. Until then the status remains "strong candidate with a sharply
 identified theorem gap", not "solved decisively."
 
+## 2026-05-08 Lean Handoff Coverage Audit
+
+Objective restatement for this pass: consume
+`~/Code/LEAN_FEAST/ALGORITHM_HANDOFF.md`, mirror the experiment-facing Lean
+packet diagnostics inside the Julia moment-NLFEAST experiment, validate those
+diagnostics numerically on a genuinely hard case, decide which pieces look
+algorithmic rather than merely explanatory, and keep everything inside
+`experiments/moment_rii`.
+
+Prompt-to-artifact checklist:
+
+- Read and incorporate the Lean handoff:
+  `ALGORITHM_HANDOFF.md`, `OBJECTIVE_EVIDENCE.md`, and the Lean README packet
+  sections were inspected. The mirrored Julia artifact is `packet_monitor.jl`.
+- Primary certificate boundary `Corr o Rlin = P_packet + E`:
+  implemented numerically as packet projector defect splitting in
+  `projector_defect_split` and exercised by
+  `run_fused_schrodinger_dd_packet_defect_diagnostic`.
+- Visible-error diagnostic `P_packet(E current)`:
+  represented by packet-visible projector defect and tested on the
+  Schrodinger/DD sweep, where the 64-node case remains packet-visible bad and
+  the 128-node case removes the visible defect to roundoff.
+- Correction-coordinate monitor
+  `P_packet(correction current) = -P_packet(E current)`:
+  represented by `packet_schedule_proxy` via
+  `correction_coordinate_relative_error`, with tests requiring small relative
+  error on the 96- and 128-node DD cases.
+- Local visible-error contraction hypothesis:
+  represented by `visible_contraction` and tested as the DD policy separator:
+  the 64-node case does not contract, while 96 and 128 nodes contract the
+  packet-visible component by many orders of magnitude.
+- Fused moment-role separation:
+  preserved by construction. Positive realization moments define the packet
+  projectors and reduced extraction; inverse-Laurent residual repair is
+  monitored separately through schedule fields and visible repair quantities.
+- Schedule-monitor quantities:
+  `packet_schedule_monitor` now records `Biterate`, `Brepair`, `innerSteps`,
+  observed repair norm, and observed outer visible budget. The FEAST-ratio
+  inner budget is deliberately optional because it requires a problem-specific
+  inside/outside separation estimate.
+- Trial/test compatibility:
+  `packet_trial_test_compatibility` records right-trial and left-test
+  membership gaps; the DD packet tests require these gaps to stay near
+  roundoff.
+- Extractor acceptance:
+  `packet_acceptance_certificate` uses a score envelope over rank,
+  membership, visible defect, contraction, correction-coordinate agreement,
+  and residual acceptance, rather than raw rank alone.
+- Products/direct sums:
+  `merge_packet_policy_reports` implements an explicit conservative merge
+  policy. This matches Lean's warning that product schedule monitors do not
+  automatically define a global schedule.
+- Algorithmic steering:
+  `packet_update_stage` and `packet_steering_trace` turn packet information
+  into update-stage actions: rebuild packet/update geometry, continue local
+  repair, improve extraction/acceptance, or accept.
+- Hard-case validation:
+  the Schrodinger domain-decomposition packet diagnostics are covered by the
+  focused test command `nix develop --command just test --slow 'packet'`.
+  The latest run passed 70 assertions in `test/fast/nonlinear.jl`, including
+  packet-visible defect tracking, packet policy steering, product merge policy,
+  schedule monitor fields, and trial/test compatibility.
+- Containment:
+  all implementation remains under `experiments/moment_rii`, with tests in
+  `test/fast/nonlinear.jl`.
+
+Audit result: the Lean handoff has been incorporated at the experiment layer
+as diagnostics plus concrete steering signals. The pieces that look
+algorithmically core are the two-sided packet projector, visible/invisible
+defect split, correction-coordinate monitor, contraction monitor, score
+acceptance envelope, trial/test compatibility monitor, and explicit
+stage/action policy. The non-claims remain important: this is not a global
+convergence proof, not a public solver API, and not a finished publication
+claim. The remaining research gap is still the local perturbation/enrichment
+estimate identified in `THEOREM_SKETCH.md`, plus broader publication-level
+novelty review.
+
 ## 2026-05-03 Active Checkpoint
 
 The current implementation/research state should be treated as a principled
