@@ -787,7 +787,11 @@ that setting.
   agreement, and physical residuals all have to pass before the run is
   accepted. It also emits an update-stage steering recommendation:
   rebuild packet/update geometry, continue local repair, improve reduced
-  extraction/acceptance, or accept.
+  extraction/acceptance, or accept. The reusable monitor/policy code now lives
+  in `packet_monitor.jl`; the DD case is the hard validation case, not the only
+  consumer. Product/direct-sum packet reports are merged by an explicit
+  conservative policy rather than by silently treating componentwise Lean
+  certificates as one global schedule.
 - Sparse Schrodinger remote stored-factor smoke: the same realistic sparse
   Schrodinger control runs through persistent worker-owned contour partitions.
   The worker factors and node-local solve buffers are created once on the first

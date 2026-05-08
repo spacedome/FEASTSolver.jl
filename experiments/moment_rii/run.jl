@@ -7390,6 +7390,7 @@ end
 
 include("policy.jl")
 include("experiment_matrix.jl")
+include("packet_monitor.jl")
 include("fused_hard_cases.jl")
 
 function main()

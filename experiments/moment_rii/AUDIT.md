@@ -164,7 +164,9 @@ global block Newton, or rational-coordinate-only fixes.
   contraction hypothesis that Lean keeps explicit. It now emits update-stage
   steering as well, so the Lean geometry can decide whether to rebuild the
   packet/update geometry, continue local repair, improve reduced
-  extraction/acceptance, or accept.
+  extraction/acceptance, or accept. The reusable monitor now lives in
+  `packet_monitor.jl`, and product/direct-sum packet schedules require an
+  explicit conservative merge policy rather than an implicit global certificate.
   The experiment deliberately does not yet provide full reusable sparse
   workspaces, broad realistic sparse gallery coverage, or publication-level
   scaling claims.

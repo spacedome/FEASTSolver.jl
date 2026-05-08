@@ -307,6 +307,12 @@ drives the packet-visible defect to roundoff while recovering all 13 roots; at
 64 nodes, the refined solve remains underresolved and the packet-visible defect
 stays large.
 
+The reusable Julia machinery for this handoff now lives in `packet_monitor.jl`.
+Hard cases such as the Schrodinger/DD interface operator supply the packet
+states and reference projectors; the monitor then provides the visible/invisible
+split, correction-coordinate proxy, acceptance envelope, update-stage steering,
+and explicit product/direct-sum merge policy.
+
 The first policy use of this information is
 `run_fused_schrodinger_dd_packet_policy_diagnostic`. It maps
 `packet_visible_defect` to `increase_nodes_or_refine_chart`,
@@ -353,6 +359,13 @@ The update-stage steering is now explicit:
 
 This is the main algorithmic use of the Lean geometry so far: not only
 diagnosing failure, but selecting which update stage should receive more work.
+
+The product/direct-sum Lean boundary is intentionally handled by an explicit
+merge policy rather than by pretending a componentwise certificate supplies one
+global schedule. The experimental rule is conservative: any component with a
+packet-visible defect rebuilds the packet/update geometry; otherwise local
+repair gaps outrank reduced extraction gaps, and only componentwise acceptance
+accepts the merged packet.
 
 ## Closest Known Proof Language
 

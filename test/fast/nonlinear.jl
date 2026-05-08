@@ -149,6 +149,50 @@ end
     @test :tighten_or_refine_high_residual_charts in high_residual.actions
 end
 
+@testitem "experimental moment RII: packet product policy merges explicit stages" begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    accepted = (accepted=true, score=6, total=6)
+    rejected = (accepted=false, score=4, total=6)
+    clean = (
+        status=:accepted_visible_removed,
+        action=:accept,
+        update_stage=:accept,
+        acceptance=accepted,
+    )
+    invisible_gap = (
+        status=:packet_invisible_acceptance_gap,
+        action=:refine_extraction_or_acceptance,
+        update_stage=:continue_local_repair_schedule,
+        acceptance=rejected,
+    )
+    visible_defect = (
+        status=:packet_visible_defect,
+        action=:increase_nodes_or_refine_chart,
+        update_stage=:rebuild_packet_update,
+        acceptance=rejected,
+    )
+
+    all_clean = merge_packet_policy_reports((clean, clean))
+    @test all_clean.accepted
+    @test all_clean.action === :accept
+    @test all_clean.update_stage === :accept
+    @test all_clean.score == 12
+    @test all_clean.total == 12
+
+    local_repair = merge_packet_policy_reports((clean, invisible_gap))
+    @test !local_repair.accepted
+    @test local_repair.action === :refine_extraction_or_acceptance
+    @test local_repair.update_stage === :continue_local_repair_schedule
+    @test local_repair.component_statuses == (:accepted_visible_removed, :packet_invisible_acceptance_gap)
+
+    rebuild = merge_packet_policy_reports((invisible_gap, visible_defect))
+    @test !rebuild.accepted
+    @test rebuild.action === :increase_nodes_or_refine_chart
+    @test rebuild.update_stage === :rebuild_packet_update
+    @test rebuild.component_update_stages == (:continue_local_repair_schedule, :rebuild_packet_update)
+end
+
 @testitem "experimental moment RII: numerics config lowers to pipeline configs" begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 
