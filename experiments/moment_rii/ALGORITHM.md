@@ -732,8 +732,13 @@ that setting.
   Schrodinger sparse gallery operator is exercised on the established
   `center=-35`, `radius=4.2` region at small size. A full-operator contour
   count estimates three target eigenvalues, and the residual-Laurent update
-  improves all three action residuals to the strict threshold. This is
-  realistic sparse NEP evidence, not a scaling benchmark.
+  improves all three action residuals to the strict threshold. With the
+  tightened test tolerance, the initial extraction has the right inside count
+  but no accepted residuals, while one residual-Laurent update accepts all
+  three. The correction-space monitor reports only tiny new Ritz-vector
+  components, so this is a near-fixed-point hard-case repair check rather than
+  the main Lemma 5 correction-direction evidence. This is realistic sparse NEP
+  evidence, not a scaling benchmark.
 - Fused Schrodinger domain-decomposition diagnostic: a one-dimensional
   finite-difference Schrodinger operator is split into subdomains and local
   interiors are eliminated, producing a rational Schur-complement NEP on the

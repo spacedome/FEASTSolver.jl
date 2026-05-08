@@ -1174,6 +1174,19 @@ function run_sparse_schrodinger_moment_gallery_smoke(;
     trial1, stats = residual_laurent_update(problem.ctx, trial0, extraction0, problem.chart, update)
     extraction1 = extract_reduced_nep(problem.ctx, trial1, problem.chart, extractor)
     updated = extraction_count_summary(extraction1; residual_tol=residual_tol)
+    selected = extraction1.inside .& (extraction1.residuals .<= residual_tol)
+    right_gap = correction_component_membership_gap(
+        Matrix(extraction1.right_vectors[:, selected]),
+        trial0.X,
+        trial1.X;
+        ranktol=1e-10,
+    )
+    left_gap = correction_component_membership_gap(
+        Matrix(extraction1.left_vectors[:, selected]),
+        trial0.Y,
+        trial1.Y;
+        ranktol=1e-10,
+    )
     result = (
         n=n,
         sparse_matrix=problem.ctx.Tmatrix(center + radius * im) isa AbstractSparseMatrix,
@@ -1192,6 +1205,13 @@ function run_sparse_schrodinger_moment_gallery_smoke(;
                 left_candidate_cols=stats.left_candidate_cols,
                 right_basis_cols=size(trial1.X, 2),
                 left_basis_cols=size(trial1.Y, 2),
+                right_correction_gap=right_gap.gap,
+                left_correction_gap=left_gap.gap,
+                max_correction_gap=max(right_gap.gap, left_gap.gap),
+                right_correction_norm=right_gap.correction_norm,
+                left_correction_norm=left_gap.correction_norm,
+                right_added_dim=right_gap.added_dim,
+                left_added_dim=left_gap.added_dim,
             ),
             updated,
         ),
@@ -1201,7 +1221,7 @@ function run_sparse_schrodinger_moment_gallery_smoke(;
         println("Sparse Schrodinger gallery moment smoke")
         println("  realistic sparse moving-boundary Schrodinger gallery operator; validates count and residual repair")
         @printf(
-            "  n=%d count=%d err=%.3e initial_good=%d/%d max=%.3e updated_good=%d/%d max=%.3e basis=(%d,%d)\n",
+            "  n=%d count=%d err=%.3e initial_good=%d/%d max=%.3e updated_good=%d/%d max=%.3e basis=(%d,%d) correction_gap=(%.3e,%.3e)\n",
             result.n,
             result.target_count,
             result.target_count_error,
@@ -1213,6 +1233,8 @@ function run_sparse_schrodinger_moment_gallery_smoke(;
             result.updated.max_inside_residual,
             result.updated.right_basis_cols,
             result.updated.left_basis_cols,
+            result.updated.right_correction_gap,
+            result.updated.left_correction_gap,
         )
     end
     result

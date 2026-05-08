@@ -574,19 +574,22 @@ end
 @testitem "experimental moment RII: sparse Schrodinger gallery count and residual repair" tags=[:slow] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 
-    result = run_sparse_schrodinger_moment_gallery_smoke(; print_rows=false)
+    result = run_sparse_schrodinger_moment_gallery_smoke(; residual_tol=1e-8, print_rows=false)
 
     @test result.sparse_matrix
     @test result.prototype_sparse
     @test result.target_count == 3
     @test result.target_count_reliable
     @test result.initial.inside == result.target_count
+    @test result.initial.good == 0
     @test result.updated.inside == result.target_count
     @test result.updated.good == result.target_count
-    @test result.updated.max_inside_residual <= 1e-7
+    @test result.updated.max_inside_residual <= 1e-8
     @test result.updated.max_inside_residual < result.initial.max_inside_residual
     @test result.updated.right_residual_rank == result.target_count
     @test result.updated.left_residual_rank == result.target_count
+    @test result.updated.max_correction_gap <= 1e-4
+    @test max(result.updated.right_correction_norm, result.updated.left_correction_norm) <= 1e-8
 end
 
 @testitem "experimental moment RII: fused Schrodinger sweep identifies Tred cleanup role" tags=[:slow] begin
