@@ -333,6 +333,27 @@ contract the visible component by many orders of magnitude, with the correction
 coordinate matching the predicted negative visible-error bias. This is the
 current numerical hook for the Lean `LocalVisibleErrorContractionHypothesis`.
 
+The same handoff says extractor acceptance should not be raw rank thresholding.
+The packet policy now therefore carries a small score-envelope certificate:
+rank, accepted membership, packet-visible defect, visible-error contraction,
+correction-coordinate agreement, and physical residual acceptance must all
+pass before the action is `accept`. This keeps the Lean distinction between
+realization evidence, repair evidence, and accepted membership visible in the
+Julia experiment.
+
+The update-stage steering is now explicit:
+
+- visible defect or missing visible contraction means rebuild the packet/update
+  geometry by increasing contour resolution or refining the chart;
+- invisible packet defect with failed contraction/correction-coordinate checks
+  means continue the local repair schedule;
+- invisible packet defect with failed membership or residual checks means
+  improve reduced extraction or acceptance;
+- a full acceptance envelope accepts the local solve.
+
+This is the main algorithmic use of the Lean geometry so far: not only
+diagnosing failure, but selecting which update stage should receive more work.
+
 ## Closest Known Proof Language
 
 The closest adjacent proof language now appears to be Jacobi-Davidson and

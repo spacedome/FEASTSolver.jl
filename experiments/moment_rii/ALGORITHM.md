@@ -781,7 +781,13 @@ that setting.
   selects 128 nodes. The monitor also reports Lean handoff quantities:
   visible-error contraction and correction-coordinate relative error. In the
   current run, 64 nodes has contraction near one, while 96 and 128 nodes
-  contract the packet-visible component by many orders of magnitude.
+  contract the packet-visible component by many orders of magnitude. The
+  policy now uses an explicit acceptance envelope rather than raw rank alone:
+  rank, membership, visible defect, contraction, correction-coordinate
+  agreement, and physical residuals all have to pass before the run is
+  accepted. It also emits an update-stage steering recommendation:
+  rebuild packet/update geometry, continue local repair, improve reduced
+  extraction/acceptance, or accept.
 - Sparse Schrodinger remote stored-factor smoke: the same realistic sparse
   Schrodinger control runs through persistent worker-owned contour partitions.
   The worker factors and node-local solve buffers are created once on the first

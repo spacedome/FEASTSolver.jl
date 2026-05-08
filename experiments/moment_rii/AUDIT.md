@@ -161,7 +161,10 @@ global block Newton, or rational-coordinate-only fixes.
   when the visible defect is removed. After the Lean algorithm handoff, this
   wrapper also reports visible-error contraction and correction-coordinate
   relative error, giving a numerical proxy for the local visible-error
-  contraction hypothesis that Lean keeps explicit.
+  contraction hypothesis that Lean keeps explicit. It now emits update-stage
+  steering as well, so the Lean geometry can decide whether to rebuild the
+  packet/update geometry, continue local repair, improve reduced
+  extraction/acceptance, or accept.
   The experiment deliberately does not yet provide full reusable sparse
   workspaces, broad realistic sparse gallery coverage, or publication-level
   scaling claims.

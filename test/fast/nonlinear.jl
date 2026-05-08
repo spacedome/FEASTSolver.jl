@@ -643,13 +643,23 @@ end
     @test result.expected == 13
     @test coarse.status === :packet_visible_defect
     @test coarse.action === :increase_nodes_or_refine_chart
+    @test coarse.update_stage === :rebuild_packet_update
+    @test !coarse.acceptance.accepted
+    @test !coarse.acceptance.visible_ok
     @test coarse.schedule.visible_contraction > 0.5
     @test middle.status === :packet_invisible_acceptance_gap
     @test middle.action === :refine_extraction_or_acceptance
+    @test middle.update_stage === :continue_local_repair_schedule
+    @test !middle.acceptance.accepted
+    @test middle.acceptance.visible_ok
+    @test !middle.acceptance.membership_ok
     @test middle.schedule.visible_contraction <= 1e-5
     @test middle.schedule.correction_coordinate_relative_error <= 1e-5
     @test fine.status === :accepted_visible_removed
     @test fine.action === :accept
+    @test fine.update_stage === :accept
+    @test fine.acceptance.accepted
+    @test fine.acceptance.score == fine.acceptance.total
     @test fine.schedule.visible_contraction <= 1e-7
     @test fine.schedule.correction_coordinate_relative_error <= 1e-7
     @test result.selected_nodes == fine.nodes

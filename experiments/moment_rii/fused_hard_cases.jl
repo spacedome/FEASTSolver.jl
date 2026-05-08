@@ -853,11 +853,47 @@ function packet_defect_status(row, expected; visible_tol=1e-8)
     end
 end
 
-function packet_defect_policy_action(status)
+function packet_acceptance_certificate(row, expected; visible_tol=1e-8, contraction_tol=1e-7)
+    rank_ok = row.rank == expected
+    membership_ok = row.refined_matched == expected
+    visible_ok = row.refined_defect.visible <= visible_tol
+    contraction_ok = row.schedule.visible_contraction <= contraction_tol
+    correction_coordinate_ok = row.schedule.correction_coordinate_relative_error <= contraction_tol
+    residual_ok = row.refined_good == expected
+    accepted = rank_ok && membership_ok && visible_ok && contraction_ok && correction_coordinate_ok && residual_ok
+    (
+        accepted=accepted,
+        rank_ok=rank_ok,
+        membership_ok=membership_ok,
+        visible_ok=visible_ok,
+        contraction_ok=contraction_ok,
+        correction_coordinate_ok=correction_coordinate_ok,
+        residual_ok=residual_ok,
+        score=count((rank_ok, membership_ok, visible_ok, contraction_ok, correction_coordinate_ok, residual_ok)),
+        total=6,
+    )
+end
+
+function packet_defect_policy_action(status, acceptance)
+    acceptance.accepted && return :accept
     status === :accepted_visible_removed && return :accept
     status === :packet_visible_defect && return :increase_nodes_or_refine_chart
     status === :packet_invisible_acceptance_gap && return :refine_extraction_or_acceptance
     :inspect
+end
+
+function packet_update_stage(row)
+    if row.acceptance.accepted
+        return :accept
+    elseif !row.acceptance.visible_ok || row.schedule.visible_contraction > 0.5
+        return :rebuild_packet_update
+    elseif !row.acceptance.contraction_ok || !row.acceptance.correction_coordinate_ok
+        return :continue_local_repair_schedule
+    elseif !row.acceptance.membership_ok || !row.acceptance.residual_ok
+        return :improve_reduced_extraction_acceptance
+    else
+        return :inspect
+    end
 end
 
 function run_fused_schrodinger_dd_packet_defect_diagnostic(;
@@ -918,7 +954,10 @@ function run_fused_schrodinger_dd_packet_defect_diagnostic(;
             refined_defect=refined_split,
             schedule=schedule,
         )
-        merge(row, (status=packet_defect_status(row, reference.target_count),))
+        status = packet_defect_status(row, reference.target_count)
+        acceptance = packet_acceptance_certificate(row, reference.target_count)
+        staged = merge(row, (status=status, acceptance=acceptance))
+        merge(staged, (update_stage=packet_update_stage(staged),))
     end
 
     if print_rows
@@ -975,7 +1014,7 @@ function run_fused_schrodinger_dd_packet_policy_diagnostic(;
         print_rows=false,
     )
     rows = map(diagnostic.rows) do row
-        action = packet_defect_policy_action(row.status)
+        action = packet_defect_policy_action(row.status, row.acceptance)
         merge(row, (action=action,))
     end
     accepted_index = findfirst(row -> row.action === :accept, rows)
@@ -987,10 +1026,14 @@ function run_fused_schrodinger_dd_packet_policy_diagnostic(;
         println("  Lean-guided action policy using packet-visible defect status")
         for row in rows
             @printf(
-                "  nodes=%d status=%s action=%s matched=%d/%d visible=%.3e contraction=%.3e q_current=%.3e coord_relerr=%.3e\n",
+                "  nodes=%d status=%s action=%s update_stage=%s accepted=%s score=%d/%d matched=%d/%d visible=%.3e contraction=%.3e q_current=%.3e coord_relerr=%.3e\n",
                 row.nodes,
                 string(row.status),
                 string(row.action),
+                string(row.update_stage),
+                string(row.acceptance.accepted),
+                row.acceptance.score,
+                row.acceptance.total,
                 row.refined_matched,
                 diagnostic.expected,
                 row.refined_defect.visible,
