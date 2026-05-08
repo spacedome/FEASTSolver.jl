@@ -318,6 +318,12 @@ It deliberately leaves the FEAST-ratio inner budget optional because estimating
 that ratio requires a problem-specific inside/outside separation, not a generic
 packet-projector norm.
 
+The monitor also exposes the trial/test compatibility part of the Lean packet
+boundary: right packet vectors should remain in the declared physical trial
+space and left packet vectors should remain in the declared physical test
+space. In the DD fused diagnostic these are reported as right/left membership
+gaps against the moment realization bases.
+
 The first policy use of this information is
 `run_fused_schrodinger_dd_packet_policy_diagnostic`. It maps
 `packet_visible_defect` to `increase_nodes_or_refine_chart`,

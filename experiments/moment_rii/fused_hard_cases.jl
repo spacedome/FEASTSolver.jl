@@ -840,6 +840,20 @@ function run_fused_schrodinger_dd_packet_defect_diagnostic(;
         refined_split = projector_defect_split(Prefined, Preference)
         schedule = packet_schedule_proxy(Praw, Prefined, Preference)
         monitor = packet_schedule_monitor(schedule; inner_steps=nodes)
+        raw_compatibility = packet_trial_test_compatibility(
+            candidate.raw.right,
+            candidate.raw.left,
+            candidate.Xbasis,
+            candidate.Ybasis;
+            ranktol=config.ranktol,
+        )
+        refined_compatibility = packet_trial_test_compatibility(
+            candidate.refined.right,
+            candidate.refined.left,
+            candidate.Xbasis,
+            candidate.Ybasis;
+            ranktol=config.ranktol,
+        )
         row = (
             nodes=nodes,
             rank=candidate.rank,
@@ -853,6 +867,8 @@ function run_fused_schrodinger_dd_packet_defect_diagnostic(;
             refined_defect=refined_split,
             schedule=schedule,
             monitor=monitor,
+            raw_trial_test_compatibility=raw_compatibility,
+            refined_trial_test_compatibility=refined_compatibility,
         )
         status = packet_defect_status(row, reference.target_count)
         acceptance = packet_acceptance_certificate(row, reference.target_count)
@@ -873,7 +889,7 @@ function run_fused_schrodinger_dd_packet_defect_diagnostic(;
         )
         for row in rows
             @printf(
-                "  nodes=%d status=%s rank=%d raw_good=%d raw_max=%.3e refined=%d/%d refined_max=%.3e raw_visible=%.3e refined_visible=%.3e contraction=%.3e q_current=%.3e q_error=%.3e visible_repair=%.3e repair=%.3e coord_relerr=%.3e\n",
+                "  nodes=%d status=%s rank=%d raw_good=%d raw_max=%.3e refined=%d/%d refined_max=%.3e raw_visible=%.3e refined_visible=%.3e contraction=%.3e q_current=%.3e q_error=%.3e visible_repair=%.3e repair=%.3e compat=%.3e coord_relerr=%.3e\n",
                 row.nodes,
                 string(row.status),
                 row.rank,
@@ -889,6 +905,7 @@ function run_fused_schrodinger_dd_packet_defect_diagnostic(;
                 row.schedule.q_error,
                 row.schedule.visible_repair,
                 row.monitor.observed_scheduled_repair,
+                row.refined_trial_test_compatibility.max_gap,
                 row.schedule.correction_coordinate_relative_error,
             )
         end

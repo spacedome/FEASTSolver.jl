@@ -796,7 +796,10 @@ that setting.
   observed outer visible budget; the FEAST-ratio inner budget is optional
   because it needs a problem-specific separation estimate. The DD policy runner
   now returns a steering trace that consumes a node ladder and records which
-  update stage would receive more work before acceptance.
+  update stage would receive more work before acceptance. It also reports
+  trial/test compatibility gaps, mirroring the Lean boundary where right packet
+  vectors stay in the declared physical trial space and left packet vectors
+  stay in the declared physical test space.
 - Sparse Schrodinger remote stored-factor smoke: the same realistic sparse
   Schrodinger control runs through persistent worker-owned contour partitions.
   The worker factors and node-local solve buffers are created once on the first

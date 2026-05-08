@@ -172,7 +172,10 @@ global block Newton, or rational-coordinate-only fixes.
   the FEAST-ratio inner budget remains optional pending a problem-specific
   separation estimate. The DD policy runner now returns a steering trace that
   consumes a candidate node ladder and records the packet/update-stage action
-  before accepting the first full envelope pass.
+  before accepting the first full envelope pass. The same monitor now reports
+  trial/test compatibility gaps, matching the Lean requirement that right
+  packet vectors stay in the declared physical trial space and left packet
+  vectors stay in the declared physical test space.
   The experiment deliberately does not yet provide full reusable sparse
   workspaces, broad realistic sparse gallery coverage, or publication-level
   scaling claims.

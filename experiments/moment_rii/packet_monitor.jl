@@ -30,6 +30,23 @@ function projector_defect_split(Pcandidate, Preference)
     )
 end
 
+function packet_membership_gap(columns, basis; ranktol=1e-10)
+    norm(columns) <= eps(Float64) && return 0.0
+    Q, _ = physical_basis_from_columns(basis; ranktol=ranktol)
+    size(Q, 2) == 0 && return 1.0
+    norm(columns - Q * (adjoint(Q) * columns)) / norm(columns)
+end
+
+function packet_trial_test_compatibility(right, left, right_trial, left_test; ranktol=1e-10)
+    right_gap = packet_membership_gap(right, right_trial; ranktol=ranktol)
+    left_gap = packet_membership_gap(left, left_test; ranktol=ranktol)
+    (
+        right_gap=right_gap,
+        left_gap=left_gap,
+        max_gap=max(right_gap, left_gap),
+    )
+end
+
 function packet_schedule_proxy(Praw, Prefined, Preference)
     raw_defect = Praw - Preference
     refined_defect = Prefined - Preference
