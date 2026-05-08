@@ -36,5 +36,6 @@ include("fast/gallery.jl")
 
 include("torture/generated_linear.jl")
 include("torture/nep.jl")
+include("torture/moment_rii.jl")
 
 @run_package_tests filter=testitem_filter verbose=true

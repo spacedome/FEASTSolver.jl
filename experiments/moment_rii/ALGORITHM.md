@@ -910,9 +910,37 @@ that setting.
   algebraic-count complete through local multiplicity rather than by accepting
   every residual-small candidate.
 
+## Moment-RII Torture Matrix
+
+`torture_matrix.jl` is the current failure-mode ledger for the generalized
+moment-RII algorithm. It maps each hard NEP class to a concrete experiment
+runner when one exists, plus a status:
+
+- `:covered` means there is an executable slow diagnostic or regression test.
+- `:diagnostic_boundary` means the case is executable but primarily guards a
+  failure interpretation, not a general success claim.
+- `:documented_gap` means the analytic model is not yet specified well enough
+  for a valid contour-method test.
+- `:degenerate_boundary` means the target packet itself is not stable enough
+  to use as generic correctness evidence.
+
+The current matrix covers low-dimensional many-root delay problems,
+nonnormal weak-support charts, near-pole meromorphic operators, algebraic
+multiplicity, residual-Laurent correction-space closure, sparse Schrodinger
+gallery operators, and Schrodinger domain-decomposition packet diagnostics.
+It also records two important non-success cases: branch-cut operators require
+an explicit sheet/analytic-domain model, and dense spectral regions are a
+target-selection boundary unless the contour isolates a stable finite packet.
+
+The matrix is intentionally a research artifact rather than a public API. Its
+job is to keep the experiment honest: when we claim the algorithm handles a
+pathology, there should be a named row pointing at executable evidence; when
+we cannot make that claim, the row should say why.
+
 Representative tests:
 
 - `just test --preset moment-core`
+- `just test-torture 'moment RII'`
 - `just test --slow 'dual linear RII'`
 - `just test --slow 'low-rank compression preserves update'`
 - `just test --slow 'residual-coordinate invariant'`

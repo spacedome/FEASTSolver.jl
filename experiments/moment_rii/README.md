@@ -111,6 +111,30 @@ reduced realization needs local cleanup.
   rung, FEAST/NLFEAST is the residual-Laurent repair rung, and invariant-pair
   Newton/deflation are higher local-refinement or escalation rungs.
 
+## Torture Matrix
+
+`torture_matrix.jl` records the hard-problem taxonomy for the current
+moment-RII candidate. It is deliberately separate from the ordinary fast test
+suite: most rows point at existing slow diagnostics, while branch-cut and dense
+spectral-region rows are documented boundaries rather than runnable success
+cases.
+
+The matrix currently tracks:
+
+- low-dimensional delay/quasipolynomial problems with many roots;
+- nonnormal weak-support charts;
+- meromorphic rational operators with near exterior poles;
+- repeated and algebraically multiple roots;
+- residual-Laurent correction-space closure;
+- realistic sparse Schrodinger gallery and domain-decomposition controls;
+- branch-cut operators as an explicit analytic-model gap;
+- dense spectral regions as a degenerate target-selection boundary.
+
+Use `print_moment_rii_torture_matrix()` after including `run.jl` for the
+human-readable table, or `moment_rii_torture_coverage_summary()` for a compact
+machine-checkable summary. The lightweight torture test checks the taxonomy and
+runner mapping without executing every expensive diagnostic.
+
 ## What The Moment Blocks Represent
 
 For simple eigenvalues, Keldysh's theorem gives the local resolvent expansion

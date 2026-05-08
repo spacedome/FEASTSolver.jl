@@ -7392,6 +7392,7 @@ include("policy.jl")
 include("experiment_matrix.jl")
 include("packet_monitor.jl")
 include("fused_hard_cases.jl")
+include("torture_matrix.jl")
 
 function main()
     run_case("diagonal_linear", diagonal_linear_problem; nodes=16, iterations=3, moment_counts=(1, 2), ranktol=1e-12, residual_tol=1e-10)
