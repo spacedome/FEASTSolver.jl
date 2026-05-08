@@ -372,6 +372,12 @@ packet-visible defect rebuilds the packet/update geometry; otherwise local
 repair gaps outrank reduced extraction gaps, and only componentwise acceptance
 accepts the merged packet.
 
+The DD policy runner now also emits a steering trace. This is still a small
+diagnostic, not a production controller, but it exercises the intended loop:
+consume a candidate chart/node ladder, classify the packet defect, choose the
+update stage that should receive more work, and stop only when the acceptance
+envelope passes.
+
 ## Closest Known Proof Language
 
 The closest adjacent proof language now appears to be Jacobi-Davidson and

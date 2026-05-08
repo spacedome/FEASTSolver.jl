@@ -170,7 +170,9 @@ global block Newton, or rational-coordinate-only fixes.
   It also exposes the Lean schedule-monitor quantities `Biterate`, `Brepair`,
   `innerSteps`, observed repair norm, and observed outer visible-error budget;
   the FEAST-ratio inner budget remains optional pending a problem-specific
-  separation estimate.
+  separation estimate. The DD policy runner now returns a steering trace that
+  consumes a candidate node ladder and records the packet/update-stage action
+  before accepting the first full envelope pass.
   The experiment deliberately does not yet provide full reusable sparse
   workspaces, broad realistic sparse gallery coverage, or publication-level
   scaling claims.

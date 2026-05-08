@@ -919,8 +919,8 @@ function run_fused_schrodinger_dd_packet_policy_diagnostic(;
         action = packet_defect_policy_action(row.status, row.acceptance)
         merge(row, (action=action,))
     end
-    accepted_index = findfirst(row -> row.action === :accept, rows)
-    selected = accepted_index === nothing ? nothing : rows[accepted_index]
+    steering = packet_steering_trace(rows)
+    selected = steering.selected
 
     if print_rows
         println()
@@ -958,8 +958,67 @@ function run_fused_schrodinger_dd_packet_policy_diagnostic(;
         expected=diagnostic.expected,
         reference_nodes=diagnostic.reference_nodes,
         rows=rows,
+        steering=steering,
         selected_nodes=selected === nothing ? nothing : selected.nodes,
         selected_status=selected === nothing ? nothing : selected.status,
         selected_action=selected === nothing ? nothing : selected.action,
+    )
+end
+
+function run_fused_schrodinger_dd_packet_steering_diagnostic(;
+    config=FusedSchrodingerDDConfig(),
+    reference_nodes=256,
+    node_ladder=(64, 96, 128),
+    print_rows=true,
+)
+    result = run_fused_schrodinger_dd_packet_policy_diagnostic(;
+        config=config,
+        reference_nodes=reference_nodes,
+        candidate_nodes=node_ladder,
+        print_rows=false,
+    )
+    steering = result.steering
+
+    if print_rows
+        println()
+        println("Fused Schrodinger/DD packet steering diagnostic")
+        println("  consumes the node ladder as an adaptive packet/update-stage policy")
+        for (idx, row) in enumerate(result.rows)
+            @printf(
+                "  step=%d nodes=%d action=%s update_stage=%s accepted=%s score=%d/%d visible=%.3e outer_budget=%.3e\n",
+                idx,
+                row.nodes,
+                string(row.action),
+                string(row.update_stage),
+                string(row.acceptance.accepted),
+                row.acceptance.score,
+                row.acceptance.total,
+                row.refined_defect.visible,
+                row.monitor.outer_visible_budget,
+            )
+            row.acceptance.accepted && break
+        end
+        if steering.accepted
+            @printf(
+                "  selected: step=%d nodes=%d\n",
+                steering.selected_index,
+                steering.selected.nodes,
+            )
+        else
+            @printf(
+                "  selected: none final_action=%s final_update_stage=%s\n",
+                string(steering.final_action),
+                string(steering.final_update_stage),
+            )
+        end
+    end
+
+    (
+        expected=result.expected,
+        reference_nodes=result.reference_nodes,
+        node_ladder=node_ladder,
+        rows=result.rows,
+        steering=steering,
+        selected_nodes=result.selected_nodes,
     )
 end

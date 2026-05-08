@@ -716,6 +716,13 @@ end
     @test fine.schedule.correction_coordinate_relative_error <= 1e-7
     @test result.selected_nodes == fine.nodes
     @test result.selected_action === :accept
+    @test result.steering.accepted
+    @test result.steering.selected_index == 3
+    @test result.steering.final_action === :accept
+    @test result.steering.final_update_stage === :accept
+    @test result.steering.trace[1].update_stage === :rebuild_packet_update
+    @test result.steering.trace[2].update_stage === :continue_local_repair_schedule
+    @test result.steering.trace[3].accepted
 end
 
 @testitem "experimental moment RII: sparse nonlinear remote workers reuse stored contour factors" tags=[:slow, :distributed] begin

@@ -794,7 +794,9 @@ that setting.
   certificates as one global schedule. The monitor also exposes the Lean
   schedule terms `Biterate`, `Brepair`, `innerSteps`, observed repair norm, and
   observed outer visible budget; the FEAST-ratio inner budget is optional
-  because it needs a problem-specific separation estimate.
+  because it needs a problem-specific separation estimate. The DD policy runner
+  now returns a steering trace that consumes a node ladder and records which
+  update stage would receive more work before acceptance.
 - Sparse Schrodinger remote stored-factor smoke: the same realistic sparse
   Schrodinger control runs through persistent worker-owned contour partitions.
   The worker factors and node-local solve buffers are created once on the first

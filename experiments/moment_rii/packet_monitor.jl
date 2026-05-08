@@ -155,3 +155,25 @@ function merge_packet_policy_reports(rows)
         total=totals,
     )
 end
+
+function packet_steering_trace(rows)
+    accepted_index = findfirst(row -> row.acceptance.accepted, rows)
+    selected = accepted_index === nothing ? nothing : rows[accepted_index]
+    trace = Tuple(
+        (
+            action=row.action,
+            update_stage=row.update_stage,
+            accepted=row.acceptance.accepted,
+            score=row.acceptance.score,
+            total=row.acceptance.total,
+        ) for row in rows
+    )
+    (
+        accepted=selected !== nothing,
+        selected_index=accepted_index,
+        selected=selected,
+        final_action=selected === nothing ? rows[end].action : :accept,
+        final_update_stage=selected === nothing ? rows[end].update_stage : :accept,
+        trace=trace,
+    )
+end
