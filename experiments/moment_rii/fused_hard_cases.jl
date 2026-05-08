@@ -837,6 +837,8 @@ function packet_schedule_proxy(Praw, Prefined, Preference)
         observed_repair=norm(repair),
         # Lean predicts the scheduled repair is biased by -P_packet(E current).
         visible_bias_residual=norm(repair_visible + raw_visible),
+        visible_contraction=norm(Preference * refined_defect) / max(norm(raw_visible), eps(Float64)),
+        correction_coordinate_relative_error=norm(repair_visible + raw_visible) / max(norm(raw_visible), eps(Float64)),
         refined_visible_error=norm(Preference * refined_defect),
     )
 end
@@ -932,7 +934,7 @@ function run_fused_schrodinger_dd_packet_defect_diagnostic(;
         )
         for row in rows
             @printf(
-                "  nodes=%d status=%s rank=%d raw_good=%d raw_max=%.3e refined=%d/%d refined_max=%.3e raw_visible=%.3e refined_visible=%.3e q_current=%.3e q_repair=%.3e visible_repair=%.3e bias_residual=%.3e\n",
+                "  nodes=%d status=%s rank=%d raw_good=%d raw_max=%.3e refined=%d/%d refined_max=%.3e raw_visible=%.3e refined_visible=%.3e contraction=%.3e q_current=%.3e visible_repair=%.3e coord_relerr=%.3e\n",
                 row.nodes,
                 string(row.status),
                 row.rank,
@@ -943,10 +945,10 @@ function run_fused_schrodinger_dd_packet_defect_diagnostic(;
                 row.refined_max,
                 row.raw_defect.visible,
                 row.refined_defect.visible,
+                row.schedule.visible_contraction,
                 row.schedule.q_current,
-                row.schedule.q_repair,
                 row.schedule.visible_repair,
-                row.schedule.visible_bias_residual,
+                row.schedule.correction_coordinate_relative_error,
             )
         end
     end
@@ -985,15 +987,16 @@ function run_fused_schrodinger_dd_packet_policy_diagnostic(;
         println("  Lean-guided action policy using packet-visible defect status")
         for row in rows
             @printf(
-                "  nodes=%d status=%s action=%s matched=%d/%d visible=%.3e q_current=%.3e bias_residual=%.3e\n",
+                "  nodes=%d status=%s action=%s matched=%d/%d visible=%.3e contraction=%.3e q_current=%.3e coord_relerr=%.3e\n",
                 row.nodes,
                 string(row.status),
                 string(row.action),
                 row.refined_matched,
                 diagnostic.expected,
                 row.refined_defect.visible,
+                row.schedule.visible_contraction,
                 row.schedule.q_current,
-                row.schedule.visible_bias_residual,
+                row.schedule.correction_coordinate_relative_error,
             )
         end
         if selected === nothing

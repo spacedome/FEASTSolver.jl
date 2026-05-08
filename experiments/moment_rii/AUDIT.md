@@ -158,7 +158,10 @@ global block Newton, or rational-coordinate-only fixes.
   64-node solve keeps a large visible defect. The first policy wrapper now
   turns that split into actions: increase nodes/refine chart for visible packet
   defects, refine extraction/acceptance for packet-invisible gaps, and accept
-  when the visible defect is removed.
+  when the visible defect is removed. After the Lean algorithm handoff, this
+  wrapper also reports visible-error contraction and correction-coordinate
+  relative error, giving a numerical proxy for the local visible-error
+  contraction hypothesis that Lean keeps explicit.
   The experiment deliberately does not yet provide full reusable sparse
   workspaces, broad realistic sparse gallery coverage, or publication-level
   scaling claims.

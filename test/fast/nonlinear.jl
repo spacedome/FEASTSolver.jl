@@ -643,10 +643,15 @@ end
     @test result.expected == 13
     @test coarse.status === :packet_visible_defect
     @test coarse.action === :increase_nodes_or_refine_chart
+    @test coarse.schedule.visible_contraction > 0.5
     @test middle.status === :packet_invisible_acceptance_gap
     @test middle.action === :refine_extraction_or_acceptance
+    @test middle.schedule.visible_contraction <= 1e-5
+    @test middle.schedule.correction_coordinate_relative_error <= 1e-5
     @test fine.status === :accepted_visible_removed
     @test fine.action === :accept
+    @test fine.schedule.visible_contraction <= 1e-7
+    @test fine.schedule.correction_coordinate_relative_error <= 1e-7
     @test result.selected_nodes == fine.nodes
     @test result.selected_action === :accept
 end

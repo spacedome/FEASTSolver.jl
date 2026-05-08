@@ -315,6 +315,24 @@ The first policy use of this information is
 parameter controller, but it demonstrates that the Lean-facing split is already
 algorithmically actionable rather than only retrospective explanation.
 
+After `ALGORITHM_HANDOFF.md`, the Julia monitor now also reports the
+correction-coordinate identity and local visible-error contraction proxies:
+
+```text
+visible_contraction =
+  ||P_packet(E_after current)|| / ||P_packet(E_before current)||
+
+correction_coordinate_relative_error =
+  ||P_packet(correction current) + P_packet(E_before current)||
+    / ||P_packet(E_before current)||
+```
+
+On the Schrodinger/DD policy sweep, the 64-node case has contraction near one,
+so the visible chart defect is not repaired; the 96- and 128-node cases
+contract the visible component by many orders of magnitude, with the correction
+coordinate matching the predicted negative visible-error bias. This is the
+current numerical hook for the Lean `LocalVisibleErrorContractionHypothesis`.
+
 ## Closest Known Proof Language
 
 The closest adjacent proof language now appears to be Jacobi-Davidson and

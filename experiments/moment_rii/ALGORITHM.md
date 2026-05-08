@@ -778,7 +778,10 @@ that setting.
   is essentially right but extraction/acceptance needs work, and
   `accepted_visible_removed` accepts the solve. On the current DD sweep this
   policy rejects 64 nodes, flags 96 nodes as an acceptance/refinement gap, and
-  selects 128 nodes.
+  selects 128 nodes. The monitor also reports Lean handoff quantities:
+  visible-error contraction and correction-coordinate relative error. In the
+  current run, 64 nodes has contraction near one, while 96 and 128 nodes
+  contract the packet-visible component by many orders of magnitude.
 - Sparse Schrodinger remote stored-factor smoke: the same realistic sparse
   Schrodinger control runs through persistent worker-owned contour partitions.
   The worker factors and node-local solve buffers are created once on the first
