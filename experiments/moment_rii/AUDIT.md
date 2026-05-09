@@ -549,6 +549,12 @@ The first characterization sweeps separate likely numerical mechanisms:
   `:max_rounds`. This is evidence that higher multiplicity requires a stronger
   deflation/retention layer if we want to support it beyond diagnostic safe
   failure.
+- Moment adequacy: increasing positive moments from `p` to `2p` and `4p` on
+  powers `3` and `4` does not change the boundary classification. This supports
+  the expected escalation rule: dynamically increase moment order up to at
+  least the reliable algebraic count or local multiplicity estimate; if the
+  classification remains unchanged after that, the missing layer is
+  multiplicity-aware deflation/retention, not more positive moments.
 
 The current failure-layer reports also record expected behavior of competing
 solvers. Branch cuts without sheet data and dense non-isolated spectral

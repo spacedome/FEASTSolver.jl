@@ -959,6 +959,13 @@ treating them as single anecdotes:
   reaches algebraic count with spurious retained candidates, and power `4`
   runs away into massive over-retention. This points to a multiplicity and
   deflation/retention limitation, not a failure to compute the contour count.
+- `run_high_multiplicity_moment_order_sweep` keeps the same multiplicity
+  boundary geometry but increases positive moment order from `p` to `4p`. The
+  power-3 and power-4 outcomes do not change. This confirms the expected
+  theory/implementation split: at least `p` positive moments are necessary to
+  represent algebraic multiplicity `p`, but once that threshold is met the
+  remaining failure is not fixed by adding more moments. The next layer is
+  multiplicity-aware deflation or retention of the reduced realization.
 
 `moment_rii_failure_layer_report(id)` records the intended diagnostic layer and
 steering action for these boundaries. The current layers are:
@@ -986,6 +993,7 @@ Representative tests:
 - `just test-torture 'moment RII'`
 - `just test --preset moment-heavy 'generated adversarial NEP profiles'`
 - `just test --preset moment-heavy 'failure boundary sweeps'`
+- `just test --preset moment-heavy 'multiplicity moment escalation'`
 - `just test --preset moment-heavy 'near-pole count diagnostic'`
 - `just test --slow 'dual linear RII'`
 - `just test --slow 'low-rank compression preserves update'`

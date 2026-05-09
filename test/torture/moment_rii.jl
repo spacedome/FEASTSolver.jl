@@ -93,6 +93,32 @@ end
     @test multiplicity.first_failure_power == 3
 end
 
+@testitem "torture moment RII: multiplicity moment escalation identifies next layer" tags=[:slow, :torture, :moment_rii, :moment_heavy] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    sweep = run_high_multiplicity_moment_order_sweep(; print_rows=false)
+
+    @test sweep.all_moment_adequate
+    @test sweep.unchanged_by_moment_escalation
+    @test all(row.count_error <= 1e-8 for row in sweep.rows)
+    @test all(row -> row.recommendation === :moments_are_not_the_limiting_layer_use_deflation_or_retention, sweep.rows)
+
+    p3 = filter(row -> row.power == 3, sweep.rows)
+    p4 = filter(row -> row.power == 4, sweep.rows)
+    @test Tuple(row.moments for row in p3) == (3, 6, 12)
+    @test Tuple(row.status for row in p3) == (
+        :algebraic_count_with_spurious_retention,
+        :algebraic_count_with_spurious_retention,
+        :algebraic_count_with_spurious_retention,
+    )
+    @test Tuple(row.moments for row in p4) == (4, 8, 16)
+    @test Tuple(row.status for row in p4) == (
+        :runaway_overretention,
+        :runaway_overretention,
+        :runaway_overretention,
+    )
+end
+
 @testitem "torture moment RII: near-pole count diagnostic identifies quadrature layer" tags=[:slow, :torture, :moment_rii, :moment_heavy] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 

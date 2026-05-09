@@ -700,6 +700,112 @@ function run_high_multiplicity_sine_boundary_sweep(;
     )
 end
 
+function high_multiplicity_moment_adequacy_recommendation(row)
+    if row.moments < row.power
+        return :increase_moments_to_algebraic_multiplicity
+    elseif row.status === :accepted_unique_multiplicity
+        return :accept
+    elseif row.status in (:algebraic_count_with_spurious_retention, :runaway_overretention)
+        return :moments_are_not_the_limiting_layer_use_deflation_or_retention
+    elseif row.status === :unreliable_count
+        return :fix_contour_count_before_moment_policy
+    else
+        return :inspect_extraction_layer
+    end
+end
+
+function run_high_multiplicity_moment_order_sweep(;
+    powers=(3, 4),
+    moment_factors=(1, 2, 4),
+    outer_radius=4.0,
+    print_rows=true,
+)
+    rows = NamedTuple[]
+    results = Any[]
+    for power in powers
+        for factor in moment_factors
+            moments = Int(power * factor)
+            result = run_count_driven_adaptive_grid_refinement(;
+                label="High-multiplicity moment-order adequacy",
+                cases=(scalar_powered_sine_case(; power=power),),
+                outer_radius=outer_radius,
+                base_spacing=2.0,
+                chart_radii=(1.3, 2.2),
+                max_refinement_rounds=3,
+                basis_moments=moments,
+                basis_nodes=max(64, 8moments),
+                determinant_nodes=1024,
+                determinant_capacity=128,
+                reduced_moments=max(2moments, 8),
+                reduced_nodes=1024,
+                component_scaling=:contour_max,
+                residual_tol=1e-8,
+                match_atol=1e-6,
+                print_rows=false,
+            )
+            wrapped = (
+                result=result,
+                rows=result.rows,
+                count=result.count,
+                stop_reason=result.stop_reason,
+                multiplicities=result.multiplicities,
+                expected_power=power,
+                accepted=result.stop_reason === :target_algebraic_count_complete &&
+                    !isempty(result.multiplicities) &&
+                    all(item.multiplicity == power for item in result.multiplicities),
+            )
+            push!(results, wrapped)
+            final = last(result.rows)
+            expected_unique = result.count.count_estimate ÷ power
+            status = high_multiplicity_sine_boundary_status(wrapped)
+            row = (
+                power=Int(power),
+                moments=moments,
+                status=status,
+                stop_reason=result.stop_reason,
+                count=result.count.count_estimate,
+                count_error=result.count.count_error,
+                expected_unique=expected_unique,
+                retained=final.retained,
+                algebraic_retained=result.algebraic_retained_count,
+                moment_adequate=moments >= power,
+                multiplicities=Tuple(item.multiplicity for item in result.multiplicities),
+            )
+            push!(
+                rows,
+                merge(row, (recommendation=high_multiplicity_moment_adequacy_recommendation(row),)),
+            )
+        end
+    end
+    if print_rows
+        println()
+        println("High-multiplicity moment-order adequacy sweep")
+        println("  tests whether adding positive moments changes the multiplicity failure layer")
+        @printf("  %6s %8s %9s %9s %9s %12s %s\n", "power", "moments", "unique", "retained", "count", "status", "recommendation")
+        for row in rows
+            @printf(
+                "  %6d %8d %9d %9d %9d %12s %s\n",
+                row.power,
+                row.moments,
+                row.expected_unique,
+                row.retained,
+                row.count,
+                string(row.status),
+                string(row.recommendation),
+            )
+        end
+    end
+    (
+        rows=Tuple(rows),
+        results=Tuple(results),
+        all_moment_adequate=all(row.moment_adequate for row in rows),
+        unchanged_by_moment_escalation=all(
+            length(unique(row.status for row in rows if row.power == power)) == 1
+            for power in powers
+        ),
+    )
+end
+
 function run_branch_cut_fixed_sheet_torture(;
     outer_radius=1.0,
     base_spacing=0.42,
