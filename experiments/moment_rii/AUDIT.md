@@ -511,18 +511,20 @@ gaps.
 | Requirement | Current Artifact | Evidence | Status |
 | --- | --- | --- | --- |
 | High eigenvalue dimension with low matrix dimension | `torture_matrix.jl` row `:low_dim_many_roots_delay` | Points at `run_multi_delay_count_driven_adaptive_refinement` and the oracle-free nonnormal delay slow test. | Covered |
-| Near infinite or dense spectral regions | `torture_matrix.jl` row `:dense_spectral_region` | Marked `:degenerate_boundary` because this is not a stable generic correctness target without an isolated finite packet. | Documented boundary |
+| Near infinite or dense spectral regions | `torture_matrix.jl` rows `:meromorphic_pole_ladder` and `:dense_spectral_region` | The pole ladder is an executable finite meromorphic approximation to roots accumulating near singularities and currently stops as an unresolved defect with reliable count `12` but retained `10`; dense spectral regions remain `:degenerate_boundary` without an isolated finite packet. | Known boundary plus documented boundary |
 | Meromorphic operators and near poles | `torture_matrix.jl` row `:near_pole_rational` | Points at the safe near-pole rational diagnostic and the too-close-pole unreliable-count diagnostic. | Covered |
-| High eigenvalue multiplicity | `torture_matrix.jl` rows `:duplicate_delay_multiplicity` and `:squared_sine_multiplicity` | Points at oracle-free duplicate-delay and repeated analytic-root diagnostics. | Covered for controlled multiplicity |
-| Operators with branch cuts | `torture_matrix.jl` row `:branch_cut_operator` | Marked `:documented_gap` until branch/sheet/analytic-domain data are part of the model. | Documented gap |
+| High eigenvalue multiplicity | `torture_matrix.jl` rows `:duplicate_delay_multiplicity`, `:squared_sine_multiplicity`, and `:quartic_sine_multiplicity` | Multiplicity two is covered; multiplicity four currently over-retains residual-small candidates and stops at `:max_rounds`, preserving a real boundary. | Covered for low multiplicity; known boundary for higher multiplicity |
+| Operators with branch cuts | `torture_matrix.jl` rows `:branch_cut_fixed_sheet` and `:branch_cut_operator` | The fixed-sheet principal square-root case is executable and count-complete; cross-cut/multisheet cases remain `:documented_gap` until branch/sheet/analytic-domain data are part of the model. | Diagnostic boundary plus documented gap |
 | Nonnormal weak-support extraction failures | `torture_matrix.jl` row `:dense_multi_delay_weak_support` | Points at the dense multi-delay weak-support diagnostic. | Covered |
 | Residual-Laurent update mechanism | `torture_matrix.jl` row `:residual_laurent_correction_space` | Points at the correction-space diagnostic showing new Ritz-vector components live in the residual-Laurent enrichment spaces. | Covered |
 | Realistic sparse/domain-decomposition NEPs | `torture_matrix.jl` rows `:sparse_schrodinger_gallery`, `:schrodinger_dd_packet`, and `:schrodinger_dd_fixed_target_guard` | Points at sparse Schrodinger gallery and fused Schrodinger/DD packet diagnostics. | Covered with explicit target-packet guard |
-| Lightweight test gate for the matrix itself | `test/torture/moment_rii.jl` | Checks required classes, row metadata, smoke runners, and documented non-executable gaps. | Added |
+| Lightweight test gate for the matrix itself | `test/torture/moment_rii.jl` | Checks required classes, row metadata, smoke runners, documented non-executable gaps, and expected known-boundary statuses. | Added |
+| Executable adversarial torture profile | `test/torture/moment_rii.jl` test `generated adversarial NEP profiles` | Runs the fixed-sheet branch control, meromorphic pole-ladder boundary, and multiplicity-four boundary through `run_moment_rii_torture_case`. | Added as `:moment_heavy` torture |
 
 ### Current Conclusion
 
 The repo now has an explicit torture matrix for the moment-RII experiment.
 This does not mean every row is a solved success case. It means every hard
 class currently under discussion has a named status: covered by slow evidence,
-guarded as a diagnostic boundary, or recorded as an analytic/modeling gap.
+guarded as a diagnostic boundary, recorded as a known algorithmic failure
+boundary, or recorded as an analytic/modeling gap.

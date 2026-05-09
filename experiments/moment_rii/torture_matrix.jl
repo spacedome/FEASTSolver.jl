@@ -2,6 +2,7 @@ const MOMENT_RII_TORTURE_REQUIRED_FAILURE_CLASSES = (
     :high_count_low_dimension,
     :nonnormal_weak_support,
     :near_pole_meromorphic,
+    :singularity_accumulation,
     :algebraic_multiplicity,
     :residual_laurent_update,
     :sparse_realistic_nep,
@@ -51,6 +52,19 @@ const MOMENT_RII_TORTURE_MATRIX = (
         failure_mode="Meromorphic singularities near the contour can poison argument-principle counts and contour samples.",
     ),
     (
+        id=:meromorphic_pole_ladder,
+        failure_class=:singularity_accumulation,
+        matrix_dimension=:low,
+        spectral_difficulty=:finite_approximation_to_pole_accumulation,
+        status=:known_failure_boundary,
+        executable=true,
+        smoke=false,
+        runner=:run_meromorphic_pole_ladder_torture,
+        evidence="torture diagnostic: meromorphic pole ladder",
+        expected_behavior="A finite rational ladder with many roots near exterior poles reports a reliable count but stops unresolved rather than over-accepting.",
+        failure_mode="Meromorphic zero packets can accumulate near poles or contour boundaries, making count reliability and target-packet stability the core issue.",
+    ),
+    (
         id=:duplicate_delay_multiplicity,
         failure_class=:algebraic_multiplicity,
         matrix_dimension=:low,
@@ -75,6 +89,19 @@ const MOMENT_RII_TORTURE_MATRIX = (
         evidence="slow test: count-driven refinement handles repeated analytic roots",
         expected_behavior="Multiplicity probes close the algebraic count without duplicating scalar values.",
         failure_mode="Repeated analytic roots stress the distinction between unique values and algebraic count.",
+    ),
+    (
+        id=:quartic_sine_multiplicity,
+        failure_class=:algebraic_multiplicity,
+        matrix_dimension=:scalar,
+        spectral_difficulty=:high_root_multiplicity,
+        status=:known_failure_boundary,
+        executable=true,
+        smoke=false,
+        runner=:run_high_multiplicity_sine_torture,
+        evidence="torture diagnostic: quartic sine multiplicity",
+        expected_behavior="The current chart policy over-retains residual-small candidates and exposes the need for a stronger multiplicity/deflation layer.",
+        failure_mode="Multiplicity greater than two stresses whether the count-driven branch generalizes beyond the existing doubled-root controls.",
     ),
     (
         id=:residual_laurent_correction_space,
@@ -138,8 +165,21 @@ const MOMENT_RII_TORTURE_MATRIX = (
         smoke=false,
         runner=:none,
         evidence="documented gap",
-        expected_behavior="No torture test should be accepted until the branch, sheet, and contour analytic domain are part of the model.",
+        expected_behavior="No cross-cut torture test should be accepted until the branch, sheet, and contour analytic domain are part of the model.",
         failure_mode="Operators with branch cuts violate the single-valued analytic assumptions unless the sheet model is explicit.",
+    ),
+    (
+        id=:branch_cut_fixed_sheet,
+        failure_class=:branch_cut,
+        matrix_dimension=:low,
+        spectral_difficulty=:fixed_sheet_analytic_contour,
+        status=:diagnostic_boundary,
+        executable=true,
+        smoke=false,
+        runner=:run_branch_cut_fixed_sheet_torture,
+        evidence="torture diagnostic: branch cut on a declared sheet",
+        expected_behavior="A branch-function operator is acceptable only when the chosen sheet is analytic on and inside the contour.",
+        failure_mode="Branch functions are not invalid by syntax; they are invalid when the sheet/domain data make the contour transfer multivalued.",
     ),
     (
         id=:dense_spectral_region,
@@ -208,6 +248,233 @@ function print_moment_rii_torture_matrix(; io=stdout, include_documented_gaps=tr
     nothing
 end
 
+function scalar_product_rational_case(; roots, poles, name=nothing)
+    roots = ComplexF64.(roots)
+    poles = ComplexF64.(poles)
+    label = name === nothing ? "product_rational" : String(name)
+    function f(z)
+        prod(z - root for root in roots; init=one(ComplexF64)) /
+            prod(z - pole for pole in poles; init=one(ComplexF64))
+    end
+    function df(z)
+        value = f(z)
+        root_sum = sum(inv(z - root) for root in roots; init=zero(ComplexF64))
+        pole_sum = sum(inv(z - pole) for pole in poles; init=zero(ComplexF64))
+        value * (root_sum - pole_sum)
+    end
+    function fmat(S)
+        Ired = Matrix{ComplexF64}(I, size(S, 1), size(S, 2))
+        numerator = Matrix{ComplexF64}(I, size(S, 1), size(S, 2))
+        denominator = Matrix{ComplexF64}(I, size(S, 1), size(S, 2))
+        for root in roots
+            numerator = numerator * (S .- root .* Ired)
+        end
+        for pole in poles
+            denominator = denominator * (S .- pole .* Ired)
+        end
+        numerator / denominator
+    end
+    (
+        name=label,
+        f=f,
+        df=df,
+        fmat=fmat,
+        roots=(center, radius) -> scalar_roots_in_contour(roots, center, radius),
+    )
+end
+
+function scalar_powered_sine_case(; shift=0.0 + 0.0im, power=4, name=nothing)
+    shift = ComplexF64(shift)
+    power = Int(power)
+    label = name === nothing ? "sine_power_$power" : String(name)
+    (
+        name=label,
+        f=z -> sin(z - shift)^power,
+        df=z -> power * sin(z - shift)^(power - 1) * cos(z - shift),
+        fmat=S -> begin
+            Ired = Matrix{ComplexF64}(I, size(S, 1), size(S, 2))
+            sin(S .- shift .* Ired)^power
+        end,
+        roots=(center, radius) -> begin
+            lower = (real(center) - radius - real(shift)) / pi
+            upper = (real(center) + radius - real(shift)) / pi
+            candidates = ComplexF64[shift + pi * k for k in floor(Int, lower)-2:ceil(Int, upper)+2]
+            scalar_roots_in_contour(candidates, center, radius)
+        end,
+    )
+end
+
+function scalar_branch_sqrt_case(; branch_point=-2.0 + 0.0im, beta, name=nothing)
+    branch_point = ComplexF64(branch_point)
+    beta = ComplexF64(beta)
+    root = branch_point + beta^2
+    label = name === nothing ? "sqrt_sheet_$(beta)" : String(name)
+    (
+        name=label,
+        f=z -> sqrt(z - branch_point) - beta,
+        df=z -> inv(2 * sqrt(z - branch_point)),
+        fmat=S -> begin
+            error("matrix square-root branch case is only used through scalar contour samples")
+        end,
+        roots=(center, radius) -> scalar_roots_in_contour(ComplexF64[root], center, radius),
+    )
+end
+
+function meromorphic_pole_ladder_cases(; gap=0.035)
+    angles = (0.05, 0.21, -0.17)
+    Tuple(
+        scalar_product_rational_case(;
+            name="pole_ladder_$j",
+            roots=[
+                0.18 * cis(angle),
+                0.44 * cis(angle + 0.35),
+                0.68 * cis(angle - 0.25),
+                0.84 * cis(angle + 0.10),
+            ],
+            poles=[
+                (1.0 + gap) * cis(angle),
+                (1.0 + 2gap) * cis(angle + 0.22),
+                (1.0 + 3gap) * cis(angle - 0.18),
+            ],
+        )
+        for (j, angle) in pairs(angles)
+    )
+end
+
+function run_meromorphic_pole_ladder_torture(;
+    gap=0.035,
+    outer_radius=1.0,
+    base_spacing=0.34,
+    chart_radii=(0.24, 0.42),
+    count_error_tol=1e-5,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    result = run_count_driven_adaptive_grid_refinement(;
+        label="Meromorphic pole-ladder torture",
+        cases=meromorphic_pole_ladder_cases(; gap=gap),
+        outer_radius=outer_radius,
+        operator_builder=dense_multi_delay_operator_builder(; coupling=0.08),
+        operator_label="dense rational pole ladder",
+        base_spacing=base_spacing,
+        chart_radii=chart_radii,
+        max_refinement_rounds=4,
+        iterations=2,
+        basis_moments=10,
+        basis_nodes=80,
+        rii_nodes=192,
+        determinant_nodes=1024,
+        determinant_capacity=128,
+        reduced_moments=20,
+        reduced_nodes=1024,
+        residual_normalization=:operator,
+        component_scaling=:contour_max,
+        count_error_tol=count_error_tol,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=print_rows,
+    )
+    diagnostic = count_driven_chart_diagnostic_summary(
+        result;
+        outer_radius=outer_radius,
+        match_atol=match_atol,
+        count_error_tol=count_error_tol,
+    )
+    (
+        result=result,
+        diagnostic=diagnostic,
+        rows=result.rows,
+        count=result.count,
+        stop_reason=result.stop_reason,
+        accepted=result.stop_reason in (:target_count_complete, :target_algebraic_count_complete),
+        count_reliable=result.count.count_error <= count_error_tol,
+    )
+end
+
+function run_high_multiplicity_sine_torture(;
+    power=4,
+    outer_radius=7.0,
+    base_spacing=2.0,
+    chart_radii=(1.3, 2.2),
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    result = run_count_driven_adaptive_grid_refinement(;
+        label="High-multiplicity sine torture",
+        cases=(scalar_powered_sine_case(; power=power),),
+        outer_radius=outer_radius,
+        base_spacing=base_spacing,
+        chart_radii=chart_radii,
+        basis_moments=12,
+        basis_nodes=96,
+        determinant_nodes=1024,
+        determinant_capacity=128,
+        reduced_moments=24,
+        reduced_nodes=1024,
+        component_scaling=:contour_max,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=print_rows,
+    )
+    (
+        result=result,
+        rows=result.rows,
+        count=result.count,
+        stop_reason=result.stop_reason,
+        multiplicities=result.multiplicities,
+        expected_power=power,
+        accepted=result.stop_reason === :target_algebraic_count_complete &&
+            !isempty(result.multiplicities) &&
+            all(item.multiplicity == power for item in result.multiplicities),
+    )
+end
+
+function run_branch_cut_fixed_sheet_torture(;
+    outer_radius=1.0,
+    base_spacing=0.42,
+    chart_radii=(0.3, 0.48),
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    cases = (
+        scalar_branch_sqrt_case(; branch_point=-2.0, beta=sqrt(1.55), name="sqrt1"),
+        scalar_branch_sqrt_case(; branch_point=-2.4, beta=sqrt(2.05 + 0.15im), name="sqrt2"),
+    )
+    result = run_count_driven_adaptive_grid_refinement(;
+        label="Fixed-sheet branch-cut torture",
+        cases=cases,
+        outer_radius=outer_radius,
+        operator_builder=triangular_operator_builder(; coupling=0.1),
+        operator_label="triangular fixed-sheet sqrt",
+        base_spacing=base_spacing,
+        chart_radii=chart_radii,
+        max_refinement_rounds=3,
+        iterations=2,
+        basis_moments=6,
+        basis_nodes=48,
+        determinant_nodes=512,
+        determinant_capacity=32,
+        reduced_moments=12,
+        reduced_nodes=512,
+        residual_normalization=:operator,
+        component_scaling=:contour_max,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=print_rows,
+    )
+    (
+        result=result,
+        rows=result.rows,
+        count=result.count,
+        stop_reason=result.stop_reason,
+        accepted=result.stop_reason === :target_count_complete,
+        sheet_domain="principal sqrt, branch points/cuts outside the contour disk",
+    )
+end
+
 function run_moment_rii_torture_case(id::Symbol; print_rows=false)
     row = moment_rii_torture_entry(id)
     row.executable || return (
@@ -268,6 +535,55 @@ function run_moment_rii_torture_case(id::Symbol; print_rows=false)
                 selected_nodes=result.selected_nodes,
                 selected_action=result.selected_action,
                 final_matched=last(result.rows).refined_matched,
+            ),
+        )
+    elseif row.id === :meromorphic_pole_ladder
+        result = run_meromorphic_pole_ladder_torture(; print_rows=print_rows)
+        passed = result.count_reliable &&
+            result.stop_reason === :count_multiplicity_or_unresolved_defect &&
+            last(result.rows).retained < result.count.count_estimate
+        return (
+            id=row.id,
+            status=row.status,
+            passed=passed,
+            skipped=false,
+            metrics=(
+                count=result.count.count_estimate,
+                count_error=result.count.count_error,
+                stop_reason=result.stop_reason,
+                retained=last(result.rows).retained,
+            ),
+        )
+    elseif row.id === :quartic_sine_multiplicity
+        result = run_high_multiplicity_sine_torture(; print_rows=print_rows)
+        passed = !result.accepted &&
+            result.stop_reason === :max_rounds &&
+            result.count.count_error <= 1e-8 &&
+            last(result.rows).retained > result.count.count_estimate
+        return (
+            id=row.id,
+            status=row.status,
+            passed=passed,
+            skipped=false,
+            metrics=(
+                count=result.count.count_estimate,
+                unique_retained=last(result.rows).retained,
+                multiplicities=Tuple(item.multiplicity for item in result.multiplicities),
+                stop_reason=result.stop_reason,
+            ),
+        )
+    elseif row.id === :branch_cut_fixed_sheet
+        result = run_branch_cut_fixed_sheet_torture(; print_rows=print_rows)
+        passed = result.accepted
+        return (
+            id=row.id,
+            status=row.status,
+            passed=passed,
+            skipped=false,
+            metrics=(
+                count=result.count.count_estimate,
+                retained=last(result.rows).retained,
+                stop_reason=result.stop_reason,
             ),
         )
     end

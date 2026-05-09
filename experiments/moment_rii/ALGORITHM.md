@@ -919,6 +919,9 @@ runner when one exists, plus a status:
 - `:covered` means there is an executable slow diagnostic or regression test.
 - `:diagnostic_boundary` means the case is executable but primarily guards a
   failure interpretation, not a general success claim.
+- `:known_failure_boundary` means the case is executable and is expected to
+  expose a current algorithmic limitation without silently accepting bad
+  output.
 - `:documented_gap` means the analytic model is not yet specified well enough
   for a valid contour-method test.
 - `:degenerate_boundary` means the target packet itself is not stable enough
@@ -928,9 +931,12 @@ The current matrix covers low-dimensional many-root delay problems,
 nonnormal weak-support charts, near-pole meromorphic operators, algebraic
 multiplicity, residual-Laurent correction-space closure, sparse Schrodinger
 gallery operators, and Schrodinger domain-decomposition packet diagnostics.
-It also records two important non-success cases: branch-cut operators require
-an explicit sheet/analytic-domain model, and dense spectral regions are a
-target-selection boundary unless the contour isolates a stable finite packet.
+It also records important non-success cases: a finite rational pole ladder
+with a reliable count but incomplete retention, a multiplicity-four sine case
+that currently over-retains residual-small candidates, branch-cut operators
+that require an explicit sheet/analytic-domain model, and dense spectral
+regions that are target-selection boundaries unless the contour isolates a
+stable finite packet.
 
 The matrix is intentionally a research artifact rather than a public API. Its
 job is to keep the experiment honest: when we claim the algorithm handles a
@@ -941,6 +947,7 @@ Representative tests:
 
 - `just test --preset moment-core`
 - `just test-torture 'moment RII'`
+- `just test --preset moment-heavy 'generated adversarial NEP profiles'`
 - `just test --slow 'dual linear RII'`
 - `just test --slow 'low-rank compression preserves update'`
 - `just test --slow 'residual-coordinate invariant'`

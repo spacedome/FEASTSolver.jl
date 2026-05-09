@@ -124,10 +124,14 @@ The matrix currently tracks:
 - low-dimensional delay/quasipolynomial problems with many roots;
 - nonnormal weak-support charts;
 - meromorphic rational operators with near exterior poles;
+- finite meromorphic pole/root ladders approximating zero accumulation near
+  singularities;
 - repeated and algebraically multiple roots;
+- high multiplicity cases that currently expose over-retention boundaries;
 - residual-Laurent correction-space closure;
 - realistic sparse Schrodinger gallery and domain-decomposition controls;
-- branch-cut operators as an explicit analytic-model gap;
+- branch-cut operators on a declared analytic sheet plus cross-cut operators
+  as an explicit analytic-model gap;
 - dense spectral regions as a degenerate target-selection boundary.
 
 Use `print_moment_rii_torture_matrix()` after including `run.jl` for the
