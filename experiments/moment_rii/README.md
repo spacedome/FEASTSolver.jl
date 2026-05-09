@@ -140,10 +140,12 @@ human-readable table, or `moment_rii_torture_coverage_summary()` for a compact
 machine-checkable summary. The lightweight torture test checks the taxonomy and
 runner mapping without executing every expensive diagnostic.
 
-For the current known failures, use
+For the current failure-boundary diagnostics, use
 `run_meromorphic_pole_ladder_boundary_sweep()` and
 `run_high_multiplicity_sine_boundary_sweep()`. These characterize transition
-points instead of only preserving one failing parameter set.
+points instead of only preserving one parameter set. The pole-ladder sweep now
+shows that weak support-1 clusters can be accepted after local algebraic count
+certification, while support-only retention would miss them.
 `run_high_multiplicity_moment_order_sweep()` checks whether adding enough
 positive moments and clustered local multiplicity probes resolves the
 multiplicity layer.

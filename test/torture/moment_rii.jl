@@ -34,7 +34,7 @@
     @test all(row -> row.documented, summary)
     @test moment_rii_torture_entry(:branch_cut_operator).executable == false
     @test any(row -> row.failure_class === :dense_spectral_region && !row.executable, summary)
-    @test moment_rii_torture_entry(:meromorphic_pole_ladder).status === :known_failure_boundary
+    @test moment_rii_torture_entry(:meromorphic_pole_ladder).status === :covered
     @test moment_rii_torture_entry(:quartic_sine_multiplicity).status === :covered
     @test moment_rii_torture_entry(:branch_cut_fixed_sheet).status === :diagnostic_boundary
 
@@ -56,16 +56,17 @@ end
 
     pole_ladder = run_moment_rii_torture_case(:meromorphic_pole_ladder; print_rows=false)
     @test pole_ladder.passed
-    @test pole_ladder.status === :known_failure_boundary
+    @test pole_ladder.status === :covered
     @test pole_ladder.metrics.count == 12
     @test pole_ladder.metrics.retained < pole_ladder.metrics.count
-    @test pole_ladder.metrics.stop_reason === :count_multiplicity_or_unresolved_defect
+    @test pole_ladder.metrics.algebraic_retained == pole_ladder.metrics.count
+    @test pole_ladder.metrics.stop_reason === :target_algebraic_count_complete
 
     multiplicity = run_moment_rii_torture_case(:quartic_sine_multiplicity; print_rows=false)
     @test multiplicity.passed
     @test multiplicity.status === :covered
     @test multiplicity.metrics.count == 20
-    @test multiplicity.metrics.raw_retained > multiplicity.metrics.filtered_retained
+    @test multiplicity.metrics.raw_retained <= multiplicity.metrics.filtered_retained
     @test multiplicity.metrics.filtered_retained == 5
     @test all(==(4), multiplicity.metrics.multiplicities)
     @test multiplicity.metrics.stop_reason === :target_algebraic_count_complete
@@ -75,9 +76,9 @@ end
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 
     pole = run_meromorphic_pole_ladder_boundary_sweep(; print_rows=false)
-    @test Tuple(row.status for row in pole.rows) == (:accepted, :accepted, :incomplete_retention)
-    @test Tuple(row.retained for row in pole.rows) == (12, 12, 10)
-    @test pole.transition_gap == 0.035
+    @test Tuple(row.status for row in pole.rows) == (:accepted, :accepted, :accepted)
+    @test Tuple(row.retained for row in pole.rows) == (12, 11, 9)
+    @test isinf(pole.transition_gap)
     @test all(row.count == 12 for row in pole.rows)
     @test all(row.count_error <= 1e-8 for row in pole.rows)
 
@@ -92,7 +93,7 @@ end
     @test multiplicity.rows[1].retained == multiplicity.rows[1].expected_unique
     @test multiplicity.rows[2].filtered_retained == multiplicity.rows[2].expected_unique
     @test multiplicity.rows[3].filtered_retained == multiplicity.rows[3].expected_unique
-    @test multiplicity.rows[3].retained > multiplicity.rows[3].filtered_retained
+    @test multiplicity.rows[3].retained <= multiplicity.rows[3].filtered_retained
     @test multiplicity.first_failure_power == typemax(Int)
 end
 

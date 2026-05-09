@@ -56,13 +56,13 @@ const MOMENT_RII_TORTURE_MATRIX = (
         failure_class=:singularity_accumulation,
         matrix_dimension=:low,
         spectral_difficulty=:finite_approximation_to_pole_accumulation,
-        status=:known_failure_boundary,
+        status=:covered,
         executable=true,
         smoke=false,
         runner=:run_meromorphic_pole_ladder_torture,
-        evidence="torture diagnostic: meromorphic pole ladder",
-        expected_behavior="A finite rational ladder with many roots near exterior poles reports a reliable count but stops unresolved rather than over-accepting.",
-        failure_mode="Meromorphic zero packets can accumulate near poles or contour boundaries, making count reliability and target-packet stability the core issue.",
+        evidence="torture diagnostic: meromorphic pole ladder; weak-support local count escalation",
+        expected_behavior="A finite rational ladder with many roots near exterior poles reports a reliable global count and accepts weak-support clusters only after local algebraic count certification.",
+        failure_mode="Meromorphic zero packets can accumulate near poles or contour boundaries, so cheap support-only retention can miss real clusters.",
     ),
     (
         id=:duplicate_delay_multiplicity,
@@ -208,10 +208,10 @@ const MOMENT_RII_FAILURE_LAYER_REPORTS = (
     (
         id=:meromorphic_pole_ladder,
         layer=:local_chart_support_retention,
-        diagnostic=:reliable_global_count_incomplete_retention,
-        steering=:refine_local_charts_or_use_stronger_packet_support_model,
+        diagnostic=:reliable_count_weak_support_local_completion,
+        steering=:probe_weak_support_clusters_or_refine_local_charts,
         fundamental=false,
-        competing_solver_note="NLEIGS/Beyn may recover some instances with different interpolation or moments, but the same near-singularity packet is ill-conditioned; the failure is currently in our local chart/support policy, not the global count.",
+        competing_solver_note="NLEIGS/Beyn may recover some instances with different interpolation or moments, but the same near-singularity packet is ill-conditioned; the support-only failure is fixed here by local count certification of weak clusters.",
     ),
     (
         id=:quartic_sine_multiplicity,
@@ -507,6 +507,7 @@ function run_meromorphic_pole_ladder_torture(;
         rows=result.rows,
         count=result.count,
         stop_reason=result.stop_reason,
+        algebraic_retained_count=result.algebraic_retained_count,
         accepted=result.stop_reason in (:target_count_complete, :target_algebraic_count_complete),
         count_reliable=result.count.count_error <= count_error_tol,
     )
@@ -516,7 +517,9 @@ function meromorphic_pole_ladder_boundary_status(result)
     final = last(result.rows)
     if !result.count_reliable
         return :unreliable_count
-    elseif result.accepted && final.retained == result.count.count_estimate
+    elseif result.accepted &&
+            (final.retained == result.count.count_estimate ||
+             result.algebraic_retained_count == result.count.count_estimate)
         return :accepted
     elseif result.stop_reason === :count_multiplicity_or_unresolved_defect &&
             final.retained < result.count.count_estimate
@@ -918,8 +921,8 @@ function run_moment_rii_torture_case(id::Symbol; print_rows=false)
     elseif row.id === :meromorphic_pole_ladder
         result = run_meromorphic_pole_ladder_torture(; print_rows=print_rows)
         passed = result.count_reliable &&
-            result.stop_reason === :count_multiplicity_or_unresolved_defect &&
-            last(result.rows).retained < result.count.count_estimate
+            result.stop_reason in (:target_count_complete, :target_algebraic_count_complete) &&
+            result.algebraic_retained_count == result.count.count_estimate
         return (
             id=row.id,
             status=row.status,
@@ -930,6 +933,7 @@ function run_moment_rii_torture_case(id::Symbol; print_rows=false)
                 count_error=result.count.count_error,
                 stop_reason=result.stop_reason,
                 retained=last(result.rows).retained,
+                algebraic_retained=result.algebraic_retained_count,
             ),
         )
     elseif row.id === :quartic_sine_multiplicity

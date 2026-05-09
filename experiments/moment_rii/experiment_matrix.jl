@@ -2745,6 +2745,13 @@ function count_driven_refinement_row(stage, result, center_count, added_count, t
     )
 end
 
+function in_target_cluster_values(clusters, outer_center, outer_radius; match_atol=1e-6)
+    ComplexF64[
+        cluster.value for cluster in clusters
+        if abs(cluster.value - outer_center) <= outer_radius + 10 * match_atol
+    ]
+end
+
 function count_driven_chart_diagnostic_summary(
     result;
     outer_center=0.0 + 0.0im,
@@ -3014,9 +3021,15 @@ function run_count_driven_adaptive_grid_refinement(;
             stop_reason = :target_count_complete
             break
         else
+            diagnostic_values = in_target_cluster_values(
+                result.support_clusters,
+                outer_center,
+                outer_radius;
+                match_atol=match_atol,
+            )
             multiplicity_rows = local_cluster_multiplicity_estimates(
                 cases,
-                result.support2_global_found;
+                diagnostic_values;
                 outer_center=outer_center,
                 outer_radius=outer_radius,
                 operator_builder=operator_builder,

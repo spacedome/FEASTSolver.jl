@@ -931,14 +931,14 @@ The current matrix covers low-dimensional many-root delay problems,
 nonnormal weak-support charts, near-pole meromorphic operators, algebraic
 multiplicity, residual-Laurent correction-space closure, sparse Schrodinger
 gallery operators, and Schrodinger domain-decomposition packet diagnostics.
-It also records important boundary cases: a finite rational pole ladder with a
-reliable count but incomplete retention, high-multiplicity sine cases that
-need enough positive moments plus clustered local multiplicity probes,
-branch-cut operators that require an explicit sheet/analytic-domain model, and
-dense spectral regions that are target-selection boundaries unless the contour
-isolates a stable finite packet.
+It also records important boundary cases: finite rational pole ladders where
+support-only retention misses weak but count-certified clusters,
+high-multiplicity sine cases that need enough positive moments plus clustered
+local multiplicity probes, branch-cut operators that require an explicit
+sheet/analytic-domain model, and dense spectral regions that are
+target-selection boundaries unless the contour isolates a stable finite packet.
 
-Two sweep helpers characterize the known failure boundaries instead of
+Two sweep helpers characterize failure and diagnostic boundaries instead of
 treating them as single anecdotes:
 
 - `run_near_pole_count_reliability_sweep` varies only the argument-principle
@@ -949,15 +949,15 @@ treating them as single anecdotes:
   move the user-selected contour away from the pole, not to blame reduced
   extraction.
 - `run_meromorphic_pole_ladder_boundary_sweep` varies exterior pole gap. The
-  current reference sweep succeeds at gaps `0.12` and `0.07`, then at gap
-  `0.035` still has a reliable contour count of `12` but retains only `10` and
-  stops unresolved. This suggests the observed failure is not primarily an
-  argument-principle quadrature-count failure; it is a chart/extraction/support
-  retention boundary near singularity accumulation.
+  current reference sweep has reliable contour count `12` at gaps `0.12`,
+  `0.07`, and `0.035`. The smaller gaps do not always have support-2 retention
+  count `12`, but weak support-1 clusters complete the algebraic count after
+  local count certification. This pins a support-retention escalation rung
+  rather than an argument-principle quadrature-count failure.
 - `run_high_multiplicity_sine_boundary_sweep` varies root multiplicity on a
   smaller contour. Powers `2`, `3`, and `4` are handled by local multiplicity
-  counts after clustering retained candidates before the local probes. The raw
-  support set may contain extra residual-small candidates, but the
+  counts after clustering residual-small in-target candidates before the local
+  probes. The support-2 set may be too small or contain extras, but the
   multiplicity-filtered clusters recover the algebraic count.
 - `run_high_multiplicity_moment_order_sweep` keeps the same multiplicity
   boundary geometry but increases positive moment order from `p` to `4p`. The
@@ -1092,13 +1092,14 @@ Representative tests:
    conservative round limit is reached. This makes the loop solver-like: known
    roots are not used to decide when to stop.
 9. If the algebraic target count is larger than the number of supported unique
-   retained values, assign multiplicities to retained clusters with small local
-   contour counts around each cluster. The algebraic retained count is the sum
-   of those local counts. Escalate only if this multiplicity-weighted count
-   still fails, or if any local count is unreliable. Do not force unique-root
-   support clustering to satisfy an algebraic count by inventing duplicate
-   scalar values. Skip these local multiplicity probes entirely when unique
-   retained support already equals the algebraic target count.
+   retained values, assign multiplicities to all residual-small in-target
+   clusters, including weak support-1 clusters, with small local contour counts
+   around each cluster. The algebraic retained count is the sum of those local
+   counts. Escalate only if this multiplicity-weighted count still fails, or if
+   any local count is unreliable. Do not force unique-root support clustering to
+   satisfy an algebraic count by inventing duplicate scalar values. Skip these
+   local probes entirely when unique retained support already equals the
+   algebraic target count.
 10. Use block Newton, rational coordinates, or deflation only as local
    refinement/escalation rungs, not as the central update.
 

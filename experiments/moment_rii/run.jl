@@ -2004,7 +2004,7 @@ function determinant_power_sums(Tred, Tred_derivative; center, radius, nodes=102
         M = Tred(z)
         dM = Tred_derivative(z)
         rhs = dM isa AbstractSparseMatrix ? Matrix(dM) : dM
-        logarithmic_derivative = tr(M \ rhs)
+        logarithmic_derivative = LinearAlgebra.tr(M \ rhs)
         μ = (z - center) / radius
         μpower = one(ComplexF64)
         for k in 0:capacity
@@ -2022,7 +2022,7 @@ function determinant_value_and_derivative(Tred, Tred_derivative, λ)
     M = Tred(λ)
     value = det(M)
     derivative = try
-        value * tr(M \ Tred_derivative(λ))
+        value * LinearAlgebra.tr(M \ Tred_derivative(λ))
     catch
         NaN + NaN * im
     end

@@ -193,9 +193,9 @@ global block Newton, or rational-coordinate-only fixes.
   for count deficits fail there. The policy split is now named explicitly:
   count deficits shrink around residual candidates, while count-error-only
   charts preserve parent-radius candidates. The sparse coupled two-delay
-  radius-12 cover is now pinned as an unresolved-defect diagnostic: the policy
-  retains 10 of 12
-  counted roots and does not over-accept the incomplete cover. A blind
+  radius-12 cover was pinned as an unresolved-defect diagnostic under
+  support-only retention: the policy retained 10 of 12 counted roots and did
+  not over-accept the incomplete cover. A blind
   supplemental half-grid fill-in was tried and rejected: it adds chart centers
   but still plateaus at 10 of 12 retained roots. Adding a larger local chart
   radius `3.0` repairs the same case with one weak-center refinement, so the
@@ -511,9 +511,9 @@ gaps.
 | Requirement | Current Artifact | Evidence | Status |
 | --- | --- | --- | --- |
 | High eigenvalue dimension with low matrix dimension | `torture_matrix.jl` row `:low_dim_many_roots_delay` | Points at `run_multi_delay_count_driven_adaptive_refinement` and the oracle-free nonnormal delay slow test. | Covered |
-| Near infinite or dense spectral regions | `torture_matrix.jl` rows `:meromorphic_pole_ladder` and `:dense_spectral_region` | The pole ladder is an executable finite meromorphic approximation to roots accumulating near singularities and currently stops as an unresolved defect with reliable count `12` but retained `10`; dense spectral regions remain `:degenerate_boundary` without an isolated finite packet. | Known boundary plus documented boundary |
+| Near infinite or dense spectral regions | `torture_matrix.jl` rows `:meromorphic_pole_ladder` and `:dense_spectral_region` | The pole ladder is an executable finite meromorphic approximation to roots accumulating near singularities. Support-only retention misses weak clusters at small pole gaps, but local count certification of all residual-small in-target clusters recovers algebraic count `12`; dense spectral regions remain `:degenerate_boundary` without an isolated finite packet. | Covered escalation plus documented boundary |
 | Meromorphic operators and near poles | `torture_matrix.jl` row `:near_pole_rational` | Points at the safe near-pole rational diagnostic and the too-close-pole unreliable-count diagnostic. | Covered |
-| High eigenvalue multiplicity | `torture_matrix.jl` rows `:duplicate_delay_multiplicity`, `:squared_sine_multiplicity`, and `:quartic_sine_multiplicity` | Multiplicity two through four are covered when positive moment order reaches the multiplicity and retained candidates are clustered before local multiplicity probes. Raw retained candidates may be larger than the accepted multiplicity-filtered set. | Covered for current generated controls |
+| High eigenvalue multiplicity | `torture_matrix.jl` rows `:duplicate_delay_multiplicity`, `:squared_sine_multiplicity`, and `:quartic_sine_multiplicity` | Multiplicity two through four are covered when positive moment order reaches the multiplicity and residual-small in-target candidates are clustered before local multiplicity probes. The support-2 set may be too small or contain extras; the accepted set is the multiplicity-filtered cluster set. | Covered for current generated controls |
 | Operators with branch cuts | `torture_matrix.jl` rows `:branch_cut_fixed_sheet` and `:branch_cut_operator` | The fixed-sheet principal square-root case is executable and count-complete; cross-cut/multisheet cases remain `:documented_gap` until branch/sheet/analytic-domain data are part of the model. | Diagnostic boundary plus documented gap |
 | Nonnormal weak-support extraction failures | `torture_matrix.jl` row `:dense_multi_delay_weak_support` | Points at the dense multi-delay weak-support diagnostic. | Covered |
 | Residual-Laurent update mechanism | `torture_matrix.jl` row `:residual_laurent_correction_space` | Points at the correction-space diagnostic showing new Ritz-vector components live in the residual-Laurent enrichment spaces. | Covered |
