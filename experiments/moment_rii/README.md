@@ -127,7 +127,8 @@ The matrix currently tracks:
 - finite meromorphic pole/root ladders approximating zero accumulation near
   singularities;
 - repeated and algebraically multiple roots;
-- high multiplicity cases that currently expose over-retention boundaries;
+- high multiplicity cases that require enough positive moments plus
+  multiplicity-aware retained-cluster probes;
 - residual-Laurent correction-space closure;
 - realistic sparse Schrodinger gallery and domain-decomposition controls;
 - branch-cut operators on a declared analytic sheet plus cross-cut operators
@@ -144,7 +145,8 @@ For the current known failures, use
 `run_high_multiplicity_sine_boundary_sweep()`. These characterize transition
 points instead of only preserving one failing parameter set.
 `run_high_multiplicity_moment_order_sweep()` checks whether adding enough
-positive moments changes the multiplicity failure layer.
+positive moments and clustered local multiplicity probes resolves the
+multiplicity layer.
 Use `run_near_pole_count_reliability_sweep()` to isolate the
 argument-principle quadrature layer for near-pole contours, and
 `moment_rii_failure_layer_report(id)` to retrieve the current diagnostic layer,

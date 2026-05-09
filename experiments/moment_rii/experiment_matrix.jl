@@ -2793,6 +2793,7 @@ function local_cluster_multiplicity_estimates(
     component_scaling=:none,
     component_scaling_nodes=64,
     local_radius=0.08,
+    cluster_radius=local_radius,
     determinant_nodes=2048,
     determinant_capacity=16,
 )
@@ -2804,7 +2805,7 @@ function local_cluster_multiplicity_estimates(
         component_scaling_nodes=component_scaling_nodes,
     )
     ctx = analytic_context(cases, chart, operator_builder)
-    retained = ComplexF64.(values)
+    retained = multiplicity_probe_cluster_values(ComplexF64.(values); cluster_radius=cluster_radius)
     rows = NamedTuple[]
     for (index, value) in pairs(retained)
         nearest = length(retained) == 1 ? Inf :
@@ -2832,6 +2833,20 @@ function local_cluster_multiplicity_estimates(
         )
     end
     rows
+end
+
+function multiplicity_probe_cluster_values(values; cluster_radius=0.08)
+    isempty(values) && return ComplexF64[]
+    clusters = Vector{Vector{ComplexF64}}()
+    for value in sort(ComplexF64.(values); by=z -> (real(z), imag(z)))
+        index = findfirst(cluster -> minimum(abs.(value .- cluster)) <= cluster_radius, clusters)
+        if index === nothing
+            push!(clusters, ComplexF64[value])
+        else
+            push!(clusters[index], value)
+        end
+    end
+    ComplexF64[sum(cluster) / length(cluster) for cluster in clusters]
 end
 
 function run_count_driven_adaptive_grid_refinement(;

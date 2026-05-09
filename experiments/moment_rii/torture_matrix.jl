@@ -95,13 +95,13 @@ const MOMENT_RII_TORTURE_MATRIX = (
         failure_class=:algebraic_multiplicity,
         matrix_dimension=:scalar,
         spectral_difficulty=:high_root_multiplicity,
-        status=:known_failure_boundary,
+        status=:covered,
         executable=true,
         smoke=false,
         runner=:run_high_multiplicity_sine_torture,
         evidence="torture diagnostic: quartic sine multiplicity",
-        expected_behavior="The current chart policy over-retains residual-small candidates and exposes the need for a stronger multiplicity/deflation layer.",
-        failure_mode="Multiplicity greater than two stresses whether the count-driven branch generalizes beyond the existing doubled-root controls.",
+        expected_behavior="Positive moments plus clustered local multiplicity probes recover the algebraic count while filtering raw spurious candidates.",
+        failure_mode="High multiplicity requires enough positive moments and multiplicity-aware retained-cluster probes; raw support candidates are not the accepted set.",
     ),
     (
         id=:residual_laurent_correction_space,
@@ -215,11 +215,11 @@ const MOMENT_RII_FAILURE_LAYER_REPORTS = (
     ),
     (
         id=:quartic_sine_multiplicity,
-        layer=:multiplicity_deflation_retention,
-        diagnostic=:reliable_count_spurious_overretention,
-        steering=:add_deflation_or_multiplicity_aware_retention_before_acceptance,
+        layer=:multiplicity_moment_retention,
+        diagnostic=:reliable_count_clustered_multiplicity_completion,
+        steering=:increase_moments_to_local_multiplicity_then_filter_by_cluster_counts,
         fundamental=false,
-        competing_solver_note="Algorithms with explicit derivative/Jordan or deflation machinery may handle this better; generic Beyn/SS-style extraction can also struggle without multiplicity-aware postprocessing.",
+        competing_solver_note="Derivative/Jordan or deflation solvers may represent multiplicity differently, but the contour-moment path is sufficient here once retained candidates are clustered before local multiplicity counts.",
     ),
     (
         id=:branch_cut_operator,
@@ -623,7 +623,8 @@ end
 function high_multiplicity_sine_boundary_status(result)
     final = last(result.rows)
     expected_unique = result.count.count_estimate ÷ result.expected_power
-    if result.accepted && final.retained == expected_unique
+    filtered_unique = length(result.multiplicities)
+    if result.accepted && filtered_unique == expected_unique
         return :accepted_unique_multiplicity
     elseif result.stop_reason === :target_algebraic_count_complete && final.retained > expected_unique
         return :algebraic_count_with_spurious_retention
@@ -662,6 +663,7 @@ function run_high_multiplicity_sine_boundary_sweep(;
                 count_error=result.count.count_error,
                 expected_unique=expected_unique,
                 retained=final.retained,
+                filtered_retained=length(result.multiplicities),
                 algebraic_retained=result.result.algebraic_retained_count,
                 multiplicities=Tuple(item.multiplicity for item in result.multiplicities),
                 accepted=result.accepted,
@@ -767,6 +769,7 @@ function run_high_multiplicity_moment_order_sweep(;
                 count_error=result.count.count_error,
                 expected_unique=expected_unique,
                 retained=final.retained,
+                filtered_retained=length(result.multiplicities),
                 algebraic_retained=result.algebraic_retained_count,
                 moment_adequate=moments >= power,
                 multiplicities=Tuple(item.multiplicity for item in result.multiplicities),
@@ -931,10 +934,11 @@ function run_moment_rii_torture_case(id::Symbol; print_rows=false)
         )
     elseif row.id === :quartic_sine_multiplicity
         result = run_high_multiplicity_sine_torture(; print_rows=print_rows)
-        passed = !result.accepted &&
-            result.stop_reason === :max_rounds &&
+        expected_unique = result.count.count_estimate ÷ result.expected_power
+        passed = result.accepted &&
             result.count.count_error <= 1e-8 &&
-            last(result.rows).retained > result.count.count_estimate
+            length(result.multiplicities) == expected_unique &&
+            all(item.multiplicity == result.expected_power for item in result.multiplicities)
         return (
             id=row.id,
             status=row.status,
@@ -942,7 +946,8 @@ function run_moment_rii_torture_case(id::Symbol; print_rows=false)
             skipped=false,
             metrics=(
                 count=result.count.count_estimate,
-                unique_retained=last(result.rows).retained,
+                raw_retained=last(result.rows).retained,
+                filtered_retained=length(result.multiplicities),
                 multiplicities=Tuple(item.multiplicity for item in result.multiplicities),
                 stop_reason=result.stop_reason,
             ),

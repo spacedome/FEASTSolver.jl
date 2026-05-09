@@ -35,13 +35,13 @@
     @test moment_rii_torture_entry(:branch_cut_operator).executable == false
     @test any(row -> row.failure_class === :dense_spectral_region && !row.executable, summary)
     @test moment_rii_torture_entry(:meromorphic_pole_ladder).status === :known_failure_boundary
-    @test moment_rii_torture_entry(:quartic_sine_multiplicity).status === :known_failure_boundary
+    @test moment_rii_torture_entry(:quartic_sine_multiplicity).status === :covered
     @test moment_rii_torture_entry(:branch_cut_fixed_sheet).status === :diagnostic_boundary
 
     reports = moment_rii_failure_layer_reports()
     @test any(report -> report.id === :near_pole_rational && report.layer === :contour_count_quadrature, reports)
     @test any(report -> report.id === :meromorphic_pole_ladder && report.layer === :local_chart_support_retention, reports)
-    @test any(report -> report.id === :quartic_sine_multiplicity && report.layer === :multiplicity_deflation_retention, reports)
+    @test any(report -> report.id === :quartic_sine_multiplicity && report.layer === :multiplicity_moment_retention, reports)
     @test any(report -> report.id === :branch_cut_operator && report.fundamental, reports)
 end
 
@@ -63,10 +63,12 @@ end
 
     multiplicity = run_moment_rii_torture_case(:quartic_sine_multiplicity; print_rows=false)
     @test multiplicity.passed
-    @test multiplicity.status === :known_failure_boundary
+    @test multiplicity.status === :covered
     @test multiplicity.metrics.count == 20
-    @test multiplicity.metrics.unique_retained > multiplicity.metrics.count
-    @test multiplicity.metrics.stop_reason === :max_rounds
+    @test multiplicity.metrics.raw_retained > multiplicity.metrics.filtered_retained
+    @test multiplicity.metrics.filtered_retained == 5
+    @test all(==(4), multiplicity.metrics.multiplicities)
+    @test multiplicity.metrics.stop_reason === :target_algebraic_count_complete
 end
 
 @testitem "torture moment RII: failure boundary sweeps characterize transitions" tags=[:slow, :torture, :moment_rii, :moment_heavy] begin
@@ -82,15 +84,16 @@ end
     multiplicity = run_high_multiplicity_sine_boundary_sweep(; print_rows=false)
     @test Tuple(row.status for row in multiplicity.rows) == (
         :accepted_unique_multiplicity,
-        :algebraic_count_with_spurious_retention,
-        :runaway_overretention,
+        :accepted_unique_multiplicity,
+        :accepted_unique_multiplicity,
     )
     @test Tuple(row.power for row in multiplicity.rows) == (2, 3, 4)
     @test Tuple(row.count for row in multiplicity.rows) == (6, 9, 12)
     @test multiplicity.rows[1].retained == multiplicity.rows[1].expected_unique
-    @test multiplicity.rows[2].retained > multiplicity.rows[2].expected_unique
-    @test multiplicity.rows[3].retained > multiplicity.rows[3].count
-    @test multiplicity.first_failure_power == 3
+    @test multiplicity.rows[2].filtered_retained == multiplicity.rows[2].expected_unique
+    @test multiplicity.rows[3].filtered_retained == multiplicity.rows[3].expected_unique
+    @test multiplicity.rows[3].retained > multiplicity.rows[3].filtered_retained
+    @test multiplicity.first_failure_power == typemax(Int)
 end
 
 @testitem "torture moment RII: multiplicity moment escalation identifies next layer" tags=[:slow, :torture, :moment_rii, :moment_heavy] begin
@@ -101,21 +104,21 @@ end
     @test sweep.all_moment_adequate
     @test sweep.unchanged_by_moment_escalation
     @test all(row.count_error <= 1e-8 for row in sweep.rows)
-    @test all(row -> row.recommendation === :moments_are_not_the_limiting_layer_use_deflation_or_retention, sweep.rows)
+    @test all(row -> row.recommendation === :accept, sweep.rows)
 
     p3 = filter(row -> row.power == 3, sweep.rows)
     p4 = filter(row -> row.power == 4, sweep.rows)
     @test Tuple(row.moments for row in p3) == (3, 6, 12)
     @test Tuple(row.status for row in p3) == (
-        :algebraic_count_with_spurious_retention,
-        :algebraic_count_with_spurious_retention,
-        :algebraic_count_with_spurious_retention,
+        :accepted_unique_multiplicity,
+        :accepted_unique_multiplicity,
+        :accepted_unique_multiplicity,
     )
     @test Tuple(row.moments for row in p4) == (4, 8, 16)
     @test Tuple(row.status for row in p4) == (
-        :runaway_overretention,
-        :runaway_overretention,
-        :runaway_overretention,
+        :accepted_unique_multiplicity,
+        :accepted_unique_multiplicity,
+        :accepted_unique_multiplicity,
     )
 end
 

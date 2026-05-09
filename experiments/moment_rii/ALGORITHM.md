@@ -931,12 +931,12 @@ The current matrix covers low-dimensional many-root delay problems,
 nonnormal weak-support charts, near-pole meromorphic operators, algebraic
 multiplicity, residual-Laurent correction-space closure, sparse Schrodinger
 gallery operators, and Schrodinger domain-decomposition packet diagnostics.
-It also records important non-success cases: a finite rational pole ladder
-with a reliable count but incomplete retention, a multiplicity-four sine case
-that currently over-retains residual-small candidates, branch-cut operators
-that require an explicit sheet/analytic-domain model, and dense spectral
-regions that are target-selection boundaries unless the contour isolates a
-stable finite packet.
+It also records important boundary cases: a finite rational pole ladder with a
+reliable count but incomplete retention, high-multiplicity sine cases that
+need enough positive moments plus clustered local multiplicity probes,
+branch-cut operators that require an explicit sheet/analytic-domain model, and
+dense spectral regions that are target-selection boundaries unless the contour
+isolates a stable finite packet.
 
 Two sweep helpers characterize the known failure boundaries instead of
 treating them as single anecdotes:
@@ -955,17 +955,17 @@ treating them as single anecdotes:
   argument-principle quadrature-count failure; it is a chart/extraction/support
   retention boundary near singularity accumulation.
 - `run_high_multiplicity_sine_boundary_sweep` varies root multiplicity on a
-  smaller contour. Power `2` is handled by local multiplicity counts, power `3`
-  reaches algebraic count with spurious retained candidates, and power `4`
-  runs away into massive over-retention. This points to a multiplicity and
-  deflation/retention limitation, not a failure to compute the contour count.
+  smaller contour. Powers `2`, `3`, and `4` are handled by local multiplicity
+  counts after clustering retained candidates before the local probes. The raw
+  support set may contain extra residual-small candidates, but the
+  multiplicity-filtered clusters recover the algebraic count.
 - `run_high_multiplicity_moment_order_sweep` keeps the same multiplicity
   boundary geometry but increases positive moment order from `p` to `4p`. The
-  power-3 and power-4 outcomes do not change. This confirms the expected
-  theory/implementation split: at least `p` positive moments are necessary to
-  represent algebraic multiplicity `p`, but once that threshold is met the
-  remaining failure is not fixed by adding more moments. The next layer is
-  multiplicity-aware deflation or retention of the reduced realization.
+  power-3 and power-4 cases remain accepted once moment order is at least
+  `p`. This confirms the expected theory/implementation split: at least `p`
+  positive moments are necessary to represent algebraic multiplicity `p`; the
+  accepted set must then be the multiplicity-filtered retained clusters, not
+  every raw residual-small candidate.
 
 `moment_rii_failure_layer_report(id)` records the intended diagnostic layer and
 steering action for these boundaries. The current layers are:
@@ -974,8 +974,9 @@ steering action for these boundaries. The current layers are:
   contour away from singularities.
 - `:local_chart_support_retention`: refine local charts or improve packet
   support modeling; global count is already reliable.
-- `:multiplicity_deflation_retention`: add deflation or multiplicity-aware
-  acceptance before treating residual-small candidates as roots.
+- `:multiplicity_moment_retention`: increase moments to the reliable local
+  multiplicity and accept multiplicity-filtered clusters rather than raw
+  residual-small candidates.
 - `:analytic_model_validity`: require branch/sheet/domain data before solving.
 - `:target_packet_definition`: ask the user to specify an isolated finite
   packet or report the target as degenerate.
