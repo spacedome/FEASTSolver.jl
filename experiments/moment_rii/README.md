@@ -139,6 +139,11 @@ human-readable table, or `moment_rii_torture_coverage_summary()` for a compact
 machine-checkable summary. The lightweight torture test checks the taxonomy and
 runner mapping without executing every expensive diagnostic.
 
+For the current known failures, use
+`run_meromorphic_pole_ladder_boundary_sweep()` and
+`run_high_multiplicity_sine_boundary_sweep()`. These characterize transition
+points instead of only preserving one failing parameter set.
+
 ## What The Moment Blocks Represent
 
 For simple eigenvalues, Keldysh's theorem gives the local resolvent expansion

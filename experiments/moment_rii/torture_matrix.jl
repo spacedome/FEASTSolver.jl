@@ -392,6 +392,75 @@ function run_meromorphic_pole_ladder_torture(;
     )
 end
 
+function meromorphic_pole_ladder_boundary_status(result)
+    final = last(result.rows)
+    if !result.count_reliable
+        return :unreliable_count
+    elseif result.accepted && final.retained == result.count.count_estimate
+        return :accepted
+    elseif result.stop_reason === :count_multiplicity_or_unresolved_defect &&
+            final.retained < result.count.count_estimate
+        return :incomplete_retention
+    else
+        return :unclassified_boundary
+    end
+end
+
+function run_meromorphic_pole_ladder_boundary_sweep(;
+    gaps=(0.12, 0.07, 0.035),
+    print_rows=true,
+)
+    rows = NamedTuple[]
+    results = Any[]
+    for gap in gaps
+        result = run_meromorphic_pole_ladder_torture(; gap=gap, print_rows=false)
+        push!(results, result)
+        final = last(result.rows)
+        push!(
+            rows,
+            (
+                gap=Float64(gap),
+                status=meromorphic_pole_ladder_boundary_status(result),
+                stop_reason=result.stop_reason,
+                count=result.count.count_estimate,
+                count_error=result.count.count_error,
+                retained=final.retained,
+                reliable=result.count_reliable,
+                accepted=result.accepted,
+            ),
+        )
+    end
+    if print_rows
+        println()
+        println("Meromorphic pole-ladder boundary sweep")
+        println("  finite rational approximation to roots accumulating near exterior poles")
+        @printf("  %8s %12s %9s %9s %12s %s\n", "gap", "count_error", "retained", "count", "status", "stop")
+        for row in rows
+            @printf(
+                "  %8.3f %12.3e %9d %9d %12s %s\n",
+                row.gap,
+                row.count_error,
+                row.retained,
+                row.count,
+                string(row.status),
+                string(row.stop_reason),
+            )
+        end
+    end
+    transition_gap = Inf
+    for row in rows
+        if row.status !== :accepted
+            transition_gap = row.gap
+            break
+        end
+    end
+    (
+        rows=Tuple(rows),
+        results=Tuple(results),
+        transition_gap=transition_gap,
+    )
+end
+
 function run_high_multiplicity_sine_torture(;
     power=4,
     outer_radius=7.0,
@@ -428,6 +497,86 @@ function run_high_multiplicity_sine_torture(;
         accepted=result.stop_reason === :target_algebraic_count_complete &&
             !isempty(result.multiplicities) &&
             all(item.multiplicity == power for item in result.multiplicities),
+    )
+end
+
+function high_multiplicity_sine_boundary_status(result)
+    final = last(result.rows)
+    expected_unique = result.count.count_estimate ÷ result.expected_power
+    if result.accepted && final.retained == expected_unique
+        return :accepted_unique_multiplicity
+    elseif result.stop_reason === :target_algebraic_count_complete && final.retained > expected_unique
+        return :algebraic_count_with_spurious_retention
+    elseif result.stop_reason === :max_rounds && final.retained > result.count.count_estimate
+        return :runaway_overretention
+    elseif result.count.count_error > 1e-8
+        return :unreliable_count
+    else
+        return :unclassified_boundary
+    end
+end
+
+function run_high_multiplicity_sine_boundary_sweep(;
+    powers=(2, 3, 4),
+    outer_radius=4.0,
+    print_rows=true,
+)
+    rows = NamedTuple[]
+    results = Any[]
+    for power in powers
+        result = run_high_multiplicity_sine_torture(;
+            power=power,
+            outer_radius=outer_radius,
+            print_rows=false,
+        )
+        push!(results, result)
+        final = last(result.rows)
+        expected_unique = result.count.count_estimate ÷ result.expected_power
+        push!(
+            rows,
+            (
+                power=Int(power),
+                status=high_multiplicity_sine_boundary_status(result),
+                stop_reason=result.stop_reason,
+                count=result.count.count_estimate,
+                count_error=result.count.count_error,
+                expected_unique=expected_unique,
+                retained=final.retained,
+                algebraic_retained=result.result.algebraic_retained_count,
+                multiplicities=Tuple(item.multiplicity for item in result.multiplicities),
+                accepted=result.accepted,
+            ),
+        )
+    end
+    if print_rows
+        println()
+        println("High-multiplicity sine boundary sweep")
+        println("  separates low multiplicity success from spurious over-retention and runaway refinement")
+        @printf("  %6s %12s %9s %9s %9s %12s %s\n", "power", "count_error", "unique", "retained", "count", "status", "stop")
+        for row in rows
+            @printf(
+                "  %6d %12.3e %9d %9d %9d %12s %s\n",
+                row.power,
+                row.count_error,
+                row.expected_unique,
+                row.retained,
+                row.count,
+                string(row.status),
+                string(row.stop_reason),
+            )
+        end
+    end
+    first_failure_power = typemax(Int)
+    for row in rows
+        if row.status !== :accepted_unique_multiplicity
+            first_failure_power = row.power
+            break
+        end
+    end
+    (
+        rows=Tuple(rows),
+        results=Tuple(results),
+        first_failure_power=first_failure_power,
     )
 end
 

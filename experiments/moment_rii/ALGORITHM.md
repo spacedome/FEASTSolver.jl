@@ -938,6 +938,21 @@ that require an explicit sheet/analytic-domain model, and dense spectral
 regions that are target-selection boundaries unless the contour isolates a
 stable finite packet.
 
+Two sweep helpers characterize the known failure boundaries instead of
+treating them as single anecdotes:
+
+- `run_meromorphic_pole_ladder_boundary_sweep` varies exterior pole gap. The
+  current reference sweep succeeds at gaps `0.12` and `0.07`, then at gap
+  `0.035` still has a reliable contour count of `12` but retains only `10` and
+  stops unresolved. This suggests the observed failure is not primarily an
+  argument-principle quadrature-count failure; it is a chart/extraction/support
+  retention boundary near singularity accumulation.
+- `run_high_multiplicity_sine_boundary_sweep` varies root multiplicity on a
+  smaller contour. Power `2` is handled by local multiplicity counts, power `3`
+  reaches algebraic count with spurious retained candidates, and power `4`
+  runs away into massive over-retention. This points to a multiplicity and
+  deflation/retention limitation, not a failure to compute the contour count.
+
 The matrix is intentionally a research artifact rather than a public API. Its
 job is to keep the experiment honest: when we claim the algorithm handles a
 pathology, there should be a named row pointing at executable evidence; when
@@ -948,6 +963,7 @@ Representative tests:
 - `just test --preset moment-core`
 - `just test-torture 'moment RII'`
 - `just test --preset moment-heavy 'generated adversarial NEP profiles'`
+- `just test --preset moment-heavy 'failure boundary sweeps'`
 - `just test --slow 'dual linear RII'`
 - `just test --slow 'low-rank compression preserves update'`
 - `just test --slow 'residual-coordinate invariant'`

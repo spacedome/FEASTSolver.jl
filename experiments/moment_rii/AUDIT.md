@@ -528,3 +528,19 @@ This does not mean every row is a solved success case. It means every hard
 class currently under discussion has a named status: covered by slow evidence,
 guarded as a diagnostic boundary, recorded as a known algorithmic failure
 boundary, or recorded as an analytic/modeling gap.
+
+### Boundary Characterization Update
+
+The first characterization sweeps separate likely numerical mechanisms:
+
+- Meromorphic pole ladder: gaps `0.12` and `0.07` are accepted with reliable
+  count `12`; gap `0.035` has reliable count `12` but retains only `10` and
+  stops as `:count_multiplicity_or_unresolved_defect`. This is evidence for a
+  local chart/support-retention boundary near singularity accumulation, not a
+  raw contour-count quadrature failure.
+- High-multiplicity sine: power `2` is accepted by local multiplicity counts;
+  power `3` reaches algebraic count while over-retaining spurious candidates;
+  power `4` over-retains beyond the algebraic count and stops at
+  `:max_rounds`. This is evidence that higher multiplicity requires a stronger
+  deflation/retention layer if we want to support it beyond diagnostic safe
+  failure.
