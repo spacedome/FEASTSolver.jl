@@ -941,6 +941,13 @@ stable finite packet.
 Two sweep helpers characterize the known failure boundaries instead of
 treating them as single anecdotes:
 
+- `run_near_pole_count_reliability_sweep` varies only the argument-principle
+  node count for a pole gap of `0.005`. Counts stabilize at five, but the
+  count error remains too large at `512` and `2048` nodes and only becomes
+  reliable at `8192` nodes. This is a contour-count/quadrature layer
+  diagnostic: the correct steering is to increase quadrature resolution or
+  move the user-selected contour away from the pole, not to blame reduced
+  extraction.
 - `run_meromorphic_pole_ladder_boundary_sweep` varies exterior pole gap. The
   current reference sweep succeeds at gaps `0.12` and `0.07`, then at gap
   `0.035` still has a reliable contour count of `12` but retains only `10` and
@@ -953,6 +960,21 @@ treating them as single anecdotes:
   runs away into massive over-retention. This points to a multiplicity and
   deflation/retention limitation, not a failure to compute the contour count.
 
+`moment_rii_failure_layer_report(id)` records the intended diagnostic layer and
+steering action for these boundaries. The current layers are:
+
+- `:contour_count_quadrature`: increase contour quadrature nodes or move a
+  contour away from singularities.
+- `:local_chart_support_retention`: refine local charts or improve packet
+  support modeling; global count is already reliable.
+- `:multiplicity_deflation_retention`: add deflation or multiplicity-aware
+  acceptance before treating residual-small candidates as roots.
+- `:analytic_model_validity`: require branch/sheet/domain data before solving.
+- `:target_packet_definition`: ask the user to specify an isolated finite
+  packet or report the target as degenerate.
+- `:packet_visibility`: increase contour/extraction resolution while guarding
+  against silently changing the target packet.
+
 The matrix is intentionally a research artifact rather than a public API. Its
 job is to keep the experiment honest: when we claim the algorithm handles a
 pathology, there should be a named row pointing at executable evidence; when
@@ -964,6 +986,7 @@ Representative tests:
 - `just test-torture 'moment RII'`
 - `just test --preset moment-heavy 'generated adversarial NEP profiles'`
 - `just test --preset moment-heavy 'failure boundary sweeps'`
+- `just test --preset moment-heavy 'near-pole count diagnostic'`
 - `just test --slow 'dual linear RII'`
 - `just test --slow 'low-rank compression preserves update'`
 - `just test --slow 'residual-coordinate invariant'`

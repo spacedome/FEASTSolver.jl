@@ -538,9 +538,22 @@ The first characterization sweeps separate likely numerical mechanisms:
   stops as `:count_multiplicity_or_unresolved_defect`. This is evidence for a
   local chart/support-retention boundary near singularity accumulation, not a
   raw contour-count quadrature failure.
+- Near-pole rational count: at pole gap `0.005`, the count is numerically
+  unstable at `512` and `2048` argument-principle nodes and becomes reliable at
+  `8192` nodes. This is a count/quadrature-layer failure where a diagnostic can
+  correctly recommend increasing nodes or moving the contour away from the
+  singularity. It is not evidence against the residual-Laurent update.
 - High-multiplicity sine: power `2` is accepted by local multiplicity counts;
   power `3` reaches algebraic count while over-retaining spurious candidates;
   power `4` over-retains beyond the algebraic count and stops at
   `:max_rounds`. This is evidence that higher multiplicity requires a stronger
   deflation/retention layer if we want to support it beyond diagnostic safe
   failure.
+
+The current failure-layer reports also record expected behavior of competing
+solvers. Branch cuts without sheet data and dense non-isolated spectral
+regions are problem-definition limits, not FEAST-specific failures. Near-pole
+meromorphic cases can sometimes be attacked by non-contour solvers, but those
+methods still face singular interpolation/conditioning. Higher multiplicity is
+the boundary where algorithms with explicit derivative/Jordan or deflation
+machinery may have a real advantage over the current contour-retention policy.

@@ -196,6 +196,57 @@ const MOMENT_RII_TORTURE_MATRIX = (
     ),
 )
 
+const MOMENT_RII_FAILURE_LAYER_REPORTS = (
+    (
+        id=:near_pole_rational,
+        layer=:contour_count_quadrature,
+        diagnostic=:argument_principle_count_error,
+        steering=:increase_count_nodes_or_move_contour_away_from_singularity,
+        fundamental=false,
+        competing_solver_note="Not FEAST-specific: rational and contour solvers both become ill-conditioned when the target contour is too close to poles; non-contour solvers may avoid this contour but must still represent the nearby singularity.",
+    ),
+    (
+        id=:meromorphic_pole_ladder,
+        layer=:local_chart_support_retention,
+        diagnostic=:reliable_global_count_incomplete_retention,
+        steering=:refine_local_charts_or_use_stronger_packet_support_model,
+        fundamental=false,
+        competing_solver_note="NLEIGS/Beyn may recover some instances with different interpolation or moments, but the same near-singularity packet is ill-conditioned; the failure is currently in our local chart/support policy, not the global count.",
+    ),
+    (
+        id=:quartic_sine_multiplicity,
+        layer=:multiplicity_deflation_retention,
+        diagnostic=:reliable_count_spurious_overretention,
+        steering=:add_deflation_or_multiplicity_aware_retention_before_acceptance,
+        fundamental=false,
+        competing_solver_note="Algorithms with explicit derivative/Jordan or deflation machinery may handle this better; generic Beyn/SS-style extraction can also struggle without multiplicity-aware postprocessing.",
+    ),
+    (
+        id=:branch_cut_operator,
+        layer=:analytic_model_validity,
+        diagnostic=:missing_sheet_and_domain_data,
+        steering=:declare_branch_sheet_or_reformulate_operator_before_solving,
+        fundamental=true,
+        competing_solver_note="No black-box eigenvalue solver can make a multivalued operator single-valued without branch/domain data; this is a problem-definition issue.",
+    ),
+    (
+        id=:dense_spectral_region,
+        layer=:target_packet_definition,
+        diagnostic=:unstable_or_nonisolated_packet,
+        steering=:choose_a_stable_finite_packet_or_report_degenerate_target,
+        fundamental=true,
+        competing_solver_note="Other solvers may return values in the region, but correctness is not well-defined unless the target set is isolated or a different objective is specified.",
+    ),
+    (
+        id=:schrodinger_dd_packet,
+        layer=:packet_visibility,
+        diagnostic=:packet_visible_defect,
+        steering=:increase_contour_resolution_or_refine_extraction_without_changing_target_packet,
+        fundamental=false,
+        competing_solver_note="A direct large linearization can avoid the Schur packet diagnostic but pays with a much larger problem; the diagnostic is useful because it preserves the reduced formulation.",
+    ),
+)
+
 function moment_rii_torture_required_failure_classes()
     MOMENT_RII_TORTURE_REQUIRED_FAILURE_CLASSES
 end
@@ -237,6 +288,17 @@ function moment_rii_torture_coverage_summary(; include_documented_gaps=true)
     Tuple(covered)
 end
 
+function moment_rii_failure_layer_report(id::Symbol)
+    for report in MOMENT_RII_FAILURE_LAYER_REPORTS
+        report.id === id && return report
+    end
+    error("no failure-layer report is registered for $id")
+end
+
+function moment_rii_failure_layer_reports()
+    MOMENT_RII_FAILURE_LAYER_REPORTS
+end
+
 function print_moment_rii_torture_matrix(; io=stdout, include_documented_gaps=true)
     println(io, "Moment-RII torture matrix")
     for row in moment_rii_torture_matrix(; include_documented_gaps=include_documented_gaps)
@@ -246,6 +308,64 @@ function print_moment_rii_torture_matrix(; io=stdout, include_documented_gaps=tr
         println(io, "    expected: $(row.expected_behavior)")
     end
     nothing
+end
+
+function run_near_pole_count_reliability_sweep(;
+    gap=0.005,
+    nodes_values=(512, 2048, 8192),
+    count_error_tol=1e-6,
+    print_rows=true,
+)
+    rows = NamedTuple[]
+    for nodes in nodes_values
+        count = full_operator_count_estimate(
+            oracle_free_near_pole_rational_cases(; gap=gap);
+            outer_radius=1.0,
+            operator_builder=triangular_operator_builder(; coupling=5.0),
+            component_scaling=:contour_max,
+            determinant_nodes=nodes,
+            determinant_capacity=64,
+        )
+        push!(
+            rows,
+            (
+                gap=Float64(gap),
+                nodes=Int(nodes),
+                count=count.count_estimate,
+                count_error=count.count_error,
+                reliable=count.count_error <= count_error_tol,
+            ),
+        )
+    end
+    if print_rows
+        println()
+        println("Near-pole count reliability sweep")
+        println("  isolates argument-principle quadrature resolution near exterior poles")
+        @printf("  %8s %8s %8s %12s %s\n", "gap", "nodes", "count", "count_error", "status")
+        for row in rows
+            @printf(
+                "  %8.4f %8d %8d %12.3e %s\n",
+                row.gap,
+                row.nodes,
+                row.count,
+                row.count_error,
+                row.reliable ? "reliable" : "underresolved",
+            )
+        end
+    end
+    first_reliable_nodes = nothing
+    for row in rows
+        if row.reliable
+            first_reliable_nodes = row.nodes
+            break
+        end
+    end
+    (
+        rows=Tuple(rows),
+        first_reliable_nodes=first_reliable_nodes,
+        layer=:contour_count_quadrature,
+        steering=:increase_count_nodes_or_move_contour_away_from_singularity,
+    )
 end
 
 function scalar_product_rational_case(; roots, poles, name=nothing)

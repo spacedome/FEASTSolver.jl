@@ -37,6 +37,12 @@
     @test moment_rii_torture_entry(:meromorphic_pole_ladder).status === :known_failure_boundary
     @test moment_rii_torture_entry(:quartic_sine_multiplicity).status === :known_failure_boundary
     @test moment_rii_torture_entry(:branch_cut_fixed_sheet).status === :diagnostic_boundary
+
+    reports = moment_rii_failure_layer_reports()
+    @test any(report -> report.id === :near_pole_rational && report.layer === :contour_count_quadrature, reports)
+    @test any(report -> report.id === :meromorphic_pole_ladder && report.layer === :local_chart_support_retention, reports)
+    @test any(report -> report.id === :quartic_sine_multiplicity && report.layer === :multiplicity_deflation_retention, reports)
+    @test any(report -> report.id === :branch_cut_operator && report.fundamental, reports)
 end
 
 @testitem "torture moment RII: generated adversarial NEP profiles" tags=[:slow, :torture, :moment_rii, :moment_heavy] begin
@@ -85,4 +91,24 @@ end
     @test multiplicity.rows[2].retained > multiplicity.rows[2].expected_unique
     @test multiplicity.rows[3].retained > multiplicity.rows[3].count
     @test multiplicity.first_failure_power == 3
+end
+
+@testitem "torture moment RII: near-pole count diagnostic identifies quadrature layer" tags=[:slow, :torture, :moment_rii, :moment_heavy] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    sweep = run_near_pole_count_reliability_sweep(; print_rows=false)
+
+    @test sweep.layer === :contour_count_quadrature
+    @test sweep.steering === :increase_count_nodes_or_move_contour_away_from_singularity
+    @test Tuple(row.nodes for row in sweep.rows) == (512, 2048, 8192)
+    @test Tuple(row.count for row in sweep.rows) == (5, 5, 5)
+    @test sweep.rows[1].count_error > 1e-1
+    @test sweep.rows[2].count_error > 1e-6
+    @test sweep.rows[3].count_error <= 1e-6
+    @test sweep.first_reliable_nodes == 8192
+
+    report = moment_rii_failure_layer_report(:near_pole_rational)
+    @test report.layer === :contour_count_quadrature
+    @test report.diagnostic === :argument_principle_count_error
+    @test !report.fundamental
 end

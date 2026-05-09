@@ -143,6 +143,10 @@ For the current known failures, use
 `run_meromorphic_pole_ladder_boundary_sweep()` and
 `run_high_multiplicity_sine_boundary_sweep()`. These characterize transition
 points instead of only preserving one failing parameter set.
+Use `run_near_pole_count_reliability_sweep()` to isolate the
+argument-principle quadrature layer for near-pole contours, and
+`moment_rii_failure_layer_report(id)` to retrieve the current diagnostic layer,
+steering action, and competing-solver note for a hard case.
 
 ## What The Moment Blocks Represent
 
