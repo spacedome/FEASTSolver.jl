@@ -929,14 +929,16 @@ runner when one exists, plus a status:
 
 The current matrix covers low-dimensional many-root delay problems,
 nonnormal weak-support charts, near-pole meromorphic operators, algebraic
-multiplicity, residual-Laurent correction-space closure, sparse Schrodinger
-gallery operators, and Schrodinger domain-decomposition packet diagnostics.
-It also records important boundary cases: finite rational pole ladders where
-support-only retention misses weak but count-certified clusters,
-high-multiplicity sine cases that need enough positive moments plus clustered
-local multiplicity probes, branch-cut operators that require an explicit
-sheet/analytic-domain model, and dense spectral regions that are
-target-selection boundaries unless the contour isolates a stable finite packet.
+multiplicity, defective matrix-valued multiplicity, clustered simple roots,
+polynomial companion/native consistency, residual-Laurent correction-space
+closure, sparse Schrodinger gallery operators, and Schrodinger
+domain-decomposition packet diagnostics. It also records important boundary
+cases: finite rational pole ladders where support-only retention misses weak
+but count-certified clusters, high-multiplicity sine cases that need enough
+positive moments plus clustered local multiplicity probes, branch-cut
+operators that require an explicit sheet/analytic-domain model, and dense
+spectral regions that are target-selection boundaries unless the contour
+isolates a stable finite packet.
 
 Two sweep helpers characterize failure and diagnostic boundaries instead of
 treating them as single anecdotes:
@@ -959,6 +961,23 @@ treating them as single anecdotes:
   counts after clustering residual-small in-target candidates before the local
   probes. The support-2 set may be too small or contain extras, but the
   multiplicity-filtered clusters recover the algebraic count.
+- `run_defective_triangular_multiplicity_torture` repeats the sine component
+  in a triangular/Jordan-like matrix NEP. It closes count `15` through five
+  multiplicity-three packets, so the multiplicity mechanism is not only a
+  scalar repeated-root artifact.
+- `run_clustered_simple_roots_torture` uses twelve simple roots arranged as
+  six close pairs. The count is algebraically complete, but local probes merge
+  the close pairs into packet-level multiplicity-two clusters. This is a
+  diagnostic boundary: the algorithm solved the packet, but resolving
+  individual simple values requires smaller local charts or polishing.
+- `run_near_branch_fixed_sheet_torture` places square-root branch points just
+  outside the contour while keeping the chosen sheet analytic on the target
+  disk. It distinguishes valid near-branch conditioning stress from the
+  cross-cut/multisheet problem-definition gap.
+- `run_near_multiple_polynomial_companion_torture` compares polynomial-native
+  extraction against companion-pencil FEAST on clustered polynomial roots. This
+  pins the polynomial rung between linear FEAST and fully general analytic
+  NEPs.
 - `run_high_multiplicity_moment_order_sweep` keeps the same multiplicity
   boundary geometry but increases positive moment order from `p` to `4p`. The
   power-3 and power-4 cases remain accepted once moment order is at least

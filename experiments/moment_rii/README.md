@@ -127,12 +127,16 @@ The matrix currently tracks:
 - finite meromorphic pole/root ladders approximating zero accumulation near
   singularities;
 - repeated and algebraically multiple roots;
+- defective matrix-valued multiplicity with coalesced eigenvectors;
+- clustered simple roots below the current local chart resolution;
 - high multiplicity cases that require enough positive moments plus
   multiplicity-aware retained-cluster probes;
+- polynomial-native extraction checked against companion linearization;
 - residual-Laurent correction-space closure;
 - realistic sparse Schrodinger gallery and domain-decomposition controls;
 - branch-cut operators on a declared analytic sheet plus cross-cut operators
-  as an explicit analytic-model gap;
+  as an explicit analytic-model gap, including branch points close to the
+  contour on a declared sheet;
 - dense spectral regions as a degenerate target-selection boundary.
 
 Use `print_moment_rii_torture_matrix()` after including `run.jl` for the

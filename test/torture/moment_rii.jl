@@ -37,11 +37,16 @@
     @test moment_rii_torture_entry(:meromorphic_pole_ladder).status === :covered
     @test moment_rii_torture_entry(:quartic_sine_multiplicity).status === :covered
     @test moment_rii_torture_entry(:branch_cut_fixed_sheet).status === :diagnostic_boundary
+    @test moment_rii_torture_entry(:defective_triangular_multiplicity).status === :covered
+    @test moment_rii_torture_entry(:clustered_simple_roots).status === :diagnostic_boundary
+    @test moment_rii_torture_entry(:near_multiple_polynomial_companion).status === :covered
 
     reports = moment_rii_failure_layer_reports()
     @test any(report -> report.id === :near_pole_rational && report.layer === :contour_count_quadrature, reports)
     @test any(report -> report.id === :meromorphic_pole_ladder && report.layer === :local_chart_support_retention, reports)
     @test any(report -> report.id === :quartic_sine_multiplicity && report.layer === :multiplicity_moment_retention, reports)
+    @test any(report -> report.id === :defective_triangular_multiplicity && report.layer === :matrix_multiplicity_geometry, reports)
+    @test any(report -> report.id === :clustered_simple_roots && report.layer === :local_resolution_limit, reports)
     @test any(report -> report.id === :branch_cut_operator && report.fundamental, reports)
 end
 
@@ -70,6 +75,40 @@ end
     @test multiplicity.metrics.filtered_retained == 5
     @test all(==(4), multiplicity.metrics.multiplicities)
     @test multiplicity.metrics.stop_reason === :target_algebraic_count_complete
+end
+
+@testitem "torture moment RII: expanded adversarial NEP profiles" tags=[:slow, :torture, :moment_rii, :moment_heavy] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    defective = run_moment_rii_torture_case(:defective_triangular_multiplicity; print_rows=false)
+    @test defective.passed
+    @test defective.metrics.count == 15
+    @test defective.metrics.algebraic_retained == defective.metrics.count
+    @test all(==(3), defective.metrics.multiplicities)
+    @test defective.metrics.stop_reason === :target_algebraic_count_complete
+
+    clustered = run_moment_rii_torture_case(:clustered_simple_roots; print_rows=false)
+    @test clustered.passed
+    @test clustered.status === :diagnostic_boundary
+    @test clustered.metrics.count == 12
+    @test clustered.metrics.algebraic_retained == clustered.metrics.count
+    @test clustered.metrics.packets == 6
+    @test all(==(2), clustered.metrics.multiplicities)
+
+    near_branch = run_moment_rii_torture_case(:near_branch_fixed_sheet; print_rows=false)
+    @test near_branch.passed
+    @test near_branch.metrics.count == 3
+    @test near_branch.metrics.retained == 3
+    @test near_branch.metrics.count_error <= 1e-8
+    @test near_branch.metrics.stop_reason === :target_count_complete
+
+    polynomial = run_moment_rii_torture_case(:near_multiple_polynomial_companion; print_rows=false)
+    @test polynomial.passed
+    @test polynomial.metrics.expected == 18
+    @test polynomial.metrics.companion_matched == 18
+    @test polynomial.metrics.native_matched == (18, 18, 18)
+    @test polynomial.metrics.companion_size == 30
+    @test polynomial.metrics.max_native_residual <= 1e-8
 end
 
 @testitem "torture moment RII: failure boundary sweeps characterize transitions" tags=[:slow, :torture, :moment_rii, :moment_heavy] begin

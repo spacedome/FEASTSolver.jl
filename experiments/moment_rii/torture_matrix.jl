@@ -9,6 +9,9 @@ const MOMENT_RII_TORTURE_REQUIRED_FAILURE_CLASSES = (
     :schrodinger_domain_decomposition,
     :branch_cut,
     :dense_spectral_region,
+    :defective_matrix_nep,
+    :clustered_simple_roots,
+    :polynomial_companion_control,
 )
 
 const MOMENT_RII_TORTURE_MATRIX = (
@@ -182,6 +185,58 @@ const MOMENT_RII_TORTURE_MATRIX = (
         failure_mode="Branch functions are not invalid by syntax; they are invalid when the sheet/domain data make the contour transfer multivalued.",
     ),
     (
+        id=:near_branch_fixed_sheet,
+        failure_class=:branch_cut,
+        matrix_dimension=:low,
+        spectral_difficulty=:near_branch_point_conditioning,
+        status=:covered,
+        executable=true,
+        smoke=false,
+        runner=:run_near_branch_fixed_sheet_torture,
+        evidence="torture diagnostic: branch point just outside contour on declared sheet",
+        expected_behavior="A declared analytic sheet remains solvable even when the branch point is close enough to stress contour conditioning.",
+        failure_mode="Near branch points can look like near-pole contour stress, but the correct diagnostic is sheet/domain validity plus count reliability.",
+    ),
+    (
+        id=:defective_triangular_multiplicity,
+        failure_class=:defective_matrix_nep,
+        matrix_dimension=:low,
+        spectral_difficulty=:coalesced_eigenvectors,
+        status=:covered,
+        executable=true,
+        smoke=false,
+        runner=:run_defective_triangular_multiplicity_torture,
+        evidence="torture diagnostic: triangular repeated-sine Jordan-like NEP",
+        expected_behavior="Local count certification closes algebraic multiplicity for coalesced matrix eigenvectors, not only scalar repeated roots.",
+        failure_mode="Matrix-valued multiplicity can collapse eigenvectors; scalar repeated-root tests do not exercise the left/right geometry.",
+    ),
+    (
+        id=:clustered_simple_roots,
+        failure_class=:clustered_simple_roots,
+        matrix_dimension=:low,
+        spectral_difficulty=:below_chart_resolution,
+        status=:diagnostic_boundary,
+        executable=true,
+        smoke=false,
+        runner=:run_clustered_simple_roots_torture,
+        evidence="torture diagnostic: simple roots closer than local chart resolution",
+        expected_behavior="Local count certification reports algebraic packet completion while documenting that nearby simple roots may be merged into packets.",
+        failure_mode="A contour solver can certify the packet count without resolving each simple root as a separate geometric value unless the chart radius is reduced.",
+    ),
+    (
+        id=:near_multiple_polynomial_companion,
+        failure_class=:polynomial_companion_control,
+        matrix_dimension=:low,
+        spectral_difficulty=:clustered_polynomial_roots,
+        status=:covered,
+        executable=true,
+        smoke=false,
+        runner=:run_near_multiple_polynomial_companion_torture,
+        evidence="torture diagnostic: polynomial-native extraction agrees with companion FEAST",
+        expected_behavior="Polynomial-native moment extraction agrees with a companion linearization on clustered polynomial roots.",
+        failure_mode="Polynomial NEPs are the lower rung between linear FEAST and fully general analytic NEPs; disagreement here would invalidate the higher-rung story.",
+    ),
+    (
         id=:dense_spectral_region,
         failure_class=:dense_spectral_region,
         matrix_dimension=:problem_dependent,
@@ -228,6 +283,38 @@ const MOMENT_RII_FAILURE_LAYER_REPORTS = (
         steering=:declare_branch_sheet_or_reformulate_operator_before_solving,
         fundamental=true,
         competing_solver_note="No black-box eigenvalue solver can make a multivalued operator single-valued without branch/domain data; this is a problem-definition issue.",
+    ),
+    (
+        id=:near_branch_fixed_sheet,
+        layer=:contour_conditioning,
+        diagnostic=:reliable_count_on_declared_sheet,
+        steering=:increase_count_nodes_if_branch_point_approaches_contour,
+        fundamental=false,
+        competing_solver_note="A non-contour solver may not expose the branch geometry explicitly, but it still needs a consistent analytic sheet.",
+    ),
+    (
+        id=:defective_triangular_multiplicity,
+        layer=:matrix_multiplicity_geometry,
+        diagnostic=:reliable_count_coalesced_eigenvectors,
+        steering=:use_local_multiplicity_counts_after_two_sided_extraction,
+        fundamental=false,
+        competing_solver_note="Jordan-aware methods represent this directly; the contour-moment path certifies algebraic completion without explicitly forming Jordan chains.",
+    ),
+    (
+        id=:clustered_simple_roots,
+        layer=:local_resolution_limit,
+        diagnostic=:count_complete_geometric_values_merged,
+        steering=:reduce_local_chart_radius_or_accept_packet_level_solution,
+        fundamental=false,
+        competing_solver_note="Root-polishing methods can separate simple roots after good initial guesses; contour methods should report whether they solved a packet or resolved individual values.",
+    ),
+    (
+        id=:near_multiple_polynomial_companion,
+        layer=:polynomial_linearization_consistency,
+        diagnostic=:native_polynomial_matches_companion_linearization,
+        steering=:investigate_before_extending_to_general_nep_if_mismatch,
+        fundamental=false,
+        competing_solver_note="Companion linearization is a strong reference for polynomial NEPs, but it increases dimension; native moments should agree before claiming nonlinear generality.",
     ),
     (
         id=:dense_spectral_region,
@@ -461,6 +548,26 @@ function meromorphic_pole_ladder_cases(; gap=0.035)
     )
 end
 
+function clustered_simple_root_cases()
+    (
+        scalar_product_rational_case(;
+            name="clustered_simple_1",
+            roots=[-0.55, -0.52, 0.15 + 0.02im, 0.18 + 0.02im],
+            poles=[],
+        ),
+        scalar_product_rational_case(;
+            name="clustered_simple_2",
+            roots=[-0.10 - 0.02im, -0.07 - 0.02im, 0.42 + 0.03im, 0.45 + 0.03im],
+            poles=[],
+        ),
+        scalar_product_rational_case(;
+            name="clustered_simple_3",
+            roots=[0.65 - 0.04im, 0.68 - 0.04im, -0.35 + 0.04im, -0.32 + 0.04im],
+            poles=[],
+        ),
+    )
+end
+
 function run_meromorphic_pole_ladder_torture(;
     gap=0.035,
     outer_radius=1.0,
@@ -510,6 +617,89 @@ function run_meromorphic_pole_ladder_torture(;
         algebraic_retained_count=result.algebraic_retained_count,
         accepted=result.stop_reason in (:target_count_complete, :target_algebraic_count_complete),
         count_reliable=result.count.count_error <= count_error_tol,
+    )
+end
+
+function run_defective_triangular_multiplicity_torture(;
+    outer_radius=7.0,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    result = run_count_driven_adaptive_grid_refinement(;
+        label="Defective triangular multiplicity torture",
+        cases=(scalar_sine_case(), scalar_sine_case(), scalar_sine_case()),
+        outer_radius=outer_radius,
+        operator_builder=triangular_operator_builder(; coupling=4.0),
+        operator_label="triangular repeated sine",
+        base_spacing=2.0,
+        chart_radii=(1.3, 2.2),
+        max_refinement_rounds=2,
+        iterations=2,
+        basis_moments=6,
+        basis_nodes=48,
+        rii_nodes=128,
+        determinant_nodes=1024,
+        determinant_capacity=64,
+        reduced_moments=12,
+        reduced_nodes=512,
+        residual_normalization=:operator,
+        component_scaling=:contour_max,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=print_rows,
+    )
+    (
+        result=result,
+        rows=result.rows,
+        count=result.count,
+        stop_reason=result.stop_reason,
+        multiplicities=result.multiplicities,
+        algebraic_retained_count=result.algebraic_retained_count,
+        accepted=result.stop_reason === :target_algebraic_count_complete &&
+            result.algebraic_retained_count == result.count.count_estimate,
+    )
+end
+
+function run_clustered_simple_roots_torture(;
+    outer_radius=1.0,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    result = run_count_driven_adaptive_grid_refinement(;
+        label="Clustered simple roots torture",
+        cases=clustered_simple_root_cases(),
+        outer_radius=outer_radius,
+        operator_builder=triangular_operator_builder(; coupling=0.8),
+        operator_label="triangular clustered simple roots",
+        base_spacing=0.34,
+        chart_radii=(0.18, 0.32),
+        max_refinement_rounds=3,
+        iterations=2,
+        basis_moments=8,
+        basis_nodes=64,
+        rii_nodes=128,
+        determinant_nodes=1024,
+        determinant_capacity=64,
+        reduced_moments=16,
+        reduced_nodes=512,
+        residual_normalization=:operator,
+        component_scaling=:contour_max,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=print_rows,
+    )
+    (
+        result=result,
+        rows=result.rows,
+        count=result.count,
+        stop_reason=result.stop_reason,
+        multiplicities=result.multiplicities,
+        algebraic_retained_count=result.algebraic_retained_count,
+        accepted=result.stop_reason === :target_algebraic_count_complete &&
+            result.algebraic_retained_count == result.count.count_estimate,
+        packet_level_solution=last(result.rows).retained < result.count.count_estimate,
     )
 end
 
@@ -856,6 +1046,79 @@ function run_branch_cut_fixed_sheet_torture(;
     )
 end
 
+function run_near_branch_fixed_sheet_torture(;
+    outer_radius=1.0,
+    count_error_tol=1e-5,
+    residual_tol=1e-8,
+    match_atol=1e-6,
+    print_rows=true,
+)
+    result = run_count_driven_adaptive_grid_refinement(;
+        label="Near-branch fixed-sheet torture",
+        cases=(
+            scalar_branch_sqrt_case(; branch_point=-1.03, beta=sqrt(1.25), name="near_sqrt1"),
+            scalar_branch_sqrt_case(; branch_point=-1.06, beta=sqrt(1.45 + 0.08im), name="near_sqrt2"),
+            scalar_branch_sqrt_case(; branch_point=-1.09, beta=sqrt(1.65 - 0.06im), name="near_sqrt3"),
+        ),
+        outer_radius=outer_radius,
+        operator_builder=similarity_analytic_tools,
+        operator_label="near branch fixed sheet",
+        base_spacing=0.34,
+        chart_radii=(0.24, 0.42),
+        max_refinement_rounds=3,
+        iterations=2,
+        basis_moments=6,
+        basis_nodes=64,
+        rii_nodes=160,
+        determinant_nodes=2048,
+        determinant_capacity=64,
+        reduced_moments=12,
+        reduced_nodes=1024,
+        residual_normalization=:operator,
+        component_scaling=:contour_max,
+        count_error_tol=count_error_tol,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=print_rows,
+    )
+    (
+        result=result,
+        rows=result.rows,
+        count=result.count,
+        stop_reason=result.stop_reason,
+        accepted=result.stop_reason === :target_count_complete &&
+            result.count.count_error <= count_error_tol,
+        sheet_domain="principal sqrt, branch points just outside the contour disk",
+    )
+end
+
+function run_near_multiple_polynomial_companion_torture(;
+    residual_tol=1e-7,
+    match_atol=1e-5,
+    print_rows=true,
+)
+    result = run_polynomial_family_bridge_diagnostic(;
+        name="near_multiple_cluster_poly",
+        make_problem=near_multiple_polynomial_problem,
+        nodes=48,
+        iterations=4,
+        basis_moments=5,
+        basis_nodes=64,
+        rii_nodes=128,
+        update_moment_count=2,
+        residual_tol=residual_tol,
+        match_atol=match_atol,
+        print_rows=print_rows,
+    )
+    (
+        result=result,
+        companion=result.companion,
+        rows=result.polynomial_rows,
+        accepted=result.companion.matched == result.companion.expected &&
+            all(row -> row.matched == result.companion.expected && row.spurious == 0, result.polynomial_rows),
+    )
+end
+
 function run_moment_rii_torture_case(id::Symbol; print_rows=false)
     row = moment_rii_torture_entry(id)
     row.executable || return (
@@ -956,6 +1219,42 @@ function run_moment_rii_torture_case(id::Symbol; print_rows=false)
                 stop_reason=result.stop_reason,
             ),
         )
+    elseif row.id === :defective_triangular_multiplicity
+        result = run_defective_triangular_multiplicity_torture(; print_rows=print_rows)
+        passed = result.accepted &&
+            all(item.multiplicity == 3 for item in result.multiplicities)
+        return (
+            id=row.id,
+            status=row.status,
+            passed=passed,
+            skipped=false,
+            metrics=(
+                count=result.count.count_estimate,
+                algebraic_retained=result.algebraic_retained_count,
+                retained=last(result.rows).retained,
+                multiplicities=Tuple(item.multiplicity for item in result.multiplicities),
+                stop_reason=result.stop_reason,
+            ),
+        )
+    elseif row.id === :clustered_simple_roots
+        result = run_clustered_simple_roots_torture(; print_rows=print_rows)
+        passed = result.accepted &&
+            result.packet_level_solution &&
+            all(item.multiplicity == 2 for item in result.multiplicities)
+        return (
+            id=row.id,
+            status=row.status,
+            passed=passed,
+            skipped=false,
+            metrics=(
+                count=result.count.count_estimate,
+                algebraic_retained=result.algebraic_retained_count,
+                retained=last(result.rows).retained,
+                packets=length(result.multiplicities),
+                multiplicities=Tuple(item.multiplicity for item in result.multiplicities),
+                stop_reason=result.stop_reason,
+            ),
+        )
     elseif row.id === :branch_cut_fixed_sheet
         result = run_branch_cut_fixed_sheet_torture(; print_rows=print_rows)
         passed = result.accepted
@@ -968,6 +1267,42 @@ function run_moment_rii_torture_case(id::Symbol; print_rows=false)
                 count=result.count.count_estimate,
                 retained=last(result.rows).retained,
                 stop_reason=result.stop_reason,
+            ),
+        )
+    elseif row.id === :near_branch_fixed_sheet
+        result = run_near_branch_fixed_sheet_torture(; print_rows=print_rows)
+        passed = result.accepted &&
+            result.count.count_estimate == 3 &&
+            last(result.rows).retained == result.count.count_estimate
+        return (
+            id=row.id,
+            status=row.status,
+            passed=passed,
+            skipped=false,
+            metrics=(
+                count=result.count.count_estimate,
+                count_error=result.count.count_error,
+                retained=last(result.rows).retained,
+                stop_reason=result.stop_reason,
+                sheet_domain=result.sheet_domain,
+            ),
+        )
+    elseif row.id === :near_multiple_polynomial_companion
+        result = run_near_multiple_polynomial_companion_torture(; print_rows=print_rows)
+        passed = result.accepted &&
+            result.companion.expected == 18 &&
+            all(row -> row.success, result.rows)
+        return (
+            id=row.id,
+            status=row.status,
+            passed=passed,
+            skipped=false,
+            metrics=(
+                expected=result.companion.expected,
+                companion_matched=result.companion.matched,
+                native_matched=Tuple(row.matched for row in result.rows),
+                max_native_residual=maximum(row.max_residual for row in result.rows),
+                companion_size=result.companion.companion_size,
             ),
         )
     end
