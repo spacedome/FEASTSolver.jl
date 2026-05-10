@@ -193,6 +193,32 @@ end
     @test rebuild.component_update_stages == (:continue_local_repair_schedule, :rebuild_packet_update)
 end
 
+@testitem "experimental moment RII: escalation decision maps failure layers to actions" begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    count = moment_rii_escalation_decision((count_reliable=false, count_error=0.25))
+    @test count.layer === :contour_count
+    @test count.action === :increase_quadrature_nodes
+    @test count.update_stage === :recompute_count_before_solver_changes
+
+    moments = moment_rii_escalation_decision((count_reliable=true, moment_adequate=false))
+    @test moments.layer === :moment_order
+    @test moments.action === :increase_positive_moments
+
+    extraction = moment_rii_escalation_decision((visible_defect=1e-3, extraction_agreement=false))
+    @test extraction.layer === :packet_defect
+    @test extraction.action === :change_extraction
+
+    contour = moment_rii_escalation_decision((near_pole_or_branch_cut=true,))
+    @test contour.layer === :target_packet
+    @test contour.action === :declare_contour_pathology
+    @test !contour.automatic_parameter_change
+
+    clean = moment_rii_escalation_decision((visible_defect=1e-12, extraction_agreement=true))
+    @test clean.layer === :accepted
+    @test clean.action === :accept
+end
+
 @testitem "experimental moment RII: numerics config lowers to pipeline configs" begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 
