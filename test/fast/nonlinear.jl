@@ -381,6 +381,38 @@ end
     @test result.dual.left_subspace_gap <= 1e-10
 end
 
+@testitem "experimental moment RII: visible projector formulation covers packet theory axes" tags=[:slow, :moment_heavy] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_visible_projector_formulation_diagnostic(; print_rows=false)
+
+    @test result.conclusion === :visible_projector_not_canonical_packet_coordinates
+    @test result.vocabulary.legacy_name === :packet
+    @test result.vocabulary.preferred_algorithmic_name === :visible_projector
+    @test result.vocabulary.keep_packet_for === :target_spectral_cluster
+    @test Tuple(axis.axis for axis in result.axes) == (
+        :projector_first,
+        :polynomial_lower_rung,
+        :invariant_pair_residual_geometry,
+        :dual_formulation,
+        :failure_layer_diagnostics,
+        :feshbach_grushin_effective_operator,
+    )
+    @test result.projector.standard === :riesz_spectral_projector
+    @test result.projector.dual === :B_oblique_left_right_riesz_projector
+    @test result.projector.standard_filter_gap <= 1e-10
+    @test result.projector.dual_filter_gap <= 1e-10
+    @test result.dual.monitor_gap <= 1e-12
+    @test result.polynomial.companion_matched == result.polynomial.companion_expected
+    @test result.polynomial.all_successful
+    @test result.polynomial.max_residual <= 1e-8
+    @test result.polynomial.interpretation === :finite_realization_residual_is_the_polynomial_visible_defect
+    @test any(layer -> layer.layer === :packet_visibility, result.failure_layers)
+    @test any(layer -> layer.layer === :target_packet_definition && layer.fundamental, result.failure_layers)
+    @test result.effective_operator.analogy === :feshbach_grushin_effective_operator
+    @test result.effective_operator.status === :theory_analogy_not_canonical_packet_api
+end
+
 @testitem "experimental moment RII: polynomial bridge agrees with companion FEAST" tags=[:slow] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 

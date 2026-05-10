@@ -6451,6 +6451,7 @@ include("linear_packet_geometry.jl")
 include("fused_hard_cases.jl")
 include("torture_matrix.jl")
 include("escalation_ladder.jl")
+include("visible_projector_formulation.jl")
 include("showcases.jl")
 include("legacy_driver.jl")
 

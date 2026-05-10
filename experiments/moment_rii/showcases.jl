@@ -71,9 +71,22 @@ function showcase_schrodinger_packet_monitor(; print_rows=true)
     )
 end
 
+function showcase_visible_projector_formulation(; print_rows=true)
+    result = run_visible_projector_formulation_diagnostic(; include_polynomial=true, print_rows=print_rows)
+    (
+        conclusion=result.conclusion,
+        vocabulary=result.vocabulary,
+        projector=result.projector,
+        polynomial=result.polynomial,
+        failure_layers=result.failure_layers,
+        effective_operator=result.effective_operator,
+    )
+end
+
 function run_moment_rii_showcases(; print_rows=true)
     escalation = showcase_clustered_root_resolution_ladder(; print_rows=print_rows)
     (
+        visible_projector=showcase_visible_projector_formulation(; print_rows=print_rows),
         linear=showcase_linear_feast_packet_geometry(; print_rows=print_rows),
         polynomial=showcase_polynomial_lower_rung(; print_rows=print_rows),
         adversarial=showcase_adversarial_packets(; print_rows=print_rows),
