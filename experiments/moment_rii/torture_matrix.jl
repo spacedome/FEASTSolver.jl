@@ -703,6 +703,84 @@ function run_clustered_simple_roots_torture(;
     )
 end
 
+function run_clustered_simple_roots_resolution_ladder(; print_rows=true)
+    stages = (
+        (name=:coarse_packet, base_spacing=0.34, chart_radii=(0.18, 0.32)),
+        (name=:overlap_resolved, base_spacing=0.17, chart_radii=(0.18, 0.32)),
+        (name=:over_shrunk_undersampled, base_spacing=0.17, chart_radii=(0.025, 0.05)),
+    )
+    rows = NamedTuple[]
+    results = Any[]
+    for stage in stages
+        result = run_count_driven_adaptive_grid_refinement(;
+            label="Clustered simple roots $(stage.name)",
+            cases=clustered_simple_root_cases(),
+            outer_radius=1.0,
+            operator_builder=triangular_operator_builder(; coupling=0.8),
+            operator_label="triangular clustered simple roots",
+            base_spacing=stage.base_spacing,
+            chart_radii=stage.chart_radii,
+            max_refinement_rounds=4,
+            iterations=2,
+            basis_moments=8,
+            basis_nodes=64,
+            rii_nodes=128,
+            determinant_nodes=1024,
+            determinant_capacity=64,
+            reduced_moments=16,
+            reduced_nodes=512,
+            residual_normalization=:operator,
+            component_scaling=:contour_max,
+            residual_tol=1e-8,
+            print_rows=false,
+        )
+        push!(results, result)
+        final = last(result.rows)
+        push!(
+            rows,
+            (
+                stage=stage.name,
+                base_spacing=stage.base_spacing,
+                chart_radii=stage.chart_radii,
+                stop_reason=result.stop_reason,
+                count=result.count.count_estimate,
+                retained=final.retained,
+                algebraic_retained=result.algebraic_retained_count,
+                packets=length(result.multiplicities),
+                multiplicities=Tuple(item.multiplicity for item in result.multiplicities),
+                value_resolved=final.retained == result.count.count_estimate &&
+                    result.stop_reason === :target_count_complete,
+                packet_complete=result.algebraic_retained_count == result.count.count_estimate,
+            ),
+        )
+    end
+    if print_rows
+        println()
+        println("Clustered simple-root resolution ladder")
+        println("  distinguishes packet-level count completion from value-level root resolution")
+        @printf("  %-24s %8s %14s %9s %9s %8s %s\n", "stage", "spacing", "radii", "retained", "count", "packets", "status")
+        for row in rows
+            status = row.value_resolved ? "value-resolved" : (row.packet_complete ? "packet-complete" : "undersampled")
+            @printf(
+                "  %-24s %8.3f %14s %9d %9d %8d %s\n",
+                string(row.stage),
+                row.base_spacing,
+                string(row.chart_radii),
+                row.retained,
+                row.count,
+                row.packets,
+                status,
+            )
+        end
+    end
+    (
+        rows=Tuple(rows),
+        results=Tuple(results),
+        resolved_stage=findfirst(row -> row.value_resolved, rows),
+        packet_stage=findfirst(row -> row.packet_complete && !row.value_resolved, rows),
+    )
+end
+
 function meromorphic_pole_ladder_boundary_status(result)
     final = last(result.rows)
     if !result.count_reliable
