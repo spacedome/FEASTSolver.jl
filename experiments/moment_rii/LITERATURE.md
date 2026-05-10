@@ -1596,3 +1596,74 @@ modular:
 This reinforces the current audit status: the candidate algorithm is coherent
 and literature-adjacent, but the decisive missing theorem is not available as
 an obvious existing result.
+
+## Feshbach/Grushin/Effective-Operator Pass, 2026-05-10
+
+Search scope: `"Feshbach Schur complement Grushin problem spectral projection
+effective Hamiltonian"`, `"Feshbach map isospectral Schur complement projection
+operator eigenvalue problem"`, `"spectral Schur complements eigenvalue
+nonlinear eigenvalue problem"`, and `"Grushin problem effective Hamiltonian
+eigenvalue Schur complement"`.
+
+The useful connection is conceptual, not a replacement name for the algorithm.
+Feshbach--Schur and Grushin reductions split a space into a visible/model part
+and a complement, eliminate the complement by a Schur-like term, and obtain an
+effective lower-dimensional operator whose singularity/eigenvalue condition is
+isospectral to the original problem under invertibility assumptions on the
+complement block. This is close to our "visible projector plus defect" language:
+the off-block couplings `P T Q` and `Q T P` are precisely the data that decide
+whether the visible model is already closed or whether a complement-mediated
+effective correction is still important.
+
+Relevant sources and how they map onto the experiment:
+
+- Bach--Chen--Froehlich--Sigal's smooth Feshbach map shows the central
+  isospectral idea: reduce through a partition/projection while preserving
+  eigenvalue multiplicity at the target spectral point. This supports our use
+  of the effective-operator analogy as a theory contract, not as a numerical
+  API. DOI: <https://doi.org/10.1016/S0022-1236(03)00057-0>.
+- The Feshbach--Schur perturbation-theory literature states the finite-rank
+  form explicitly: an operator split by `P` is replaced by an effective
+  Hamiltonian with a Schur complement term involving the inverse on `Ran(I-P)`.
+  This matches the visible/complement coupling diagnostic and explains why
+  near-pole or noninvertible complement behavior is a contour-pathology layer,
+  not something to hide inside extraction.
+- Bekas--Saad's spectral Schur complement paper is directly numerical linear
+  algebra: Schur complements turn large eigenproblems into lower-dimensional
+  nonlinear eigenproblems. This is the closest computational analogy to
+  "project then solve a reduced nonlinear model," and it reinforces why our
+  fused algorithm must avoid a redundant inner contour solve when the contour
+  samples already contain the necessary realization data. DOI:
+  <https://doi.org/10.1137/040603528>.
+- Grushin-problem language commonly calls the eliminated block object an
+  effective Hamiltonian. For our purposes this is best treated as proof
+  vocabulary for the visible/complement split. It does not produce a canonical
+  Hankel packet coordinate chart.
+
+Consequences for the current algorithm story:
+
+1. Keep `visible_projector` as the algorithmic object. The Feshbach/Grushin
+   analogy sharpens why this is a projection-plus-complement story.
+2. Do not rename the method around Feshbach/Grushin. FEAST's distinctive
+   ingredient remains contour-filtered residual-Laurent enrichment and
+   re-extraction.
+3. Use off-block leakage as the lower-rung computable diagnostic. In the linear
+   standard and dual tests, exact Riesz/B-oblique Riesz projectors have
+   machine-precision leakage, while one-sided right projectors can remain
+   idempotent and still leak strongly.
+4. Treat complement noninvertibility, near contour poles, and branch-cut
+   crossings as failure-layer diagnostics. Automatic contour movement is not a
+   valid hidden solver step because it changes the target problem.
+5. In future theory notes, formulate the visible defect as an effective-operator
+   coupling estimate:
+
+```text
+T = [ PTP  PTQ ]
+    [ QTP  QTQ ]
+
+F_P(T) = PTP - PTQ (QTQ)^(-1) QTP
+```
+
+For the FEAST experiment this formula is a local proof model. The production
+diagnostic should remain the cheaper and more stable leakage quantities unless
+the complement inverse is already available for another reason.
