@@ -7391,6 +7391,8 @@ end
 include("policy.jl")
 include("experiment_matrix.jl")
 include("packet_monitor.jl")
+include("theory_handoff.jl")
+include("linear_packet_geometry.jl")
 include("fused_hard_cases.jl")
 include("torture_matrix.jl")
 include("showcases.jl")

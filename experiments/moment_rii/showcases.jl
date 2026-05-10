@@ -5,11 +5,15 @@
 
 function showcase_linear_feast_packet_geometry(; print_rows=true)
     print_rows && println("\nShowcase: linear dual RII reduces to FEAST contour filtering")
-    result = run_linear_dual_rii_reduction_diagnostic(; print_rows=print_rows)
+    handoff = lean_theory_handoff_summary(; print_rows=print_rows)
+    reduction = run_linear_dual_rii_reduction_diagnostic(; print_rows=print_rows)
+    projector = linear_packet_projector_diagnostic(; print_rows=print_rows)
     (
         conclusion=:packet_projector_is_riesz_oblique_projector_in_linear_dual_feast,
-        max_projection_gap=result.max_projection_gap,
-        rows=result.rows,
+        handoff=handoff,
+        max_projection_gap=reduction.max_projection_gap,
+        reduction_rows=reduction.rows,
+        projector=projector,
     )
 end
 

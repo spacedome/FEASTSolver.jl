@@ -362,6 +362,25 @@ end
     end
 end
 
+@testitem "experimental moment RII: linear packet monitor is Riesz projector" tags=[:slow, :moment_heavy] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = linear_packet_projector_diagnostic(; print_rows=false)
+
+    @test result.standard.expected == 3
+    @test result.standard.idempotence <= 1e-12
+    @test result.standard.filter_gap <= 1e-10
+    @test result.standard.monitor_gap <= 1e-12
+    @test result.standard.subspace_gap <= 1e-10
+    @test result.dual.expected == result.standard.expected
+    @test result.dual.idempotence <= 1e-12
+    @test result.dual.right_filter_gap <= 1e-10
+    @test result.dual.left_filter_gap <= 1e-10
+    @test result.dual.monitor_gap <= 1e-12
+    @test result.dual.right_subspace_gap <= 1e-10
+    @test result.dual.left_subspace_gap <= 1e-10
+end
+
 @testitem "experimental moment RII: polynomial bridge agrees with companion FEAST" tags=[:slow] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 
