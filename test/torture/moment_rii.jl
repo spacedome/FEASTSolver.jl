@@ -114,16 +114,20 @@ end
 @testitem "torture moment RII: clustered root resolution ladder" tags=[:slow, :torture, :moment_rii, :moment_heavy] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 
-    ladder = run_clustered_simple_roots_resolution_ladder(; print_rows=false)
+    escalation = run_moment_rii_escalation_ladder(; print_rows=false)
+    ladder = escalation.clustered
 
+    @test escalation.conclusion === :escalate_by_failure_layer_not_by_one_canonical_chart
+    @test any(item -> item[1] === :local_overlap && item[2] === :increase_chart_overlap, escalation.policy)
+    @test any(item -> item[1] === :target_packet && item[2] === :do_not_move_outer_contour_automatically, escalation.policy)
     @test Tuple(row.stage for row in ladder.rows) == (:coarse_packet, :overlap_resolved, :over_shrunk_undersampled)
     @test ladder.rows[1].packet_complete
     @test !ladder.rows[1].value_resolved
     @test ladder.rows[2].value_resolved
     @test ladder.rows[2].retained == ladder.rows[2].count == 12
     @test !ladder.rows[3].packet_complete
-    @test ladder.resolved_stage == 2
-    @test ladder.packet_stage == 1
+    @test escalation.resolved_stage == 2
+    @test escalation.packet_stage == 1
 end
 
 @testitem "torture moment RII: failure boundary sweeps characterize transitions" tags=[:slow, :torture, :moment_rii, :moment_heavy] begin

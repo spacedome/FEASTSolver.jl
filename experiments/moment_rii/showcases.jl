@@ -50,10 +50,11 @@ function showcase_adversarial_packets(; print_rows=true)
 end
 
 function showcase_clustered_root_resolution_ladder(; print_rows=true)
-    result = run_clustered_simple_roots_resolution_ladder(; print_rows=print_rows)
+    result = run_moment_rii_escalation_ladder(; include_multiplicity_smoke=false, print_rows=print_rows)
     (
-        conclusion=:overlap_before_shrink_for_value_level_resolution,
-        rows=result.rows,
+        conclusion=result.conclusion,
+        policy=result.policy,
+        rows=result.clustered.rows,
         resolved_stage=result.resolved_stage,
         packet_stage=result.packet_stage,
     )
@@ -75,6 +76,6 @@ function run_moment_rii_showcases(; print_rows=true)
         linear=showcase_linear_feast_packet_geometry(; print_rows=print_rows),
         polynomial=showcase_polynomial_lower_rung(; print_rows=print_rows),
         adversarial=showcase_adversarial_packets(; print_rows=print_rows),
-        clustered_resolution=showcase_clustered_root_resolution_ladder(; print_rows=print_rows),
+        escalation=showcase_clustered_root_resolution_ladder(; print_rows=print_rows),
     )
 end
