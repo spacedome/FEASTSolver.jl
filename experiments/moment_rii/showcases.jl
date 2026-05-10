@@ -8,12 +8,14 @@ function showcase_linear_feast_packet_geometry(; print_rows=true)
     handoff = lean_theory_handoff_summary(; print_rows=print_rows)
     reduction = run_linear_dual_rii_reduction_diagnostic(; print_rows=print_rows)
     projector = linear_packet_projector_diagnostic(; print_rows=print_rows)
+    leakage = run_linear_visible_projector_leakage_diagnostic(; print_rows=print_rows)
     (
         conclusion=:packet_projector_is_riesz_oblique_projector_in_linear_dual_feast,
         handoff=handoff,
         max_projection_gap=reduction.max_projection_gap,
         reduction_rows=reduction.rows,
         projector=projector,
+        leakage=leakage,
     )
 end
 

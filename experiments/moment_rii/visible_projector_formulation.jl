@@ -117,6 +117,7 @@ function run_visible_projector_formulation_diagnostic(;
 )
     handoff = lean_theory_handoff_summary(; print_rows=false)
     linear = linear_packet_projector_diagnostic(; print_rows=false)
+    linear_leakage = run_linear_visible_projector_leakage_diagnostic(; print_rows=false)
     axes = visible_projector_research_axes()
     vocabulary = visible_projector_vocabulary()
     failure_layers = classify_visible_projector_failure_layers()
@@ -151,6 +152,7 @@ function run_visible_projector_formulation_diagnostic(;
         axes=axes,
         lean_contract=handoff.contract,
         projector=projector_summary,
+        linear_leakage=linear_leakage,
         polynomial=polynomial_summary,
         dual=dual_summary,
         failure_layers=failure_layers,
@@ -163,9 +165,10 @@ function run_visible_projector_formulation_diagnostic(;
         println("  legacy word: $(vocabulary.legacy_name); preferred algorithmic object: $(vocabulary.preferred_algorithmic_name)")
         println("  contract: $(result.lean_contract)")
         @printf(
-            "  linear projector gaps: standard=%.3e dual=%.3e\n",
+            "  linear projector gaps: standard=%.3e dual=%.3e; one-sided leakage floor=%.3e\n",
             projector_summary.standard_filter_gap,
             projector_summary.dual_filter_gap,
+            linear_leakage.one_sided_minimum,
         )
         if polynomial_summary !== nothing
             @printf(

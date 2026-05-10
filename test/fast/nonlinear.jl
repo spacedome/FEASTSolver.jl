@@ -381,6 +381,19 @@ end
     @test result.dual.left_subspace_gap <= 1e-10
 end
 
+@testitem "experimental moment RII: linear visible-projector leakage detects one-sided defects" tags=[:slow, :moment_heavy] begin
+    include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
+
+    result = run_linear_visible_projector_leakage_diagnostic(; print_rows=false)
+
+    @test result.conclusion === :visible_projector_leakage_detects_one_sided_and_chart_defects
+    @test result.clean_maximum <= 1e-10
+    @test result.one_sided_minimum >= 1e-2
+    @test result.perturbed_minimum >= 1e-4
+    @test any(row -> row.label === :standard_right_orthogonal && row.hidden_to_visible <= 1e-10 && row.visible_to_hidden >= 1e-2, result.rows)
+    @test any(row -> row.label === :dual_b_oblique_exact && row.leakage <= 1e-10, result.rows)
+end
+
 @testitem "experimental moment RII: visible projector formulation covers packet theory axes" tags=[:slow, :moment_heavy] begin
     include(joinpath(@__DIR__, "..", "..", "experiments", "moment_rii", "run.jl"))
 
@@ -402,6 +415,8 @@ end
     @test result.projector.dual === :B_oblique_left_right_riesz_projector
     @test result.projector.standard_filter_gap <= 1e-10
     @test result.projector.dual_filter_gap <= 1e-10
+    @test result.linear_leakage.clean_maximum <= 1e-10
+    @test result.linear_leakage.one_sided_minimum >= 1e-2
     @test result.dual.monitor_gap <= 1e-12
     @test result.polynomial.companion_matched == result.polynomial.companion_expected
     @test result.polynomial.all_successful

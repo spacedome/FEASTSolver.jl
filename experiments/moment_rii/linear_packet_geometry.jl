@@ -161,6 +161,117 @@ end
 
 linear_b_oblique_packet_projector(X, Y, B) = X * pinv(Y' * B * X) * Y' * B
 
+function orthogonal_projector_from_columns(X; ranktol=1e-10)
+    Q, _ = physical_basis_from_columns(X; ranktol=ranktol)
+    Q * Q'
+end
+
+function visible_projector_leakage(T, P)
+    n = size(P, 1)
+    Q = Matrix{ComplexF64}(I, n, n) - P
+    scale = max(opnorm(T), eps(Float64))
+    visible_to_hidden = opnorm(P * T * Q) / scale
+    hidden_to_visible = opnorm(Q * T * P) / scale
+    (
+        visible_to_hidden=visible_to_hidden,
+        hidden_to_visible=hidden_to_visible,
+        max=max(visible_to_hidden, hidden_to_visible),
+        idempotence=norm(P * P - P),
+    )
+end
+
+function visible_projector_leakage_row(label, T, P, Preference; expected=:unknown)
+    leakage = visible_projector_leakage(T, P)
+    (
+        label=label,
+        expected=expected,
+        leakage=leakage.max,
+        visible_to_hidden=leakage.visible_to_hidden,
+        hidden_to_visible=leakage.hidden_to_visible,
+        idempotence=leakage.idempotence,
+        projector_gap=norm(P - Preference),
+    )
+end
+
+function run_linear_visible_projector_leakage_diagnostic(;
+    n=9,
+    center=1.0 + 0.0im,
+    radius=0.62,
+    z=center + 0.31im,
+    perturbation=1e-3,
+    seed=20260510,
+    ranktol=1e-10,
+    print_rows=true,
+)
+    Random.seed!(seed)
+    λ = ComplexF64[-1.2, -0.6, 0.25, 0.72, 1.02, 1.33, 1.78, 2.3, 3.0]
+    V = ComplexF64[exp(0.11im * i * j) / (1 + abs(i - j)) for i in 1:n, j in 1:n]
+    A = V * Diagonal(λ) * inv(V)
+    B = Diagonal(ComplexF64.(1 .+ 0.07 .* (1:n)))
+    Adual = B * A
+    I_n = Matrix{ComplexF64}(I, n, n)
+
+    Pstd, Xstd, Ystd, _ = linear_standard_packet_projector(A, center, radius)
+    Tstd = z .* I_n .- A
+    Pstd_right_only = orthogonal_projector_from_columns(Xstd; ranktol=ranktol)
+    Pstd_perturbed = oblique_packet_projector(
+        Xstd .+ perturbation .* randn(ComplexF64, size(Xstd)),
+        Ystd;
+        ranktol=ranktol,
+    )
+
+    Pdual, _, Xdual, Ydual, _ = linear_dual_packet_projector(Adual, B, center, radius)
+    # The generalized FEAST projector is spectral for B \ A, not for the raw
+    # pencil matrix zB-A.  Measuring leakage on zB-A would incorrectly flag the
+    # exact B-oblique spectral projector because T maps the right invariant space
+    # through B.
+    Tdual = z .* I_n .- (B \ Adual)
+    Pdual_right_only = orthogonal_projector_from_columns(Xdual; ranktol=ranktol)
+    Pdual_perturbed = linear_b_oblique_packet_projector(
+        Xdual .+ perturbation .* randn(ComplexF64, size(Xdual)),
+        Ydual,
+        B,
+    )
+
+    rows = (
+        visible_projector_leakage_row(:standard_oblique_exact, Tstd, Pstd, Pstd; expected=:clean),
+        visible_projector_leakage_row(:standard_right_orthogonal, Tstd, Pstd_right_only, Pstd; expected=:one_sided_leakage),
+        visible_projector_leakage_row(:standard_oblique_perturbed, Tstd, Pstd_perturbed, Pstd; expected=:chart_leakage),
+        visible_projector_leakage_row(:dual_b_oblique_exact, Tdual, Pdual, Pdual; expected=:clean),
+        visible_projector_leakage_row(:dual_right_orthogonal, Tdual, Pdual_right_only, Pdual; expected=:one_sided_leakage),
+        visible_projector_leakage_row(:dual_b_oblique_perturbed, Tdual, Pdual_perturbed, Pdual; expected=:chart_leakage),
+    )
+
+    clean = filter(row -> row.expected === :clean, rows)
+    one_sided = filter(row -> row.expected === :one_sided_leakage, rows)
+    perturbed = filter(row -> row.expected === :chart_leakage, rows)
+    result = (
+        rows=rows,
+        clean_maximum=maximum(row.leakage for row in clean),
+        one_sided_minimum=minimum(row.leakage for row in one_sided),
+        perturbed_minimum=minimum(row.leakage for row in perturbed),
+        conclusion=:visible_projector_leakage_detects_one_sided_and_chart_defects,
+    )
+
+    if print_rows
+        println()
+        println("Linear visible-projector leakage diagnostic")
+        println("  off-block leakage P*T*Q and Q*T*P is zero for the spectral projector, not for one-sided right-space projectors")
+        for row in rows
+            @printf(
+                "  %-28s leakage=%.3e projector_gap=%.3e idempotence=%.3e expected=%s\n",
+                string(row.label),
+                row.leakage,
+                row.projector_gap,
+                row.idempotence,
+                string(row.expected),
+            )
+        end
+    end
+
+    result
+end
+
 function contour_standard_filter_matrix(A, contour)
     n = size(A, 1)
     P = zeros(ComplexF64, n, n)
