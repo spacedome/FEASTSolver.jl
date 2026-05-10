@@ -411,6 +411,11 @@ end
     @test any(layer -> layer.layer === :target_packet_definition && layer.fundamental, result.failure_layers)
     @test result.effective_operator.analogy === :feshbach_grushin_effective_operator
     @test result.effective_operator.status === :theory_analogy_not_canonical_packet_api
+    @test result.effective_operator.diagnostic.exact_coupling <= 1e-10
+    @test result.effective_operator.diagnostic.exact_schur_correction <= 1e-10
+    @test result.effective_operator.diagnostic.perturbed_coupling > 1e-6
+    @test isfinite(result.effective_operator.diagnostic.perturbed_schur_correction)
+    @test result.effective_operator.diagnostic.interpretation === :effective_operator_coupling_measures_visible_projector_defect
 end
 
 @testitem "experimental moment RII: polynomial bridge agrees with companion FEAST" tags=[:slow] begin
