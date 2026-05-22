@@ -5,6 +5,15 @@ real solver. It is not a public API plan yet.
 
 ## Current Experiment Boundary
 
+**Do not miss this cleanup target:** the `Tred(lambda)=Y' * T(lambda) * X`
+inner contour-solve path is not the final moment-NLFEAST algorithm. It is a
+validation/control/cleanup path only. The final implementation should make the
+chart-owned contour sample cache primary: node responses feed the small
+two-sided linear realization directly, and residual-Laurent repair augments
+that same cache before re-extraction. Any remaining reduced-problem inner
+Beyn/SS code should be treated as legacy scaffolding unless it is explicitly
+used for validation or local cleanup.
+
 The candidate algorithm is expressed through these experiment objects:
 
 - `ContourChart`: target chart and component scaling policy.

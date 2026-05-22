@@ -104,6 +104,22 @@ The central implementation path is currently `ContourChart`, `TrialSpaces`,
 
 ## Reduced Realization Boundary
 
+**Hard implementation note:** the reduced-problem contour method is the wrong
+default algorithm. It exists only as validation, cleanup, or a historical
+control while the fused cache path is being finished. Do not build the final
+moment-NLFEAST implementation as
+
+```text
+physical FEAST projection -> Tred(lambda)=Y^H T(lambda) X -> inner Beyn/SS
+```
+
+The intended method is the fused one-contour-sample realization:
+
+```text
+one chart-owned contour cache -> small linear realization -> residual-Laurent
+cache augmentation -> re-extraction
+```
+
 Stages 2--5 deliberately keep reduced realization/extraction and acceptance
 policy separate from the FEAST-style update. This mirrors linear FEAST more
 than it may first appear: FEAST theory controls the contour projection, the
