@@ -10,13 +10,15 @@ the library into a maze of allocation workarounds.
 
 The finalized FEAST variants are mostly present and working:
 
-- `feast.jl`: dense standard, generalized, and dual generalized FEAST.
-- `sparse_feast.jl`: sparse standard and generalized FEAST, with direct and
-  first-pass iterative solver policies.
-- `nlfeast.jl`: canonical nonlinear FEAST/Beyn hybrid, including sparse and
-  action-style operator paths.
-- `distributed_feast.jl` and `distributed/`: process-parallel dense contour
-  variants with persistent worker ownership.
+- `optimized/linear_*.jl`: dense standard, generalized, and dual generalized
+  FEAST.
+- `optimized/sparse_*.jl` and `linalg/sparse_feast_common.jl`: sparse standard
+  and generalized FEAST, with direct and first-pass iterative solver policies.
+- `optimized/nonlinear.jl`: canonical nonlinear FEAST/Beyn hybrid, including
+  sparse and action-style operator paths.
+- `distributed/`: process-parallel dense contour variants with persistent
+  worker ownership, split into plans, workers, stats, and one algorithm file per
+  variant.
 - `fastlapack.jl`: the practical non-allocating LAPACK bridge needed because
   Julia builtins allocate too much in the hot path.
 - `stats.jl` and `distributed/stats.jl`: lightweight timing and convergence
@@ -268,17 +270,19 @@ simple, but the implementation should keep these concepts explicit:
 - worker BLAS threads are controlled to avoid oversubscription;
 - setup time is measured separately from solve time.
 
-The current `distributed_feast.jl` file is too large because it combines plan
-types, plan constructors, loop orchestration, and variant-specific logic. Split
-it into `parallel/plans.jl`, `parallel/linear_*.jl`, and
-`parallel/workers.jl`.
+The distributed dense linear variants are now split into `distributed/plans.jl`,
+`distributed/linear_*.jl`, `distributed/workers.jl`, and `distributed/common.jl`.
+The remaining cleanup pressure is in the worker file and distributed nonlinear
+path, where the process model is necessarily explicit but still needs careful
+boundaries.
 
 ## Experimental Code
 
 The following should not be treated as finalized FEAST variants:
 
 - `feast_experimental.jl`
-- `nlfeast_experimental.jl`
+- `experimental/nonlinear_legacy.jl`
+- `experimental/nonlinear_moments_legacy.jl`
 - `moment_rii.jl`
 
 They can remain in `src/experimental/` for now if tests or experiments depend on
@@ -302,7 +306,8 @@ templates for source organization.
 4. **Split sparse solve plumbing.** Separate sparse pattern/materialization and
    solver policies from sparse FEAST orchestration.
 5. **Split distributed plans.** Move plan types and worker setup away from
-   iteration loops. Keep existing APIs intact.
+   iteration loops. Keep existing APIs intact. Dense linear distributed variants
+   are split; distributed nonlinear and worker internals still need review.
 6. **Move experimental files.** Put unfinished IFEAST, old nonlinear moment
    variants, and moment-RII prototypes under `src/experimental/` or leave them
    only in `experiments/` if no public exports require them.
