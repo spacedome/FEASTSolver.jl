@@ -270,11 +270,12 @@ simple, but the implementation should keep these concepts explicit:
 - worker BLAS threads are controlled to avoid oversubscription;
 - setup time is measured separately from solve time.
 
-The distributed dense linear variants are now split into `distributed/plans.jl`,
-`distributed/linear_*.jl`, `distributed/workers.jl`, and `distributed/common.jl`.
-The remaining cleanup pressure is in the worker file and distributed nonlinear
-path, where the process model is necessarily explicit but still needs careful
-boundaries.
+The distributed dense variants are now split into `distributed/plans.jl`,
+`distributed/nonlinear_plans.jl`, `distributed/linear_*.jl`,
+`distributed/nonlinear.jl`, `distributed/workers.jl`,
+`distributed/nonlinear_workers.jl`, and `distributed/common.jl`. The remaining
+cleanup pressure is mostly in the worker files, where the process model is
+necessarily explicit but still needs careful boundaries.
 
 ## Experimental Code
 
@@ -306,8 +307,8 @@ templates for source organization.
 4. **Split sparse solve plumbing.** Separate sparse pattern/materialization and
    solver policies from sparse FEAST orchestration.
 5. **Split distributed plans.** Move plan types and worker setup away from
-   iteration loops. Keep existing APIs intact. Dense linear distributed variants
-   are split; distributed nonlinear and worker internals still need review.
+   iteration loops. Keep existing APIs intact. Dense distributed variants are
+   split; worker internals still need review.
 6. **Move experimental files.** Put unfinished IFEAST, old nonlinear moment
    variants, and moment-RII prototypes under `src/experimental/` or leave them
    only in `experiments/` if no public exports require them.
