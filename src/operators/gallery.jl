@@ -1,16 +1,7 @@
-# FEAST-native nonlinear operator interface and small gallery operators.
+# Small FEAST-native gallery operators used by tests, examples, and experiments.
 #
-# These mirror the NLEVP/NEP-PACK gallery problems we use for tests and
-# experiments, but expose the contract FEAST wants: a top-level callable
-# object, an explicit prototype, an in-place materializer, and an action path.
-
-abstract type AbstractFeastOperator end
-abstract type AbstractFeastGalleryOperator <: AbstractFeastOperator end
-
-struct MaterializedMatrixOperator{F,P} <: AbstractFeastOperator
-    T::F
-    prototype::P
-end
+# These mirror the NLEVP/NEP-PACK gallery problems we use locally, but expose the
+# operator contract from `operators/interface.jl`.
 
 struct SparseCombinationPattern{Tv,Ti}
     m::Int
@@ -59,12 +50,6 @@ struct SchrodingerMoveBCGalleryOperator{T<:SparseMatrixCSC{Float64,Int},P} <: Ab
     sparse_pattern::P
 end
 
-struct GalleryMatrixMaterializer{O<:AbstractFeastOperator}
-    operator::O
-end
-
-Base.size(op::MaterializedMatrixOperator) = size(op.prototype)
-Base.size(op::MaterializedMatrixOperator, dim::Integer) = size(op.prototype, dim)
 Base.size(op::PolynomialGalleryOperator) = size(op.matrices[1])
 Base.size(op::PolynomialGalleryOperator, dim::Integer) = size(op.matrices[1], dim)
 Base.size(op::HadelerGalleryOperator) = size(op.A0)
@@ -75,36 +60,6 @@ Base.size(op::GunGalleryOperator) = size(op.K)
 Base.size(op::GunGalleryOperator, dim::Integer) = size(op.K, dim)
 Base.size(op::SchrodingerMoveBCGalleryOperator) = size(op.A0)
 Base.size(op::SchrodingerMoveBCGalleryOperator, dim::Integer) = size(op.A0, dim)
-(op::AbstractFeastOperator)(z) = operator_matrix(op, z)
-(materializer::GalleryMatrixMaterializer)(M, z) = materialize!(M, materializer.operator, z)
-
-matrix_operator(T, prototype::AbstractMatrix) = MaterializedMatrixOperator(T, prototype)
-matrix_materializer(op::AbstractFeastOperator) = GalleryMatrixMaterializer(op)
-
-operator_prototype(op::MaterializedMatrixOperator) = similar(op.prototype, ComplexF64)
-
-function operator_matrix(op::AbstractFeastOperator, z)
-    M = operator_prototype(op)
-    materialize!(M, op, z)
-    M
-end
-
-function materialize!(M, op::MaterializedMatrixOperator, z)
-    copyto!(M, op.T(z))
-    M
-end
-
-function operator_action_workspace(op::AbstractFeastOperator, Y::AbstractVecOrMat, V::AbstractVecOrMat)
-    similar(Y)
-end
-
-function mul!(Y::AbstractVecOrMat, op::MaterializedMatrixOperator, z, V::AbstractVecOrMat)
-    mul!(Y, op.T(z), V)
-end
-
-function mul!(Y::AbstractVecOrMat, op::AbstractFeastGalleryOperator, z, V::AbstractVecOrMat)
-    mul!(Y, op, z, V, operator_action_workspace(op, Y, V))
-end
 
 function sparse_combination_pattern(matrices)
     isempty(matrices) && error("sparse combination requires at least one matrix")
@@ -362,7 +317,7 @@ function read_gallery_sparse_matrix(filename, ::Type{T}=Int64) where {T}
 end
 
 function gun_gallery_data_dir()
-    local_data = normpath(joinpath(@__DIR__, "..", "data", "nlevp"))
+    local_data = normpath(joinpath(@__DIR__, "..", "..", "data", "nlevp"))
     if isfile(joinpath(local_data, "gun_K.txt"))
         return local_data
     end

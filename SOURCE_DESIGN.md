@@ -22,6 +22,9 @@ The finalized FEAST variants are mostly present and working:
 - `linalg/reduced.jl` and `linalg/residuals.jl`: shared reduced-problem,
   normalization, and residual kernels used by the reference, optimized, and
   distributed solvers.
+- `operators/interface.jl` and `operators/gallery.jl`: the FEAST-native
+  nonlinear operator contract and the local gallery problems used by tests and
+  experiments.
 - `fastlapack.jl`: the practical non-allocating LAPACK bridge needed because
   Julia builtins allocate too much in the hot path.
 - `stats.jl` and `distributed/stats.jl`: lightweight timing and convergence
