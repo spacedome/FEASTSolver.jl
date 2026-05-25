@@ -272,10 +272,10 @@ simple, but the implementation should keep these concepts explicit:
 
 The distributed dense variants are now split into `distributed/plans.jl`,
 `distributed/nonlinear_plans.jl`, `distributed/linear_*.jl`,
-`distributed/nonlinear.jl`, `distributed/workers.jl`,
-`distributed/nonlinear_workers.jl`, and `distributed/common.jl`. The remaining
-cleanup pressure is mostly in the worker files, where the process model is
-necessarily explicit but still needs careful boundaries.
+`distributed/nonlinear.jl`, `distributed/*_workers.jl`,
+`distributed/workers.jl`, and `distributed/common.jl`. The process model is
+still explicit, but the variant-specific worker kernels are no longer mixed
+into one file.
 
 ## Experimental Code
 
@@ -307,8 +307,8 @@ templates for source organization.
 4. **Split sparse solve plumbing.** Separate sparse pattern/materialization and
    solver policies from sparse FEAST orchestration.
 5. **Split distributed plans.** Move plan types and worker setup away from
-   iteration loops. Keep existing APIs intact. Dense distributed variants are
-   split; worker internals still need review.
+   iteration loops. Keep existing APIs intact. Dense distributed variants and
+   worker kernels are split.
 6. **Move experimental files.** Put unfinished IFEAST, old nonlinear moment
    variants, and moment-RII prototypes under `src/experimental/` or leave them
    only in `experiments/` if no public exports require them.
