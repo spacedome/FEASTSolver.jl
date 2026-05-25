@@ -1,6 +1,6 @@
 
 """
-Experimental nonlinear moment variants.
+Legacy experimental nonlinear moment variants.
 
 The canonical nonlinear solver currently lives in `nlfeast.jl`. This file
 contains higher-moment experiments related to Beyn/Sakurai-Sugiura style block

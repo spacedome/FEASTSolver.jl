@@ -14,13 +14,13 @@ The canonical `nlfeast!` state is an eigenpair list `(X, Lambda)`, with
 (X - T(z) \ T(X, Lambda)) * inv(zI - Lambda)
 ```
 
-The higher-moment prototypes in `src/nlfeast.jl` and
-`src/nlfeast_experimental.jl` replace the two Beyn moments with block Hankel
-matrices built from `Q_0, ..., Q_{2K-1}`. This works as a Beyn/SS extraction
-step, but it creates a dimension-management problem: `m` active vectors produce
-roughly `K*m` Ritz candidates. If all candidates are used in the next RII step,
-the next Hankel extraction grows again; if we truncate back to `m`, we lose
-exactly the information that made higher moments useful.
+The higher-moment prototypes in `src/experimental/nonlinear_legacy.jl` and
+`src/experimental/nonlinear_moments_legacy.jl` replace the two Beyn moments with
+block Hankel matrices built from `Q_0, ..., Q_{2K-1}`. This works as a Beyn/SS
+extraction step, but it creates a dimension-management problem: `m` active
+vectors produce roughly `K*m` Ritz candidates. If all candidates are used in the
+next RII step, the next Hankel extraction grows again; if we truncate back to
+`m`, we lose exactly the information that made higher moments useful.
 
 ## Current Candidate
 
@@ -1187,9 +1187,12 @@ may already be partially superseded by the charted residual-Laurent candidate.
 ## Local References
 
 - `docs/article.tex`, section "Higher Moments", states the current limitation.
-- `src/nlfeast.jl` has the canonical diagonal-state NLFEAST-Beyn implementation
-  and older `nlfeast_moments!` prototype.
-- `src/nlfeast_experimental.jl` has additional moment/SS variants.
+- `src/optimized/nonlinear.jl` has the canonical diagonal-state NLFEAST-Beyn
+  implementation.
+- `src/experimental/nonlinear_legacy.jl` has the older `nlfeast_moments!`
+  prototype.
+- `src/experimental/nonlinear_moments_legacy.jl` has additional moment/SS
+  variants.
 - `experiments/moment_rii/LITERATURE.md` records the local NEP-PACK and
   external literature review that should guide API decisions.
 - NEP-PACK's local `method_block_SS.jl` shows the standard SS-Hankel extraction.

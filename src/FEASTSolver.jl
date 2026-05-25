@@ -18,7 +18,7 @@ import LinearAlgebra: lu, mul!, qr
 
 # First-class dense serial FEAST variants.
 export feast!, gen_feast!, dual_gen_feast!, nlfeast!
-export reference_feast!, reference_gen_feast!, reference_dual_gen_feast!
+export reference_feast!, reference_gen_feast!, reference_dual_gen_feast!, reference_nlfeast!
 export AbstractSparseFeastSolver, SparseDirectSolver, SparseBiCGSTABSolver
 export DenseFeastStats, DenseFeastIterationStats
 
@@ -51,19 +51,21 @@ include("companion.jl")
 include("reference/linear_standard.jl")
 include("reference/linear_generalized.jl")
 include("reference/linear_dual_generalized.jl")
+include("reference/nonlinear.jl")
 include("optimized/linear_standard.jl")
 include("optimized/linear_generalized.jl")
 include("optimized/linear_dual_generalized.jl")
 include("optimized/sparse_standard.jl")
 include("optimized/sparse_generalized.jl")
+include("optimized/nonlinear.jl")
 include("moment_rii.jl")
 include("distributed/stats.jl")
 include("distributed_feast.jl")
 include("distributed/workers.jl")
 include("distributed/nonlinear.jl")
 include("feast_experimental.jl")
-include("nlfeast.jl")
-include("nlfeast_experimental.jl")
+include("experimental/nonlinear_legacy.jl")
+include("experimental/nonlinear_moments_legacy.jl")
 include("stochastic.jl")
 
 end # module

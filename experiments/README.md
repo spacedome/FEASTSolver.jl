@@ -24,9 +24,11 @@ letting the active subspace grow by a factor of the moment count each iteration.
 
 Research orientation:
 
-- `src/nlfeast.jl` contains the canonical nonlinear FEAST-Beyn hybrid prototype.
-- `src/nlfeast_experimental.jl` contains higher-moment experiments related to
-  Beyn and Sakurai-Sugiura style methods.
+- `src/optimized/nonlinear.jl` contains the canonical nonlinear FEAST-Beyn
+  hybrid prototype.
+- `src/experimental/nonlinear_legacy.jl` and
+  `src/experimental/nonlinear_moments_legacy.jl` contain higher-moment
+  experiments related to Beyn and Sakurai-Sugiura style methods.
 - `src/feast_experimental.jl` contains unfinished IFEAST/inexact-FEAST work.
 - `article.tex` is the main local reference for the nonlinear contour-method
   research framing.

@@ -28,6 +28,44 @@
     @test stats.iteration_log[end].variant == :nonlinear
 end
 
+@testitem "nonlinear FEAST: reference implementation matches optimized linear pencil" setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using LinearAlgebra
+    using .FEASTTestSetup: initial_subspace, assert_eigenvalues_found, assert_converged
+
+    n = 10
+    A = Matrix(Diagonal(1.0:n))
+    T(z) = z * Matrix{Float64}(I, n, n) - A
+    expected = complex.(1.0:3.0)
+
+    λ_opt, _, res_opt = nlfeast!(
+        T,
+        initial_subspace(n, 3, 411),
+        8,
+        8;
+        c=2.0,
+        r=1.2,
+        ϵ=1e-12,
+        store=true,
+    )
+    λ_ref, _, res_ref = reference_nlfeast!(
+        T,
+        initial_subspace(n, 3, 411),
+        8,
+        8;
+        c=2.0,
+        r=1.2,
+        ϵ=1e-12,
+    )
+
+    inside_opt = in_contour(λ_opt, 2.0, 1.2)
+    inside_ref = in_contour(λ_ref, 2.0, 1.2)
+    assert_eigenvalues_found(λ_opt[inside_opt], expected; atol=1e-10)
+    assert_eigenvalues_found(λ_ref[inside_ref], expected; atol=1e-10)
+    assert_converged(res_opt[inside_opt]; atol=1e-10)
+    assert_converged(res_ref[inside_ref]; atol=1e-10)
+end
+
 @testitem "experimental moment RII: projected SS Hankel recovers deficient quadratic" setup=[FEASTTestSetup] begin
     using FEASTSolver
     using LinearAlgebra
