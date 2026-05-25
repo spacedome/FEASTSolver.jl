@@ -26,6 +26,40 @@
     @test stats.iteration_log[end].eigenvalues_inside == length(expected)
 end
 
+@testitem "standard FEAST: reference implementation matches optimized diagonal problem" setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using LinearAlgebra
+    using .FEASTTestSetup: initial_subspace, assert_eigenvalues_found, assert_converged
+
+    A = Matrix(Diagonal(1.0:8.0))
+    expected = complex.(1.0:3.0)
+    X0 = initial_subspace(8, 3, 111)
+
+    λ_ref, _, res_ref = reference_feast!(
+        copy(X0),
+        A;
+        nodes=8,
+        iter=10,
+        c=2.0,
+        r=1.2,
+        ϵ=1e-10,
+    )
+    λ_opt, _, res_opt = feast!(
+        copy(X0),
+        A;
+        nodes=8,
+        iter=10,
+        c=2.0,
+        r=1.2,
+        ϵ=1e-10,
+    )
+
+    assert_eigenvalues_found(λ_ref, expected; atol=1e-9)
+    assert_eigenvalues_found(λ_opt, expected; atol=1e-9)
+    assert_converged(res_ref; atol=1e-9)
+    assert_converged(res_opt; atol=1e-9)
+end
+
 @testitem "standard FEAST: symmetric dense problem" setup=[FEASTTestSetup] begin
     using FEASTSolver
     using LinearAlgebra

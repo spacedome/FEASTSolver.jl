@@ -14,10 +14,11 @@ using Distributed: @distributed, myid, remotecall, remotecall_wait, workers
 using Random: rand, randn
 
 import Base: close, length
-import LinearAlgebra: mul!
+import LinearAlgebra: lu, mul!, qr
 
 # First-class dense serial FEAST variants.
 export feast!, gen_feast!, dual_gen_feast!, nlfeast!
+export reference_feast!, reference_gen_feast!, reference_dual_gen_feast!
 export AbstractSparseFeastSolver, SparseDirectSolver, SparseBiCGSTABSolver
 export DenseFeastStats, DenseFeastIterationStats
 
@@ -47,7 +48,12 @@ include("gallery.jl")
 include("sparse_feast.jl")
 include("beyn.jl")
 include("companion.jl")
-include("feast.jl")
+include("reference/linear_standard.jl")
+include("reference/linear_generalized.jl")
+include("reference/linear_dual_generalized.jl")
+include("optimized/linear_standard.jl")
+include("optimized/linear_generalized.jl")
+include("optimized/linear_dual_generalized.jl")
 include("moment_rii.jl")
 include("distributed/stats.jl")
 include("distributed_feast.jl")

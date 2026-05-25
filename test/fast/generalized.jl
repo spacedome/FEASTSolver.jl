@@ -46,6 +46,71 @@
     @test dual_stats.iteration_log[end].variant == :dual_generalized
 end
 
+@testitem "generalized FEAST: reference implementations match optimized diagonal pencil" setup=[FEASTTestSetup] begin
+    using FEASTSolver
+    using LinearAlgebra
+    using .FEASTTestSetup: initial_subspace, assert_eigenvalues_found, assert_converged
+
+    A = Matrix(Diagonal(1.0:8.0))
+    B = Matrix(Diagonal(2.0 .+ (1.0:8.0) ./ 10.0))
+    exact = diag(A) ./ diag(B)
+    expected = complex.(exact[in_contour(exact, 0.9, 0.55)])
+    X0 = initial_subspace(8, 4, 211)
+    Y0 = initial_subspace(8, 4, 212)
+
+    λ_ref, _, res_ref = reference_gen_feast!(
+        copy(X0),
+        A,
+        B;
+        nodes=8,
+        iter=20,
+        c=0.9,
+        r=0.55,
+        ϵ=1e-10,
+    )
+    λ_opt, _, res_opt = gen_feast!(
+        copy(X0),
+        A,
+        B;
+        nodes=8,
+        iter=20,
+        c=0.9,
+        r=0.55,
+        ϵ=1e-10,
+    )
+    λ_dual_ref, _, _, res_dual_ref = reference_dual_gen_feast!(
+        copy(X0),
+        copy(Y0),
+        A,
+        B;
+        nodes=8,
+        iter=20,
+        c=0.9,
+        r=0.55,
+        ϵ=1e-10,
+    )
+    λ_dual_opt, _, _, res_dual_opt = dual_gen_feast!(
+        copy(X0),
+        copy(Y0),
+        A,
+        B;
+        nodes=8,
+        iter=20,
+        c=0.9,
+        r=0.55,
+        ϵ=1e-10,
+    )
+
+    assert_eigenvalues_found(λ_ref, expected; atol=1e-9)
+    assert_eigenvalues_found(λ_opt, expected; atol=1e-9)
+    assert_eigenvalues_found(λ_dual_ref, expected; atol=1e-9)
+    assert_eigenvalues_found(λ_dual_opt, expected; atol=1e-9)
+    assert_converged(res_ref; atol=1e-9)
+    assert_converged(res_opt; atol=1e-9)
+    assert_converged(res_dual_ref; atol=1e-9)
+    assert_converged(res_dual_opt; atol=1e-9)
+end
+
 @testitem "generalized FEAST: identity mass matrix and sparse pencil" setup=[FEASTTestSetup] begin
     using FEASTSolver
     using LinearAlgebra
