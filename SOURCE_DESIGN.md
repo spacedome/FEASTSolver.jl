@@ -19,12 +19,15 @@ The finalized FEAST variants are mostly present and working:
 - `distributed/`: process-parallel dense contour variants with persistent
   worker ownership, split into plans, workers, stats, and one algorithm file per
   variant.
+- `linalg/reduced.jl` and `linalg/residuals.jl`: shared reduced-problem,
+  normalization, and residual kernels used by the reference, optimized, and
+  distributed solvers.
 - `fastlapack.jl`: the practical non-allocating LAPACK bridge needed because
   Julia builtins allocate too much in the hot path.
 - `stats.jl` and `distributed/stats.jl`: lightweight timing and convergence
   diagnostics.
-- `moment_rii.jl`, `feast_experimental.jl`, and `nlfeast_experimental.jl`:
-  research code that should not drive the finalized FEAST source layout.
+- `moment_rii.jl`, `feast_experimental.jl`, and `experimental/`: research code
+  that should not drive the finalized FEAST source layout.
 
 The main issue is that the FEAST loop is repeated in several files. Each copy
 contains the same conceptual stages, but with local differences for dense,
@@ -301,9 +304,13 @@ templates for source organization.
    Cross-check them against current optimized methods on small dense problems.
 2. **Extract common optimized stage helpers.** Start with dense standard FEAST:
    validation, workspace allocation, reduced extraction, residual update, and
-   RII filter. Keep behavior unchanged.
+   RII filter. Reduced extraction and residual kernels now live under
+   `linalg/`; remaining extraction should be demand-driven, not abstracted for
+   its own sake.
 3. **Move LAPACK wrappers under `linalg/`.** Preserve the existing helper names
-   initially; add clearer stage-level wrappers above them.
+   initially; add clearer stage-level wrappers above them. Reduced and residual
+   kernels are split; `fastlapack.jl` can move later if it becomes a bottleneck
+   for readability.
 4. **Split sparse solve plumbing.** Separate sparse pattern/materialization and
    solver policies from sparse FEAST orchestration.
 5. **Split distributed plans.** Move plan types and worker setup away from
