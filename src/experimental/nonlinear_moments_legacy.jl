@@ -2,11 +2,11 @@
 """
 Legacy experimental nonlinear moment variants.
 
-The canonical nonlinear solver currently lives in `nlfeast.jl`. This file
-contains higher-moment experiments related to Beyn/Sakurai-Sugiura style block
-Hankel moment methods. These are research prototypes for understanding how
-moment-expanded subspaces interact with residual inverse iteration, not stable
-public algorithms yet.
+The canonical nonlinear solver currently lives in `optimized/nonlinear.jl`.
+This file contains higher-moment experiments related to Beyn/Sakurai-Sugiura
+style block Hankel moment methods. These are research prototypes for
+understanding how moment-expanded subspaces interact with residual inverse
+iteration, not stable public algorithms yet.
 """
 function nlfeast_moments_all!(T, X::AbstractMatrix{ComplexF64}, nodes::Integer, iter::Integer;
     c=complex(0.0,0.0), r=1.0, debug=false, ϵ=10e-12, moments=2, store=true, spurious=1e-5)

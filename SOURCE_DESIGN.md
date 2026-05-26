@@ -337,8 +337,9 @@ templates for source organization.
 
 ## Immediate Recommendation
 
-The first concrete cleanup should be adding `reference/linear.jl` and using it
-in tests. That creates a clear correctness baseline. Then refactor
-`feast.jl` one variant at a time, starting with dense standard FEAST, into a
-workspace plus named stages. If that shape reads well, apply the same pattern to
-generalized, dual generalized, sparse, and nonlinear variants.
+The first cleanup pass has established the intended source boundaries:
+reference solvers, optimized serial variants, distributed variants, shared
+linalg kernels, operator interfaces, and sandboxed experiments. Future cleanup
+should be demand-driven: move `fastlapack.jl` or experimental files only when
+they actively obscure a maintained algorithm or block productionizing a specific
+research result.
