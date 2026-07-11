@@ -22,6 +22,10 @@ The `moment_rii/` directory tracks the higher-moment NLFEAST question from
 `article.tex`: how to apply RII to SS/Beyn-Hankel moment expansions without
 letting the active subspace grow by a factor of the moment count each iteration.
 
+The `fused_nlfeast/` directory is the clean reference experiment for the
+cache-native, two-sided moment iteration that emerged from that work. Its local
+test suite is intentionally independent of the historical experiment driver.
+
 Research orientation:
 
 - `src/optimized/nonlinear.jl` contains the canonical nonlinear FEAST-Beyn

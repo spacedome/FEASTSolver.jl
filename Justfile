@@ -56,6 +56,10 @@ experiment-nleigs:
 experiment-moment-rii:
     {{ julia }} --project=. --startup-file=no experiments/moment_rii/run.jl
 
+# Run the focused cache-native two-sided NLFEAST experiment tests.
+test-fused-nlfeast:
+    {{ julia }} --project=. --startup-file=no experiments/fused_nlfeast/test/runtests.jl
+
 # Run a cheap NLEIGS comparison smoke check without the large dense problem.
 experiment-nleigs-smoke:
     FEAST_EXPERIMENT_PROBLEMS=butterfly FEAST_EXPERIMENT_METHODS=feast,nleigs FEAST_EXPERIMENT_PROCS=0 FEAST_EXPERIMENT_WARMUP=false {{ julia }} --project=. --startup-file=no experiments/nleigs_comparison/run.jl
