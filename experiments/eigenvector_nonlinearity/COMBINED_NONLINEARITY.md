@@ -59,6 +59,17 @@ for a finite-quadrature implementation bound.  Unlike the repulsive Hermitian
 linear pencil, the resulting closure Jacobian need not be negative
 semidefinite, so GMRES and globalization replace the unconditional CG result.
 
-The current experiment establishes the direct and Anderson forms.  It does not
-claim a general contraction theorem for simultaneous nonlinearities.
+The direct experiment establishes the direct and Anderson forms. Neither that
+control nor the accumulated-space extension below claims a general contraction
+theorem for simultaneous nonlinearities.
 
+`combined_windowed.jl` adds the two-timescale accumulated-space realization.
+It appends the first `d` corrected moment blocks, solves the reduced quadratic
+NEP exactly by companion linearization, and iterates the density only inside
+that reduced space before the next contour refresh.
+
+On the `n=48,p=3`, strength-`0.02` control, direct corrected moments require 11
+factor sets and 3968 RHS columns. Three-block accumulation requires 7/2432;
+four-block and growing memory require 6/2048. When the quadratic coefficient
+vanishes, the accumulated combined and linear-pencil algorithms agree to
+roundoff and use the same refresh count.

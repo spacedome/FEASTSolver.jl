@@ -66,7 +66,7 @@ end
 
 function solve_reduced_nlfeast(
     problem::ContactMeanField1D,
-    chart::CircularChart,
+    chart_spec,
     initial;
     config::ReducedNLFEASTConfig,
 )
@@ -85,6 +85,12 @@ function solve_reduced_nlfeast(
 
     for iteration in 1:config.outer_iterations
         H = hamiltonian(problem, rho)
+        chart_resolution = resolve_chart(
+            chart_spec,
+            H,
+            config.subspace_dimension,
+        )
+        chart = chart_resolution.chart
         step = moment_projector_step(
             H,
             chart,
@@ -109,6 +115,9 @@ function solve_reduced_nlfeast(
             solve_count=step.solve_count,
             solve_application_count=step.solve_count,
             rhs_count=step.rhs_count,
+            chart_factorization_count=chart_resolution.factorization_count,
+            chart_center=chart.center,
+            chart_radius=chart.radius,
         ))
         if reduced.defect <= config.density_tolerance && residual <= config.residual_tolerance
             converged = true
@@ -117,6 +126,7 @@ function solve_reduced_nlfeast(
     end
 
     (
+        variant=:full_q_projected,
         orbitals=orbitals,
         density=rho,
         basis=basis,
@@ -127,5 +137,8 @@ function solve_reduced_nlfeast(
         solve_count=sum(record.solve_count for record in history),
         solve_application_count=sum(record.solve_application_count for record in history),
         rhs_count=sum(record.rhs_count for record in history),
+        chart_factorization_count=sum(
+            record.chart_factorization_count for record in history
+        ),
     )
 end

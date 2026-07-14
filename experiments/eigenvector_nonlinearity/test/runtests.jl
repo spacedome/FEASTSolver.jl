@@ -340,3 +340,9 @@ end
     @test result.residual <= 1e-9
     @test abs(base.spacing * sum(result.density) - base.occupied) <= 1e-10
 end
+
+include("two_timescale.jl")
+include("windowed.jl")
+include("nonlocal_projector.jl")
+include("dual_windowed.jl")
+include("combined_windowed.jl")

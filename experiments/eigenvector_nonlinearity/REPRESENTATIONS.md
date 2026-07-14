@@ -55,9 +55,10 @@ derivative-free fallback, not a universal accelerator.
 
 ## Reduced Nonlinear Solve
 
-Canonical projected NLFEAST filters an oversampled basis of dimension `q>p`,
-solves the nonlinear density problem inside it, and refreshes the basis.  It
-can be efficient when a small virtual buffer captures the nonlinear response.
+`reduced.jl` is a fixed-`q` full-filter control: it filters a contour containing
+`q>p` states, solves the density problem inside that space to a fixed tolerance,
+and discards the reduced history on refresh. It is not a faithful implementation
+of the 2013 accumulated-subspace eigenvector NLFEAST algorithm.
 
 Observed behavior is regime dependent:
 
@@ -69,11 +70,27 @@ g=5, p=3, q=6         incomplete response/count failure
 g=5, p=3, q=12        moment-rank conditioning failure
 ```
 
-This branch trades response RHS for a larger contour realization and a reduced
+This control trades response RHS for a larger contour realization and a reduced
 nonlinear solve.  It is attractive when `q` stays small and reduced operator
 formation is cheap.  It is fragile when the virtual-response dimension is
 unknown, which is precisely the case where direct response Newton avoids an
 arbitrary buffer.
+
+`two_timescale.jl` instead stops the reduced solve when its closure defect
+reaches the full-space leakage floor. It filters only the occupied block and
+uses its component outside the current basis to repair a fixed `q` space. Its
+contour RHS width therefore depends on `p`, not `q`. The strong `g=5,p=3`
+control converges for `q=8` and `q=10`, but not for `q=5`; a windowed or growing
+space remains the natural way to remove that fixed-response-dimension choice.
+
+The accumulated controls retain recent filtered occupied ranges instead of a
+fixed virtual eigenspace. `raw_windowed.jl` appends the `d` moment blocks before
+extraction, matching the 2013 algorithmic order; `windowed.jl` appends the
+realized occupied range and isolates the exact-rank mechanism. On the strong
+control they agree, and three or four stored ranges converge in 12 or 11
+refreshes. Unbounded growth reaches 8 refreshes at reduced dimension 24. This
+removes the guessed virtual contour but replaces it with an explicit memory
+and reduced-cubic-cost policy.
 
 ## Non-Hermitian State
 
@@ -86,9 +103,9 @@ P=X(YᴴX)⁻¹Yᴴ.
 
 The experiment applies a diagonal similarity transform to the Hermitian model.
 This preserves its spectrum and exact density while making the right and left
-spaces distinct.  Dual filtering plus SVD common-gauge biorthogonalization
-converges in 42 mixed updates for similarity condition numbers from `3` to
-`3×10³`.  At condition number `3×10²`, replacing the oblique density by the
+spaces distinct. The original direct control converges in 42 mixed updates
+across its condition-number sweep from `3` to `3×10³`. At condition number
+`3×10²`, replacing the oblique density by the
 Euclidean projector of right vectors alone gives a `34%` density error.  The
 left realization is therefore essential, while the common projector remains
 the natural nonlinear state.  Each node uses one factorization for both the
@@ -99,6 +116,12 @@ For a general non-Hermitian closure the response Jacobian is not self-adjoint;
 the response solve returns to GMRES.  Higher-moment narrow probes use the same
 independent right/left realization and divided-overlap common gauge already
 tested in `fused_nlfeast`.
+
+`dual_windowed.jl` extends this to coupled accumulated spaces. Right and
+adjoint-left moment blocks share each node LU, while an overlap-SVD supplies one
+retained rank and common gauge before reduced extraction. On the separate
+`n=48`, tighter-tolerance cost control, three-block and growing schedules reduce
+33 direct refreshes to 7 and 6 without losing biorthogonality.
 
 ## Finite Temperature And Large Occupation
 

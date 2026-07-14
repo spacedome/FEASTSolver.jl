@@ -175,11 +175,16 @@ unless orbitals are also requested.
 
 ## Claim Boundary
 
-For the current Hermitian density problem, direct higher-moment projector
-FEAST with a hybrid Anderson/inexact-response outer update is the strongest
-candidate.  Higher moments change solve width; they do not change the fixed
-point.  The reduced nonlinear branch is a valid special form but current
-evidence makes it a secondary method.
+The controls now make growing or short-window pre-extraction moment spaces the
+strongest derivative-free candidate by contour work. This ordering survives
+local-density, nonlocal-projector, non-Hermitian dual, and simultaneous
+spectral/state tests. Higher moments change solve width and the retained
+response space; they do not change the exact fixed point. Adaptive thick
+restart is the bounded-memory alternative when indefinite growth is
+unacceptable. Response Newton remains faster on the current sparse timing and
+uses fewer factor sets there, at substantially greater RHS width. Inner
+forcing, memory, reduced cubic work, and the factorization/RHS crossover still
+prevent selection of one universal schedule.
 
 The master form also identifies real extensions rather than bookkeeping:
 
@@ -189,7 +194,7 @@ The master form also identifies real extensions rather than bookkeeping:
 - orbital-specific product-Grassmann states;
 - finite-temperature or changing-count density matrices.
 
-Direct simultaneous iteration and a non-Hermitian dual closure now have
-focused implementations.  Their general response equations, orbital-specific
-states, and finite-temperature selected-inversion backend should not be
-claimed solved from the Hermitian local-density result.
+Direct and accumulated simultaneous iteration, a coupled dual accumulated
+closure, and a nonlocal full-projector closure now have focused implementations.
+Their general response equations, orbital-specific states, and finite-temperature
+selected-inversion backend should not be claimed solved from these controls.

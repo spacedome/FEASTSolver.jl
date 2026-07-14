@@ -149,9 +149,9 @@ without an additional recovery step.
 - Response compression, selected inversion, sparse factor reuse, and
   preconditioning change cost but not the mathematical core.
 
-## Decision
+## Current Synthesis
 
-The most natural algorithm is now unambiguous:
+The common coupled system is unambiguous:
 
 ```text
 physical state θ
@@ -162,10 +162,11 @@ physical state θ
 ```
 
 For Hermitian `H(P)` this collapses further to the occupied Riesz-projector map
-`P⁺=ΠΓ(H(P))`.  Moment depth and probe width are realization coordinates of
-that same map.  They are not additional nonlinear stages.  Anderson, response
-Newton, mixing, and level shifting are outer solvers or transformations of the
-same closure equation.
+`P⁺=ΠΓ(H(P))`. Moment depth and probe width are realization coordinates of
+that same map. The best schedule for coupling reduced nonlinear work to FEAST
+refreshes is not yet settled. In particular, the 2013 accumulated-subspace
+algorithm, fixed-`q` full filtering, and leakage-forced occupied enrichment are
+different realizations. `VARIANT_LEDGER.md` keeps their evidence separate.
 
 The recommended profiles are:
 
@@ -173,11 +174,14 @@ The recommended profiles are:
 factorization dominated, DH available
     shallow higher moments + hybrid Anderson/inexact response Newton
 
+factorization dominated, reduced memory available
+    pre-extraction growing/windowed moments + a bounded inner solve
+
 cheap factors or no DH
     shallow higher moments + Anderson/DIIS
 
 small known virtual-response dimension q
-    oversampled projected NLFEAST, with direct residual verification
+    leakage-forced occupied enrichment, with direct residual verification
 
 non-Hermitian
     dual moment realization + common gauge + oblique-projector closure
@@ -188,6 +192,13 @@ large occupation, density only, or closing gap
 simultaneous θ and z nonlinearity
     persistent invariant pair + corrected moments + closure acceleration
 ```
+
+`cache_native_corrected_moments` now tests the integration between the memory
+and response profiles. One frozen factor cache supplies the moment block and,
+when scheduled, one full closure-response correction before reduced iteration.
+The integration creates a measurable factor/RHS envelope but does not establish
+one universal policy: accumulated moments remain the sparse timing leader on
+the current cheap-Hamiltonian control.
 
 Level-shifted and gauge-aligned orbital SCF are valid fallbacks but are not the
 default on the tested density problem.  Deep power moments are also not a
@@ -226,19 +237,27 @@ universal convergence theorem.  Evidence now covers:
 - Anderson, mixed, inexact/tight response, CG, level-shift, orbital, and reduced
   outer branches;
 - a single-cache dual non-Hermitian closure;
-- simultaneous spectral and eigenvector nonlinearity;
+- coupled right/left accumulated moments with a common overlap gauge;
+- simultaneous spectral and eigenvector nonlinearity, including accumulated
+  corrected-moment spaces and an exact zero-quadratic reduction;
+- a nonlocal full-projector closure that cannot be represented by density;
 - full-operator count mismatch detection and oracle-free moving occupied charts;
 - sparse shifted solves and a measured factorization/RHS cost crossover.
 
 The remaining work is deliberately separated:
 
 - analytic local contraction and finite-realization perturbation theorems;
+- a scale-aware inner forcing law and principled history transport/restart rule;
+- adaptive memory/restart policies beyond leakage-contraction growth;
+- large-occupation and multidimensional sparse cost evidence;
 - certified phase resolution for fixed non-Hermitian contours;
 - a sparse inertia backend and production symbolic-factor reuse;
 - finite-temperature selected-inversion integration;
 - product-Grassmann algorithms for truly orbital-specific operators;
 - public FEASTSolver/FEAST.rs API design and tolerance ownership.
 
-These are theorem, backend, or broader-problem projects.  None currently points
-to a different core moment or RII update for the declared unitarily invariant
-contour problem.
+These are theorem, backend, or broader-problem projects. Across local density,
+nonlocal projector, oblique projector, and simultaneous `θ,z` controls, none
+currently points to a different core corrected moment update. The meaningful
+variation remains scheduling, memory, reduced solve, and physical-state
+representation.
